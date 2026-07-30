@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}VoxCraft — Text to voice, crafted{% endblock %}
+
+{% block content %}
+
+<section class="hero">
+  <span class="hero__eyebrow">// Text-to-speech, engineered for creators</span>
+  <h1 class="hero__title">Every script deserves a <em>voice</em> that fits.</h1>
+  <svg class="wave" role="img" aria-label="Animated audio waveform"></svg>
+  <p class="hero__sub">
+    VoxCraft turns scripts into natural narration across Urdu, Bengali, Tamil, Telugu,
+    English and more — built for YouTube creators, dubbers, and studios who ship daily.
+  </p>
+  <div class="hero__actions">
+    <a href="{{ url_for('studio') }}" class="btn btn--brass">Start creating — free</a>
+    <a href="{{ url_for('pricing') }}" class="btn btn--ghost">See pricing</a>
+  </div>
+</section>
+
+<div class="chain">
+  <div class="chain__node">
+    <span class="chain__label">01 — Input</span>
+    <h3>Drop in your script</h3>
+    <p>Paste text in any supported language. VoxCraft handles numerals, loanwords, and punctuation cues automatically.</p>
+  </div>
+  <span class="chain__arrow">→</span>
+  <div class="chain__node">
+    <span class="chain__label">02 — Voice</span>
+    <h3>Pick a voice model</h3>
+    <p>Neural voices tuned per-language, with adjustable rate and pitch — no SSML wrangling required.</p>
+  </div>
+  <span class="chain__arrow">→</span>
+  <div class="chain__node">
+    <span class="chain__label">03 — Render</span>
+    <h3>Export clean audio</h3>
+    <p>Download MP3 or WAV, ready to drop into your edit — captions-friendly timing included.</p>
+  </div>
+</div>
+
+<section class="section" id="voices">
+  <div class="section__head">
+    <span class="section__eyebrow">Voice library</span>
+    <h2 class="section__title">A voice for every region, not an afterthought.</h2>
+    <p class="section__sub">South Asian languages are first-class here — not a bolt-on translation layer.</p>
+  </div>
+  <div class="voice-grid">
+    {% for v in voices %}
+    <div class="voice-card">
+      <div class="voice-card__top">
+        <span class="voice-card__name">{{ v.name }}</span>
+        <span class="voice-card__tag">{{ v.tag }}</span>
+      </div>
+      <div class="voice-card__meta">{{ v.lang }} · {{ v.gender }}</div>
+      <button class="voice-card__play" aria-label="Preview {{ v.name }}">▶</button>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Why VoxCraft</span>
+    <h2 class="section__title">Built by someone shipping with it daily.</h2>
+  </div>
+  <div class="chain" style="margin-top:0;">
+    <div class="chain__node">
+      <h3>No SSML headaches</h3>
+      <p>Rate and pitch controls that actually work — nothing read aloud verbatim.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <h3>Real language handling</h3>
+      <p>Numbers, percentages, and loanwords pronounced the way people actually say them.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <h3>Built for volume</h3>
+      <p>Priority render queues so daily-upload creators aren't stuck waiting.</p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

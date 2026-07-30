@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Studio — VoxCraft{% endblock %}
+
+{% block content %}
+<div class="studio">
+
+  <div class="panel">
+    <span class="panel__label">Voice &amp; language</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <select id="language-select" class="admin-input" style="width:100%;font-family:var(--body);padding:10px;">
+        {% for lang in voices.keys() %}
+        <option value="{{ lang }}">{{ lang }}</option>
+        {% endfor %}
+      </select>
+      <select id="voice-select" class="admin-input" style="width:100%;font-family:var(--body);padding:10px;"></select>
+    </div>
+
+    <div style="margin-top:16px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Speed: <span id="speed-label">100%</span></label>
+      <input id="speed-slider" type="range" min="50" max="200" step="5" value="100" style="width:100%;">
+    </div>
+
+    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+      <button class="btn btn--ghost btn--sm" id="preview-btn">▶ Preview voice</button>
+      <span class="render-status" data-preview-status></span>
+    </div>
+    <audio id="preview-player" style="display:none;width:100%;margin-top:8px;" controls></audio>
+
+    {% if not pro %}
+    <p class="limit-note">Free plan: {{ free_char_limit }} chars/generation · 10 generations/day · 5 batch/day · {{ batch_max }} lines max.
+      <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to remove all limits.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <span class="panel__label">Mode</span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn--sm btn--brass" id="tab-single-btn">Single</button>
+      <button class="btn btn--sm btn--ghost" id="tab-batch-btn">Batch</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Single tab ===== -->
+<div class="section" id="tab-single" style="padding-top:0;">
+  <div class="panel">
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;color:var(--text-mid);margin-bottom:10px;">
+      <input type="checkbox" id="ssml-toggle"> Markup mode (pause / emphasis / pitch tags)
+    </label>
+    <div id="ssml-cheatsheet" style="display:none;font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin-bottom:10px;line-height:1.7;">
+      [pause:500ms] silence &nbsp;·&nbsp; [strong]…[/strong] strong emphasis &nbsp;·&nbsp; [em]…[/em] moderate emphasis<br>
+      [slow]…[/slow] slow rate &nbsp;·&nbsp; [fast]…[/fast] fast rate &nbsp;·&nbsp; [high]…[/high] higher pitch<br>
+      [low]…[/low] lower pitch &nbsp;·&nbsp; [whisper]…[/whisper] soft whisper
+    </div>
+    <textarea class="script-input" id="single-text" placeholder="Type or paste your text here…"></textarea>
+    <div class="script-meta">
+      <span data-char-count>0 chars</span>
+      <span data-duration-est>~0.0s</span>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="generate-single-btn">Generate speech</button>
+      <span class="render-status" data-single-status></span>
+    </div>
+    <div id="single-result" style="margin-top:16px;"></div>
+    <div id="history-list" style="margin-top:20px;"></div>
+  </div>
+</div>
+
+<!-- ===== Batch tab ===== -->
+<div class="section" id="tab-batch" style="padding-top:0;display:none;">
+  <div class="panel">
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:10px;">Each non-empty line becomes a separate clip — up to {{ batch_max }} lines.</p>
+    <textarea class="script-input" id="batch-text" placeholder="Line one — clip 1&#10;Line two — clip 2&#10;Line three — clip 3"></textarea>
+    <div class="script-meta">
+      <span data-line-count>0 / {{ batch_max }} lines</span>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="generate-batch-btn">Generate all</button>
+      <span class="render-status" data-batch-status></span>
+    </div>
+    <div id="batch-result" style="margin-top:16px;"></div>
+  </div>
+</div>
+
+<!-- ===== Clone a voice (Pro) ===== -->
+<div class="section" style="padding-top:0;">
+  <div class="panel">
+    <span class="panel__label">Clone a voice {% if not pro %}— Pro only{% endif %}</span>
+    {% if not pro %}
+    <p style="color:var(--text-mid);font-size:0.9rem;">Upload a reference clip and generate speech in that voice.
+      <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to unlock this.</p>
+    {% else %}
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
+      Runs on CPU — generation takes 10-60+ seconds. Reference clip: 10+ seconds of clean speech works best.
+      Max {{ '500' }} chars per generation while cloning is CPU-hosted.
+    </p>
+    <input type="file" id="clone-file-input" accept=".wav,.mp3,.m4a,.ogg" style="margin-bottom:10px;">
+    <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);" data-clone-upload-status></div>
+    <textarea class="script-input" id="clone-text" placeholder="Text to speak in the cloned voice…" style="min-height:100px;margin-top:10px;"></textarea>
+    <div class="render-bar">
+      <button class="btn btn--jade" id="clone-generate-btn">Generate cloned speech</button>
+      <span class="render-status" data-clone-status></span>
+    </div>
+    <div id="clone-result" style="margin-top:16px;"></div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.VOXCRAFT_VOICES = {{ voices|tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/studio.js') }}"></script>
+{% if pro %}
+<script src="{{ url_for('static', filename='js/clone.js') }}"></script>
+{% endif %}
+{% endblock %}

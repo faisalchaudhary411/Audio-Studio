@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Pricing — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Pricing</span>
+    <h2 class="section__title">Simple plans, no surprise caps.</h2>
+    <p class="section__sub">Pay in your local method — EasyPaisa, JazzCash, HBL, or card via Freemius.</p>
+  </div>
+
+  <div class="plans">
+    {% for p in plans %}
+    <div class="plan {% if p.get('featured') %}plan--featured{% endif %}">
+      <span class="plan__name">{{ p.name }}</span>
+      <div>
+        <span class="plan__price">{{ p.price }}</span>
+        <span class="plan__period">{{ p.period }}</span>
+      </div>
+      <ul class="plan__list">
+        {% for item in p.limits %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      <button class="btn {% if p.get('featured') %}btn--brass{% else %}btn--ghost{% endif %} btn--block">
+        {{ p.cta }}
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
