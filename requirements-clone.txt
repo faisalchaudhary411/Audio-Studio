@@ -1,0 +1,7 @@
+# Optional: only needed once you're ready to self-host voice cloning
+# (needs a paid instance with real RAM — not free-tier viable anywhere).
+# pip install -r requirements-clone.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
+chatterbox-tts
