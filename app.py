@@ -122,7 +122,25 @@ def studio():
 
 @app.route("/pricing")
 def pricing():
-    return render_template("pricing.html")
+    limits = persistence.load_limits()
+    free_features = [f.strip() for f in (limits.get("FREE_FEATURES") or "").split("|") if f.strip()] or [
+        f"{limits['FREE_DAILY_ACTIONS']} generations/day",
+        f"{limits['FREE_CHAR_LIMIT']:,} chars/generation",
+        f"{limits['FREE_VOICES_COUNT']} voices",
+        "Ads supported",
+    ]
+    pro_features = [f.strip() for f in (limits.get("PRO_FEATURES") or "").split("|") if f.strip()] or [
+        "Unlimited generations", "Unlimited characters", "All voices, all languages",
+        "No ads", f"Batch up to {limits['PRO_BATCH_MAX']} lines", "Voice cloning (where enabled)",
+    ]
+    plans = [
+        {"id": "free", "name": "Free", "price": limits.get("FREE_PRICE_LABEL", "$0"), "period": "forever",
+         "limits": free_features, "cta": "Current plan", "cta_url": None},
+        {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_LABEL", "840 PKR"), "period": "/month",
+         "limits": pro_features, "cta": "Get Pro", "featured": True,
+         "cta_url": limits.get("CHECKOUT_URL") or url_for("upgrade")},
+    ]
+    return render_template("pricing.html", plans=plans)
 
 
 # ---------------------------------------------------------------------------
