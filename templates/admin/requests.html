@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Admin — Pro Requests{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Pro requests</h2>
+  </div>
+
+  <div style="display:grid;gap:14px;">
+    {% for r in reqs %}
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+        <div>
+          <strong style="font-family:var(--display);font-size:1.1rem;">{{ r.name }}</strong>
+          <div style="color:var(--text-dim);font-size:0.85rem;">{{ r.email }} · {{ r.phone or 'no phone' }}</div>
+          <div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);margin-top:4px;">{{ r.id }} · {{ r.date }}</div>
+          {% if r.payment_method %}<div style="margin-top:6px;"><span class="voice-card__tag">{{ r.payment_method }}</span> {% if r.txn_id %}<span style="color:var(--text-dim);font-size:0.8rem;">ref: {{ r.txn_id }}</span>{% endif %}</div>{% endif %}
+        </div>
+        <div style="text-align:right;">
+          <span style="font-family:var(--mono);font-size:0.78rem;color:{% if r.status == 'approved' %}var(--jade-hi){% elif r.status == 'rejected' %}#e88{% else %}var(--brass-hi){% endif %};">{{ r.status }}</span>
+          {% if r.status in ['pending', 'payment_pending'] %}
+          <form method="post" style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
+            <input type="hidden" name="req_id" value="{{ r.id }}">
+            <button type="submit" name="action" value="approve" class="btn btn--jade btn--sm">Approve</button>
+            <button type="submit" name="action" value="reject" class="btn btn--ghost btn--sm">Reject</button>
+          </form>
+          {% elif r.key_assigned %}
+          <div style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);margin-top:6px;">{{ r.key_assigned }}</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--text-dim);">No requests yet.</p>
+    {% endfor %}
+  </div>
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}

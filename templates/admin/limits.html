@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Admin — Pricing & Limits{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Pricing & limits</h2>
+    {% if saved %}<p style="color:var(--jade-hi);">Saved.</p>{% endif %}
+    {% if error %}<p style="color:#e88;">{{ error }}</p>{% endif %}
+  </div>
+
+  <form method="post" class="panel">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free char limit</label>
+        <input type="number" name="FREE_CHAR_LIMIT" value="{{ limits.FREE_CHAR_LIMIT }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free daily actions</label>
+        <input type="number" name="FREE_DAILY_ACTIONS" value="{{ limits.FREE_DAILY_ACTIONS }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free batch limit</label>
+        <input type="number" name="FREE_BATCH_LIMIT" value="{{ limits.FREE_BATCH_LIMIT }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free preview limit</label>
+        <input type="number" name="FREE_PREVIEW_LIMIT" value="{{ limits.FREE_PREVIEW_LIMIT }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro batch max</label>
+        <input type="number" name="PRO_BATCH_MAX" value="{{ limits.PRO_BATCH_MAX }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free voices count</label>
+        <input type="number" name="FREE_VOICES_COUNT" value="{{ limits.FREE_VOICES_COUNT }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro price (PKR)</label>
+        <input type="number" name="PRO_PRICE_PKR" value="{{ limits.PRO_PRICE_PKR }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro price label</label>
+        <input type="text" name="PRO_PRICE_LABEL" value="{{ limits.PRO_PRICE_LABEL }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free price label</label>
+        <input type="text" name="FREE_PRICE_LABEL" value="{{ limits.FREE_PRICE_LABEL }}" class="admin-input" style="width:100%;">
+      </div>
+      <div style="grid-column:1/-1;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Checkout URL (Freemius)</label>
+        <input type="text" name="CHECKOUT_URL" value="{{ limits.CHECKOUT_URL }}" class="admin-input" style="width:100%;">
+      </div>
+      <div style="grid-column:1/-1;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free features (pipe-separated)</label>
+        <input type="text" name="FREE_FEATURES" value="{{ limits.FREE_FEATURES }}" class="admin-input" style="width:100%;">
+      </div>
+      <div style="grid-column:1/-1;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro features (pipe-separated)</label>
+        <input type="text" name="PRO_FEATURES" value="{{ limits.PRO_FEATURES }}" class="admin-input" style="width:100%;">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--jade" style="margin-top:18px;">Save changes</button>
+  </form>
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}

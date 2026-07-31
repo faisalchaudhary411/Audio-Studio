@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Admin — Blog{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Blog</h2>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">Write new post</span>
+    <form method="post">
+      <input type="hidden" name="action" value="create">
+      <input type="text" name="title" placeholder="Title" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
+      <input type="text" name="category" placeholder="Category (e.g. Updates, Tips)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
+      <input type="text" name="excerpt" placeholder="Short excerpt (shown in list)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
+      <textarea name="body" placeholder="Full post body (Markdown supported)" class="script-input" style="min-height:200px;margin-bottom:10px;" required></textarea>
+      <label style="font-size:0.9rem;color:var(--text-mid);"><input type="checkbox" name="published" checked> Publish immediately</label>
+      <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">Save post</button>
+    </form>
+  </div>
+
+  <div style="display:grid;gap:12px;">
+    {% for p in posts %}
+    <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div>
+        <strong>{{ p.title }}</strong>
+        <div style="color:var(--text-dim);font-size:0.8rem;">{{ p.date }} · {{ 'Published' if p.published else 'Draft' }}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <form method="post"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="toggle_publish" class="btn btn--ghost btn--sm">{{ 'Unpublish' if p.published else 'Publish' }}</button></form>
+        <form method="post"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this post?')">Delete</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--text-dim);">No posts yet.</p>
+    {% endfor %}
+  </div>
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}
