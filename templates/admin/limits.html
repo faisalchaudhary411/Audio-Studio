@@ -21,8 +21,12 @@
         <input type="number" name="FREE_DAILY_ACTIONS" value="{{ limits.FREE_DAILY_ACTIONS }}" class="admin-input" style="width:100%;">
       </div>
       <div>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free batch limit</label>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free batch limit (runs/day)</label>
         <input type="number" name="FREE_BATCH_LIMIT" value="{{ limits.FREE_BATCH_LIMIT }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free batch max lines/run</label>
+        <input type="number" name="FREE_BATCH_MAX_LINES" value="{{ limits.FREE_BATCH_MAX_LINES }}" class="admin-input" style="width:100%;">
       </div>
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free preview limit</label>
