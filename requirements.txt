@@ -5,6 +5,7 @@ gTTS==2.5.4
 lameenc==1.8.4
 werkzeug==3.0.3
 pydub==0.25.1
+audioop-lts==0.2.1; python_version >= "3.13"
 SpeechRecognition==3.10.4
 markdown==3.7
 requests==2.32.3
