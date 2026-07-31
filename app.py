@@ -42,13 +42,22 @@ CLONE_CHAR_LIMIT = 500  # tighter than normal TTS — keeps CPU generation time 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 
-FREE_CHAR_LIMIT = 5000        # per "month" — see is_pro/session TODO above
-FREE_DAILY_ACTIONS = 10       # single generations/day
-FREE_BATCH_LIMIT = 5          # batch generations/day
-FREE_PREVIEW_LIMIT = 5        # previews/day
-BATCH_MAX_LINES = 20
-
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+# Limits now come from persistence.load_limits() (GitHub-backed, editable in
+# /admin/limits) instead of hardcoded constants. Cached briefly so we're not
+# hitting the GitHub API on every single request — admin changes take effect
+# within LIMITS_CACHE_TTL seconds, not instantly, which is a fine trade-off.
+LIMITS_CACHE_TTL = 30
+_limits_cache = {"data": None, "ts": 0}
+
+
+def get_limits() -> dict:
+    now = time.time()
+    if _limits_cache["data"] is None or (now - _limits_cache["ts"]) > LIMITS_CACHE_TTL:
+        _limits_cache["data"] = persistence.load_limits()
+        _limits_cache["ts"] = now
+    return _limits_cache["data"]
 
 
 def is_pro() -> bool:
@@ -117,26 +126,30 @@ def usage_summary() -> dict:
     """Surfaces the SAME counters that _check_and_bump actually enforces —
     this is deliberately the session-cookie numbers, not usage_tracking.py's
     IP-based numbers, so what's displayed always matches what's enforced.
+    Limits themselves now come from get_limits() (GitHub-backed, editable in
+    /admin/limits), not hardcoded constants.
     (Note: usage_tracking.py's IP-based module exists for licensing checks
     but isn't wired into daily-limit enforcement here — see README.)"""
     _reset_daily_if_needed()
+    lim = get_limits()
     return {
-        "singles": {"used": session.get("usage_singles", 0), "limit": FREE_DAILY_ACTIONS},
-        "chars": {"used": session.get("usage_chars", 0), "limit": FREE_CHAR_LIMIT},
-        "batches": {"used": session.get("usage_batches", 0), "limit": FREE_BATCH_LIMIT},
-        "previews": {"used": session.get("usage_previews", 0), "limit": FREE_PREVIEW_LIMIT},
-        "transcribe": {"used": session.get("usage_transcribe", 0), "limit": FREE_DAILY_ACTIONS},
-        "convert": {"used": session.get("usage_convert", 0), "limit": FREE_DAILY_ACTIONS},
-        "merge": {"used": session.get("usage_merge", 0), "limit": FREE_DAILY_ACTIONS},
-        "cutter": {"used": session.get("usage_cutter", 0), "limit": FREE_DAILY_ACTIONS},
+        "singles": {"used": session.get("usage_singles", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "chars": {"used": session.get("usage_chars", 0), "limit": lim["FREE_CHAR_LIMIT"]},
+        "batches": {"used": session.get("usage_batches", 0), "limit": lim["FREE_BATCH_LIMIT"]},
+        "previews": {"used": session.get("usage_previews", 0), "limit": lim["FREE_PREVIEW_LIMIT"]},
+        "transcribe": {"used": session.get("usage_transcribe", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "convert": {"used": session.get("usage_convert", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "merge": {"used": session.get("usage_merge", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "cutter": {"used": session.get("usage_cutter", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
 @app.route("/studio")
 def studio():
+    lim = get_limits()
     active_voices = VOICES if is_pro() else FREE_VOICES
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
-                            free_char_limit=FREE_CHAR_LIMIT, batch_max=BATCH_MAX_LINES,
+                            free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=lim["FREE_BATCH_MAX_LINES"],
                             usage=usage_summary())
 
 
@@ -285,6 +298,7 @@ def admin_limits():
             "FREE_CHAR_LIMIT": int(request.form.get("FREE_CHAR_LIMIT", 5000)),
             "FREE_DAILY_ACTIONS": int(request.form.get("FREE_DAILY_ACTIONS", 10)),
             "FREE_BATCH_LIMIT": int(request.form.get("FREE_BATCH_LIMIT", 5)),
+            "FREE_BATCH_MAX_LINES": int(request.form.get("FREE_BATCH_MAX_LINES", 20)),
             "FREE_PREVIEW_LIMIT": int(request.form.get("FREE_PREVIEW_LIMIT", 5)),
             "PRO_BATCH_MAX": int(request.form.get("PRO_BATCH_MAX", 20)),
             "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 20)),
@@ -296,6 +310,7 @@ def admin_limits():
             "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
         }
         ok, err = persistence.save_limits(limits)
+        _limits_cache["data"] = None  # force refresh so the change is visible immediately, not after LIMITS_CACHE_TTL
         return render_template("admin/limits.html", limits=limits, saved=ok, error=err)
     limits = persistence.load_limits()
     return render_template("admin/limits.html", limits=limits)
@@ -404,8 +419,9 @@ def tools_hub():
 
 @app.route("/api/tools/transcribe", methods=["POST"])
 def api_transcribe():
-    if not _check_and_bump("usage_transcribe", FREE_DAILY_ACTIONS):
-        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    lim = get_limits()
+    if not _check_and_bump("usage_transcribe", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     lang_code = request.form.get("lang_code", "en-US")
     if not file:
@@ -419,8 +435,9 @@ def api_transcribe():
 
 @app.route("/api/tools/convert", methods=["POST"])
 def api_convert():
-    if not _check_and_bump("usage_convert", FREE_DAILY_ACTIONS):
-        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    lim = get_limits()
+    if not _check_and_bump("usage_convert", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
     quality = int(request.form.get("quality", 192))
@@ -437,8 +454,9 @@ def api_convert():
 
 @app.route("/api/tools/merge", methods=["POST"])
 def api_merge():
-    if not _check_and_bump("usage_merge", FREE_DAILY_ACTIONS):
-        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    lim = get_limits()
+    if not _check_and_bump("usage_merge", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     files = request.files.getlist("files")
     gap_ms = int(request.form.get("gap_ms", 500))
     output_format = request.form.get("output_format", "mp3")
@@ -469,8 +487,9 @@ def api_cutter_duration():
 
 @app.route("/api/tools/cutter/trim", methods=["POST"])
 def api_cutter_trim():
-    if not _check_and_bump("usage_cutter", FREE_DAILY_ACTIONS):
-        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    lim = get_limits()
+    if not _check_and_bump("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     start_sec = float(request.form.get("start_sec", 0))
     end_sec = float(request.form.get("end_sec", 0))
@@ -486,8 +505,9 @@ def api_cutter_trim():
 
 @app.route("/api/tools/cutter/split", methods=["POST"])
 def api_cutter_split():
-    if not _check_and_bump("usage_cutter", FREE_DAILY_ACTIONS):
-        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    lim = get_limits()
+    if not _check_and_bump("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     split_sec = float(request.form.get("split_sec", 0))
     if not file:
@@ -513,8 +533,9 @@ def api_preview():
     if not voice_id:
         return jsonify({"error": "No voice selected."}), 400
 
-    if not _check_and_bump("usage_previews", FREE_PREVIEW_LIMIT):
-        return jsonify({"error": f"Free preview limit reached ({FREE_PREVIEW_LIMIT}/day). Upgrade to Pro for unlimited previews."}), 402
+    lim = get_limits()
+    if not _check_and_bump("usage_previews", lim["FREE_PREVIEW_LIMIT"]):
+        return jsonify({"error": f"Free preview limit reached ({lim['FREE_PREVIEW_LIMIT']}/day). Upgrade to Pro for unlimited previews."}), 402
 
     text = default_preview_text(language)
     rate_str = f"{speed_pct - 100:+d}%"
@@ -539,12 +560,13 @@ def api_generate():
     if not voice_id:
         return jsonify({"error": "No voice selected."}), 400
 
-    char_limit_widget = None if is_pro() else FREE_CHAR_LIMIT
+    lim = get_limits()
+    char_limit_widget = None if is_pro() else lim["FREE_CHAR_LIMIT"]
     if char_limit_widget and len(text) > char_limit_widget:
         return jsonify({"error": f"Free plan is capped at {char_limit_widget:,} characters. Upgrade to Pro for unlimited length."}), 402
 
-    if not _check_and_bump("usage_singles", FREE_DAILY_ACTIONS):
-        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS} generations/day). Upgrade to Pro for unlimited."}), 402
+    if not _check_and_bump("usage_singles", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Upgrade to Pro for unlimited."}), 402
 
     rate_str = f"{speed_pct - 100:+d}%"
     try:
@@ -577,12 +599,13 @@ def api_batch():
     if not voice_id:
         return jsonify({"error": "No voice selected."}), 400
 
-    max_lines = BATCH_MAX_LINES if not is_pro() else 999
+    lim = get_limits()
+    max_lines = lim["PRO_BATCH_MAX"] if is_pro() else lim["FREE_BATCH_MAX_LINES"]
     if len(lines) > max_lines:
         return jsonify({"error": f"{'Pro' if is_pro() else 'Free'} plan limit is {max_lines} lines."}), 402
 
-    if not _check_and_bump("usage_batches", FREE_BATCH_LIMIT):
-        return jsonify({"error": f"Free batch limit reached ({FREE_BATCH_LIMIT}/day). Upgrade to Pro for unlimited."}), 402
+    if not _check_and_bump("usage_batches", lim["FREE_BATCH_LIMIT"]):
+        return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for unlimited."}), 402
 
     rate_str = f"{speed_pct - 100:+d}%"
     results = []
