@@ -9,6 +9,8 @@
   <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no"></iframe>
 </div>
 
-{# In-page push has no container-div ID (just appends a script tag to <body>),
-   so it's safe to include directly without iframe isolation. #}
-<script>(function(d,z,s){s.src='https://'+d+'/401/'+z;try{(document.body||document.documentElement).appendChild(s)}catch(e){}})('groleegni.net',8523450,document.createElement('script'))</script>
+{# In-page push (groleegni.net) intentionally removed — it injects an
+   uncontrolled floating UI element with no fixed position/z-index we can set,
+   which was overlapping the nav hamburger button. Re-add only if you can
+   confirm Adsterra's zone settings pin it somewhere that won't collide with
+   the nav. #}
