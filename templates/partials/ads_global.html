@@ -1,12 +1,14 @@
-{# Included from base.html only when NOT pro. Ported 1:1 from your Adsterra codes. #}
+{# Included from base.html only when NOT pro. #}
 
 <style>
-.adsterra-sticky-footer { position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; background: rgba(16,24,32,0.95); border-top: 1px solid rgba(232,169,60,0.3); padding: 6px; text-align: center; display: none; }
+.adsterra-sticky-footer { position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; display: none; }
 @media (max-width: 768px) { .adsterra-sticky-footer { display: block; } }
+.adsterra-sticky-footer iframe { width: 100%; height: 80px; border: 0; display: block; background: rgba(16,24,32,0.95); }
 </style>
 <div class="adsterra-sticky-footer">
-<script async="async" data-cfasync="false" src="https://pl29723111.effectivecpmnetwork.com/5b0c617f15e7e87967b22cafcc23e1b7/invoke.js"></script>
-<div id="container-5b0c617f15e7e87967b22cafcc23e1b7-footer"></div>
+  <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no"></iframe>
 </div>
 
+{# In-page push has no container-div ID (just appends a script tag to <body>),
+   so it's safe to include directly without iframe isolation. #}
 <script>(function(d,z,s){s.src='https://'+d+'/401/'+z;try{(document.body||document.documentElement).appendChild(s)}catch(e){}})('groleegni.net',8523450,document.createElement('script'))</script>
