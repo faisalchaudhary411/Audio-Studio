@@ -11,51 +11,55 @@
 
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;display:flex;align-items:center;justify-content:center;';
-    overlay.innerHTML = `
-      <div style="background:#182530;border:1px solid rgba(232,169,60,0.3);border-radius:20px;padding:1.5rem;max-width:460px;width:90%;text-align:center;">
-        <div style="color:rgba(245,242,234,0.4);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.8rem;">Sponsored — Preparing Your Audio</div>
-        <div style="min-height:120px;display:flex;align-items:center;justify-content:center;margin:0.5rem 0;" id="voxcraft-interstitial-slot"></div>
-        <div style="color:rgba(245,242,234,0.45);font-size:0.85rem;margin:0.6rem 0;" id="voxcraft-interstitial-timer">Ad closes in 5s…</div>
-        <button id="voxcraft-interstitial-skip" disabled style="background:#E8A93C;color:#1A1204;border:none;padding:0.6rem 1.4rem;border-radius:12px;font-weight:700;cursor:not-allowed;font-size:0.88rem;opacity:0.5;">Please wait…</button>
-        <div style="color:rgba(245,242,234,0.25);font-size:0.75rem;margin-top:0.8rem;"><a href="/pricing" style="color:#E8A93C;text-decoration:none;">Remove ads with Pro →</a></div>
-      </div>
-    `;
+    const iframe = document.createElement('iframe');
+    iframe.src = '/ads/slot/interstitial';
+    iframe.style.cssText = 'width:100%;height:100%;border:0;';
+    overlay.appendChild(iframe);
     document.body.appendChild(overlay);
 
-    const slot = overlay.querySelector('#voxcraft-interstitial-slot');
-    const script = document.createElement('script');
-    script.async = true;
-    script.setAttribute('data-cfasync', 'false');
-    script.src = 'https://pl29723111.effectivecpmnetwork.com/5b0c617f15e7e87967b22cafcc23e1b7/invoke.js';
-    const container = document.createElement('div');
-    container.id = 'container-5b0c617f15e7e87967b22cafcc23e1b7-interstitial';
-    slot.appendChild(script);
-    slot.appendChild(container);
-
-    const timerEl = overlay.querySelector('#voxcraft-interstitial-timer');
-    const skipBtn = overlay.querySelector('#voxcraft-interstitial-skip');
-    let s = 5;
-
-    function finish() {
-      overlay.remove();
-      onDone();
-    }
-    skipBtn.onclick = finish;
-
-    const iv = setInterval(() => {
-      s -= 1;
-      if (s <= 0) {
-        clearInterval(iv);
-        finish();
-      } else {
-        timerEl.textContent = `Ad closes in ${s}s…`;
-        if (s <= 2) {
-          skipBtn.disabled = false;
-          skipBtn.style.cursor = 'pointer';
-          skipBtn.style.opacity = '1';
-          skipBtn.textContent = `Skip Ad (${s})`;
-        }
+    function onMessage(e) {
+      if (e.data === 'voxcraft-interstitial-done') {
+        window.removeEventListener('message', onMessage);
+        overlay.remove();
+        onDone();
       }
-    }, 1000);
+    }
+    window.addEventListener('message', onMessage);
+
+    // Safety net: if the iframe never loads (ad blocker, network issue),
+    // don't trap the user — auto-continue after 6s regardless.
+    setTimeout(() => {
+      if (document.body.contains(overlay)) {
+        window.removeEventListener('message', onMessage);
+        overlay.remove();
+        onDone();
+      }
+    }, 6000);
   };
+
+  // ---- Popunder: once per session, on first button-like click (ported from POPUNDER_SCRIPT) ----
+  window.VoxCraftAds.initPopunder = function () {
+    if (window.VOXCRAFT_IS_PRO) return;
+    if (sessionStorage.getItem('voxcraft_popunder_shown')) return;
+    let triggered = false;
+    document.addEventListener('click', function (e) {
+      if (triggered) return;
+      if (e.target.closest('button, a, [role="button"]')) {
+        triggered = true;
+        sessionStorage.setItem('voxcraft_popunder_shown', '1');
+        setTimeout(function () {
+          const w = window.open('about:blank', '_blank');
+          if (w) {
+            w.location = 'https://www.effectivecpmnetwork.com/y29b51ygf?key=6d81ae914eae0a29f481ed4a8117e686';
+            w.blur();
+            window.focus();
+          }
+        }, 300);
+      }
+    }, { once: true });
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    window.VoxCraftAds.initPopunder();
+  });
 })();
