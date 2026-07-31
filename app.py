@@ -113,11 +113,31 @@ def landing():
     return render_template("landing.html")
 
 
+def usage_summary() -> dict:
+    """Surfaces the SAME counters that _check_and_bump actually enforces —
+    this is deliberately the session-cookie numbers, not usage_tracking.py's
+    IP-based numbers, so what's displayed always matches what's enforced.
+    (Note: usage_tracking.py's IP-based module exists for licensing checks
+    but isn't wired into daily-limit enforcement here — see README.)"""
+    _reset_daily_if_needed()
+    return {
+        "singles": {"used": session.get("usage_singles", 0), "limit": FREE_DAILY_ACTIONS},
+        "chars": {"used": session.get("usage_chars", 0), "limit": FREE_CHAR_LIMIT},
+        "batches": {"used": session.get("usage_batches", 0), "limit": FREE_BATCH_LIMIT},
+        "previews": {"used": session.get("usage_previews", 0), "limit": FREE_PREVIEW_LIMIT},
+        "transcribe": {"used": session.get("usage_transcribe", 0), "limit": FREE_DAILY_ACTIONS},
+        "convert": {"used": session.get("usage_convert", 0), "limit": FREE_DAILY_ACTIONS},
+        "merge": {"used": session.get("usage_merge", 0), "limit": FREE_DAILY_ACTIONS},
+        "cutter": {"used": session.get("usage_cutter", 0), "limit": FREE_DAILY_ACTIONS},
+    }
+
+
 @app.route("/studio")
 def studio():
     active_voices = VOICES if is_pro() else FREE_VOICES
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
-                            free_char_limit=FREE_CHAR_LIMIT, batch_max=BATCH_MAX_LINES)
+                            free_char_limit=FREE_CHAR_LIMIT, batch_max=BATCH_MAX_LINES,
+                            usage=usage_summary())
 
 
 @app.route("/pricing")
@@ -162,15 +182,16 @@ def activate():
 
 @app.route("/upgrade", methods=["GET", "POST"])
 def upgrade():
+    checkout_url = persistence.load_limits().get("CHECKOUT_URL") or None
     if request.method == "GET":
-        return render_template("upgrade.html")
+        return render_template("upgrade.html", checkout_url=checkout_url)
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
     payment_method = (request.form.get("payment_method") or "").strip()
     txn_id = (request.form.get("txn_id") or "").strip()
     if not name or not email:
-        return render_template("upgrade.html", error="Name and email are required.")
+        return render_template("upgrade.html", error="Name and email are required.", checkout_url=checkout_url)
 
     screenshot_b64 = ""
     file = request.files.get("screenshot")
@@ -179,8 +200,8 @@ def upgrade():
 
     result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64)
     if result.get("success"):
-        return render_template("upgrade.html", submitted=True, req_id=result["id"])
-    return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."))
+        return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url)
+    return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."), checkout_url=checkout_url)
 
 
 # ---------------------------------------------------------------------------
@@ -352,9 +373,33 @@ def admin_blog():
     return render_template("admin/blog.html", posts=posts)
 
 
+@app.route("/ads/slot/<slot>")
+def ads_slot(slot):
+    """Standalone minimal HTML pages for each ad placement, embedded via
+    <iframe>. This is the Flask equivalent of Streamlit's components.html()
+    iframe isolation — necessary because Adsterra's invoke.js is hardcoded to
+    look for one exact container ID (container-5b0c617f15e7e87967b22cafcc23e1b7)
+    for every placement. Embedding that same ID directly in the page multiple
+    times (banner + sticky footer + interstitial all at once) causes duplicate-ID
+    conflicts and the ad script only finds the first one. Iframes give each
+    placement its own document, exactly like the original's isolation."""
+    if is_pro():
+        return "", 204
+    templates_map = {
+        "banner": "ads/slot_banner.html",
+        "sticky_footer": "ads/slot_sticky_footer.html",
+        "native_banner": "ads/slot_banner.html",
+        "interstitial": "ads/slot_interstitial.html",
+    }
+    tpl = templates_map.get(slot)
+    if not tpl:
+        return "", 404
+    return render_template(tpl)
+
+
 @app.route("/tools")
 def tools_hub():
-    return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS)
+    return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
 
 
 @app.route("/api/tools/transcribe", methods=["POST"])
