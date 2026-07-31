@@ -124,11 +124,15 @@
   }
   renderHistory();
 
-  generateSingleBtn.addEventListener('click', async () => {
+  generateSingleBtn.addEventListener('click', () => {
     if (!singleText.value.trim()) {
       singleStatus.textContent = 'Please enter some text first.';
       return;
     }
+    window.VoxCraftAds.showInterstitial(runSingleGeneration);
+  });
+
+  async function runSingleGeneration() {
     generateSingleBtn.disabled = true;
     singleStatus.textContent = 'Generating…';
     singleResult.innerHTML = '';
@@ -168,7 +172,7 @@
     } finally {
       generateSingleBtn.disabled = false;
     }
-  });
+  }
 
   // ---- Batch generation ----
   const batchText = document.getElementById('batch-text');
