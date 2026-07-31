@@ -1,0 +1,39 @@
+<!DOCTYPE html><html><head>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#101820;font-family:Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.adbox{background:#182530;border:1px solid rgba(232,169,60,0.3);border-radius:20px;padding:1.5rem;max-width:460px;width:95%;text-align:center;margin:auto}
+.lbl{color:rgba(245,242,234,0.4);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.8rem}
+.adwrap{min-height:120px;display:flex;align-items:center;justify-content:center;margin:0.5rem 0}
+.tmr{color:rgba(245,242,234,0.45);font-size:0.85rem;margin:0.6rem 0}
+.skipbtn{background:#E8A93C;color:#1A1204;border:none;padding:0.6rem 1.4rem;border-radius:12px;font-weight:700;cursor:pointer;font-size:0.88rem;margin-top:0.4rem}
+.skipbtn:disabled{background:rgba(245,242,234,0.1);color:rgba(245,242,234,0.3);cursor:not-allowed}
+.pro{color:rgba(245,242,234,0.25);font-size:0.75rem;margin-top:0.8rem}
+.pro a{color:#E8A93C;text-decoration:none}
+</style></head><body>
+<div class="adbox">
+<div class="lbl">Sponsored — Preparing Your Audio</div>
+<div class="adwrap">
+<script async="async" data-cfasync="false" src="https://pl29723111.effectivecpmnetwork.com/5b0c617f15e7e87967b22cafcc23e1b7/invoke.js"></script>
+<div id="container-5b0c617f15e7e87967b22cafcc23e1b7"></div>
+</div>
+<div class="tmr" id="tmr">Ad closes in 5s…</div>
+<button class="skipbtn" id="skipBtn" disabled>Please wait…</button>
+<div class="pro"><a href="/upgrade" target="_parent">Remove ads with Pro →</a></div>
+</div>
+<script>
+(function(){
+  var s=5, tmr=document.getElementById("tmr"), btn=document.getElementById("skipBtn");
+  function done(){ window.parent.postMessage('voxcraft-interstitial-done', '*'); }
+  btn.onclick = done;
+  var iv=setInterval(function(){
+    s--;
+    if(s<=0){ clearInterval(iv); done(); }
+    else{
+      tmr.textContent = "Ad closes in " + s + "s…";
+      if(s<=2){ btn.disabled=false; btn.textContent = "Skip Ad (" + s + ")"; }
+    }
+  }, 1000);
+})();
+</script>
+</body></html>
