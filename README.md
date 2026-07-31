@@ -1,37 +1,65 @@
 # VoxCraft — Flask migration
 
-## Status: TTS tool ported for real. Everything else is NOT ported yet.
+## Status: TTS + 4 audio tools + full management layer ported. 4 audio tools remain.
 
-This pass replaced the stub `/api/generate` with an actual port of your Streamlit
-TTS engine — edge-tts + gTTS fallback, retry logic, markup/SSML mode, single +
-batch generation with ZIP export, voice preview, free/Pro voice-list gating,
-daily usage limits. It's a faithful port of the `tts_dispatch` / `generate_audio`
-/ `generate_audio_markup` / `parse_markup_segments` / `_make_silence` functions
-from your `app__1_.py`.
+### This round: licensing, admin, ads, blog, legal pages
+Ported from your Streamlit backend and functionally tested end-to-end in this
+environment (not just route wiring — actual license activation/device-binding,
+IP usage limits, request approval → key email, and blog markdown rendering
+were all verified with real test data before handing off):
 
-**Still NOT ported** (your Streamlit app has 9 tools total — this is TTS only):
-Transcribe, Audio Converter, Merge, Cutter, Music tool, Denoise, Voice Changer,
-Video-to-Audio extractor, admin panel, Freemius/Paddle payment callbacks,
-license-key system, IP-based usage tracking, ad system (6 surfaces), blog.
+- **Licensing** (`licensing.py`) — your internal key system: generate, activate
+  (with same-device re-activation via IP+fingerprint matching), revoke,
+  unrevoke, delete, renew. Plus Freemius verification. **Paddle was NOT
+  ported** — per your own project history, Freemius replaced Paddle after
+  Paddle rejected the app, so Paddle was already dead code in the original.
+- **Usage tracking** (`usage_tracking.py`) — real IP-based (not session-cookie)
+  free-tier limits, hashed IP + browser fingerprint, synced to GitHub.
+- **Manual pro requests** (`pro_requests.py`) — EasyPaisa/JazzCash/HBL bank
+  transfer flow: customer submits proof at `/upgrade`, you approve in
+  `/admin/requests`, they get an emailed license key automatically.
+- **Admin panel** (`/admin/*`) — dashboard, pricing/limits editor, license key
+  manager, pro-requests queue, blog manager. **Password-gated — the original
+  had NO auth on `/admin` at all, which I added here** (`ADMIN_PASSWORD`).
+- **Ads** — your real Adsterra codes (sticky footer, in-page push, banner,
+  interstitial), ported as-is, gated to free users only.
+- **Blog** — public `/blog` + `/blog/<id>`, Markdown body rendering, full CRUD
+  in the admin panel, persisted to GitHub same as your other config data.
+- **Privacy / Terms / Contact** — new pages (didn't exist in the original).
+  These are starting templates, not legal advice — have them reviewed,
+  especially before handling Pakistani payment data.
 
-- `app.py` — routes: `/`, `/studio`, `/pricing`, `/api/tts/preview`, `/api/tts/generate`, `/api/tts/batch`
-- `tts_engine.py` — ported TTS engine (edge-tts, gTTS fallback, markup parser)
-- `voices.py` — full + free voice catalogues (ported from `app__1_.py`)
-- `templates/studio.html` + `static/js/studio.js` — real voice picker, SSML toggle, single/batch UI
-- `static/css/style.css` — design system (ink-teal + brass/jade palette)
-- `Procfile` + `requirements.txt` — includes edge-tts, gTTS, lameenc
+### One thing worth fixing (found while testing, ported faithfully rather than
+silently changed): your original `check_vox_license()` has the revoked-key
+check placed after the expiry check, which already returns early for revoked
+keys — so revoked keys report "Subscription expired" instead of "revoked".
+Cosmetic only, but flagging since you may want the message accurate.
 
-## What YOU need to wire in (marked with `TODO` in app.py / tts_engine.py)
-1. **Real Pro / license check** — `is_pro()` is a session-cookie stub. Your original
-   app used IP-based usage tracking synced through your GitHub backend — this
-   Flask version uses Flask session cookies instead, which is NOT equivalent
-   (resets per-browser, not per-IP/device). Wire in your real license-key check
-   before relying on the free-tier limits.
-2. **ElevenLabs cloned voices** (`EL::` prefix) — stripped out this pass. Re-add
-   `el_generate_audio()` and the routing branch in `tts_dispatch()` if needed.
-3. **Google-engine voices** (`GT::` prefix, "More Languages" category) — stripped
-   out this pass; those route through gTTS directly, not edge-tts.
-4. **The other 8 tools + admin + payments + ads + blog** — not started.
+## REQUIRED environment variables (set these in Render before deploying)
+| Variable | Purpose | What breaks without it |
+|---|---|---|
+| `GITHUB_TOKEN` | repo-scope PAT for `faisalchaudhary411/faisalchaudhary411.github.io` | Nothing persists — limits/keys/requests/blog all silently no-op |
+| `ADMIN_PASSWORD` | gates `/admin` | Admin panel redirects to login forever (no password = can't log in) |
+| `SECRET_KEY` | Flask session signing | Sessions won't persist reliably across restarts |
+| `RESEND_API_KEY` + `ADMIN_EMAIL` | pro-request notification emails | Requests still queue in admin, just no email alert |
+| `FREEMIUS_API_TOKEN` + `FREEMIUS_PRODUCT_ID` | Freemius license verification | Only needed if you wire up Freemius checkout; manual bank-transfer flow works without it |
+
+## Newly ported earlier: Transcribe, Convert, Merge, Cutter
+Live under `/tools` — pydub + ffmpeg (preinstalled on Render). See git history
+of this README for details.
+
+**Still NOT ported**: Music tool, Denoise, Voice Changer, Video-to-Audio
+extractor.
+
+## Voice cloning — deliberately NOT deployed yet
+See earlier note: no free tier has enough RAM for Chatterbox, and the free
+hosted alternative (HF's public Chatterbox Space) is currently paused. Hold
+off until you're ready to pay for ~2GB RAM somewhere.
+
+## Deploying on Render
+1. Push to GitHub, including all the env vars above set in Render's dashboard.
+2. New → Blueprint → point at the repo (reads `render.yaml` automatically).
+3. Free tier is fine for everything in this app — no heavy ML deps.
 
 ## Testing locally / on Replit
 ```

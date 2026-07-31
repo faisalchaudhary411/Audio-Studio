@@ -1,32 +1,38 @@
 """
-VoxCraft — Flask app, TTS tool ported for real (edge-tts + gTTS fallback,
-markup mode, single + batch generation).
+VoxCraft — Flask app.
 
-Everything else (Transcribe, Convert, Merge, Cutter, Music, Denoise,
-VoiceChanger, VideoExtract, admin, payments, ads, blog) is NOT ported yet —
-this pass is TTS only, on purpose, per your instruction.
+This pass: real licensing (internal keys + Freemius), IP-based usage tracking,
+manual pro-request queue, admin panel, ads, blog, and privacy/terms/contact
+pages — ported from your Streamlit app's backend modules (see persistence.py,
+licensing.py, usage_tracking.py, notifications.py, pro_requests.py).
 
-TODO before this replaces the Streamlit app:
-- Real Pro / license-key check (is_pro() below is a session-cookie stub —
-  original app used IP-based usage tracking synced via your GitHub backend,
-  which this does not replicate yet).
-- ElevenLabs cloned-voice routing (EL:: prefix) — stripped out for this pass.
-- Google-engine voices (GT:: prefix, the "More Languages" category) — stripped
-  out for this pass; those route through gTTS directly rather than edge-tts.
-- The other 8 tools, admin panel, payments, ads, blog.
+Still NOT ported: Music tool, Denoise, Voice Changer, Video-to-Audio extractor.
+Paddle is intentionally NOT ported (Freemius replaced it per your own history).
+
+REQUIRED ENV VARS for this pass to actually work (see README):
+- GITHUB_TOKEN      — repo-scope PAT for faisalchaudhary411/faisalchaudhary411.github.io
+- ADMIN_PASSWORD    — gates /admin (there was NO auth on the original admin page — added here)
+- RESEND_API_KEY, ADMIN_EMAIL — for pro-request notification emails
+- FREEMIUS_API_TOKEN, FREEMIUS_PRODUCT_ID — only if you want Freemius checkout wired live
 """
 
-from flask import Flask, render_template, request, jsonify, session, send_file
+from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash
 import os
 import io
 import time
 import zipfile
 import base64
 import datetime as dt
+import markdown as md_lib
 
 from voices import VOICES, FREE_VOICES, default_preview_text
 from tts_engine import tts_dispatch
 from clone_engine import start_clone_job, get_job
+import audio_tools
+import persistence
+import licensing
+import usage_tracking
+import pro_requests
 from werkzeug.utils import secure_filename
 
 CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
@@ -42,10 +48,35 @@ FREE_BATCH_LIMIT = 5          # batch generations/day
 FREE_PREVIEW_LIMIT = 5        # previews/day
 BATCH_MAX_LINES = 20
 
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
 
 def is_pro() -> bool:
-    """TODO: replace with real license-key check against Freemius."""
-    return session.get("is_pro", False)
+    """Real check now: validates the license key stored in this session
+    against licensing.check_vox_license() (backed by license_keys.json on
+    GitHub). Falls back to False if no key is activated or GITHUB_TOKEN
+    isn't configured yet."""
+    key = session.get("license_key")
+    if not key:
+        return False
+    return licensing.check_vox_license(key).get("valid", False)
+
+
+def admin_required(view_func):
+    from functools import wraps
+
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not session.get("admin_authed"):
+            return redirect(url_for("admin_login", next=request.path))
+        return view_func(*args, **kwargs)
+
+    return wrapper
+
+
+@app.context_processor
+def inject_globals():
+    return {"is_pro_ctx": is_pro()}
 
 
 def _today() -> str:
@@ -59,6 +90,10 @@ def _reset_daily_if_needed():
         session["usage_batches"] = 0
         session["usage_previews"] = 0
         session["usage_chars"] = 0
+        session["usage_transcribe"] = 0
+        session["usage_convert"] = 0
+        session["usage_merge"] = 0
+        session["usage_cutter"] = 0
 
 
 def _check_and_bump(counter_key: str, limit: int) -> bool:
@@ -88,6 +123,321 @@ def studio():
 @app.route("/pricing")
 def pricing():
     return render_template("pricing.html")
+
+
+# ---------------------------------------------------------------------------
+# Licensing: activate a key, submit a manual pro request
+# ---------------------------------------------------------------------------
+@app.route("/activate", methods=["GET", "POST"])
+def activate():
+    if request.method == "GET":
+        return render_template("activate.html")
+    key = (request.form.get("license_key") or "").strip()
+    if not key:
+        return render_template("activate.html", error="Enter a license key.")
+    result = licensing.activate_vox_license(key, request)
+    if result.get("valid"):
+        session["license_key"] = key
+        return render_template("activate.html", success=True, name=result.get("name"))
+    return render_template("activate.html", error=result.get("error", "Invalid license key."))
+
+
+@app.route("/upgrade", methods=["GET", "POST"])
+def upgrade():
+    if request.method == "GET":
+        return render_template("upgrade.html")
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    phone = (request.form.get("phone") or "").strip()
+    payment_method = (request.form.get("payment_method") or "").strip()
+    txn_id = (request.form.get("txn_id") or "").strip()
+    if not name or not email:
+        return render_template("upgrade.html", error="Name and email are required.")
+
+    screenshot_b64 = ""
+    file = request.files.get("screenshot")
+    if file and file.filename:
+        screenshot_b64 = base64.b64encode(file.read()).decode("ascii")
+
+    result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64)
+    if result.get("success"):
+        return render_template("upgrade.html", submitted=True, req_id=result["id"])
+    return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."))
+
+
+# ---------------------------------------------------------------------------
+# Blog (public)
+# ---------------------------------------------------------------------------
+@app.route("/blog")
+def blog_list():
+    posts = [p for p in persistence.load_blogs() if p.get("published")]
+    posts.sort(key=lambda p: p.get("date", ""), reverse=True)
+    return render_template("blog_list.html", posts=posts)
+
+
+@app.route("/blog/<post_id>")
+def blog_detail(post_id):
+    posts = persistence.load_blogs()
+    post = next((p for p in posts if str(p.get("id")) == str(post_id) and p.get("published")), None)
+    if not post:
+        return render_template("blog_list.html", posts=[], not_found=True), 404
+    post_html = md_lib.markdown(post.get("body", ""))
+    return render_template("blog_detail.html", post=post, post_html=post_html)
+
+
+# ---------------------------------------------------------------------------
+# Static content pages
+# ---------------------------------------------------------------------------
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+
+@app.route("/contact")
+def contact():
+    return render_template("contact.html")
+
+
+# ---------------------------------------------------------------------------
+# Admin
+# ---------------------------------------------------------------------------
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "GET":
+        return render_template("admin/login.html")
+    password = request.form.get("password", "")
+    if ADMIN_PASSWORD and password == ADMIN_PASSWORD:
+        session["admin_authed"] = True
+        next_url = request.args.get("next") or url_for("admin_dashboard")
+        return redirect(next_url)
+    return render_template("admin/login.html", error="Incorrect password.")
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin_authed", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin")
+@admin_required
+def admin_dashboard():
+    keys = persistence.load_license_keys()
+    reqs = persistence.load_requests()
+    posts = persistence.load_blogs()
+    active_keys = sum(1 for k, v in keys.items() if licensing.is_subscription_active(v) and not v.get("revoked"))
+    pending_reqs = sum(1 for r in reqs if r.get("status") in ("pending", "payment_pending"))
+    return render_template("admin/dashboard.html",
+                            total_keys=len(keys), active_keys=active_keys,
+                            pending_reqs=pending_reqs, total_posts=len(posts),
+                            github_configured=bool(os.environ.get("GITHUB_TOKEN")))
+
+
+@app.route("/admin/limits", methods=["GET", "POST"])
+@admin_required
+def admin_limits():
+    if request.method == "POST":
+        limits = {
+            "FREE_CHAR_LIMIT": int(request.form.get("FREE_CHAR_LIMIT", 5000)),
+            "FREE_DAILY_ACTIONS": int(request.form.get("FREE_DAILY_ACTIONS", 10)),
+            "FREE_BATCH_LIMIT": int(request.form.get("FREE_BATCH_LIMIT", 5)),
+            "FREE_PREVIEW_LIMIT": int(request.form.get("FREE_PREVIEW_LIMIT", 5)),
+            "PRO_BATCH_MAX": int(request.form.get("PRO_BATCH_MAX", 20)),
+            "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 20)),
+            "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
+            "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
+            "FREE_PRICE_LABEL": request.form.get("FREE_PRICE_LABEL", "$0"),
+            "CHECKOUT_URL": request.form.get("CHECKOUT_URL", ""),
+            "FREE_FEATURES": request.form.get("FREE_FEATURES", ""),
+            "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
+        }
+        ok, err = persistence.save_limits(limits)
+        return render_template("admin/limits.html", limits=limits, saved=ok, error=err)
+    limits = persistence.load_limits()
+    return render_template("admin/limits.html", limits=limits)
+
+
+@app.route("/admin/keys", methods=["GET", "POST"])
+@admin_required
+def admin_keys():
+    if request.method == "POST":
+        action = request.form.get("action")
+        key = request.form.get("key", "")
+        if action == "create":
+            licensing.create_new_key_manual()
+        elif action == "revoke":
+            licensing.revoke_key(key)
+        elif action == "unrevoke":
+            licensing.unrevoke_key(key)
+        elif action == "delete":
+            licensing.delete_key(key)
+        return redirect(url_for("admin_keys"))
+    keys = persistence.load_license_keys()
+    rows = [{"key": k, **v} for k, v in keys.items()]
+    rows.sort(key=lambda r: r.get("created", ""), reverse=True)
+    return render_template("admin/keys.html", rows=rows)
+
+
+@app.route("/admin/requests", methods=["GET", "POST"])
+@admin_required
+def admin_requests():
+    if request.method == "POST":
+        action = request.form.get("action")
+        req_id = request.form.get("req_id", "")
+        if action == "approve":
+            reqs = persistence.load_requests()
+            target = next((r for r in reqs if r["id"] == req_id), None)
+            if target:
+                new_key = licensing.create_subscription_key(target.get("name", "Pro User"), target.get("email", ""))
+                pro_requests.approve_request(req_id, new_key)
+        elif action == "reject":
+            pro_requests.reject_request(req_id)
+        return redirect(url_for("admin_requests"))
+    reqs = persistence.load_requests()
+    return render_template("admin/requests.html", reqs=reqs)
+
+
+@app.route("/admin/blog", methods=["GET", "POST"])
+@admin_required
+def admin_blog():
+    posts = persistence.load_blogs()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "create":
+            new_post = {
+                "id": str(int(time.time())),
+                "title": request.form.get("title", "").strip(),
+                "category": request.form.get("category", "").strip(),
+                "excerpt": request.form.get("excerpt", "").strip(),
+                "body": request.form.get("body", "").strip(),
+                "date": dt.datetime.now().strftime("%Y-%m-%d"),
+                "published": request.form.get("published") == "on",
+            }
+            posts.insert(0, new_post)
+            persistence.save_blogs(posts)
+        elif action == "toggle_publish":
+            post_id = request.form.get("post_id")
+            for p in posts:
+                if str(p["id"]) == post_id:
+                    p["published"] = not p.get("published", False)
+            persistence.save_blogs(posts)
+        elif action == "delete":
+            post_id = request.form.get("post_id")
+            posts = [p for p in posts if str(p["id"]) != post_id]
+            persistence.save_blogs(posts)
+        return redirect(url_for("admin_blog"))
+    return render_template("admin/blog.html", posts=posts)
+
+
+@app.route("/tools")
+def tools_hub():
+    return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS)
+
+
+@app.route("/api/tools/transcribe", methods=["POST"])
+def api_transcribe():
+    if not _check_and_bump("usage_transcribe", FREE_DAILY_ACTIONS):
+        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    lang_code = request.form.get("lang_code", "en-US")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        result = audio_tools.transcribe(file.read(), file.filename, lang_code)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/convert", methods=["POST"])
+def api_convert():
+    if not _check_and_bump("usage_convert", FREE_DAILY_ACTIONS):
+        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    output_format = request.form.get("output_format", "mp3")
+    quality = int(request.form.get("quality", 192))
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.convert(file.read(), file.filename, output_format, quality)
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"converted-{int(time.time())}.{output_format}",
+                         "format": output_format})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/merge", methods=["POST"])
+def api_merge():
+    if not _check_and_bump("usage_merge", FREE_DAILY_ACTIONS):
+        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    files = request.files.getlist("files")
+    gap_ms = int(request.form.get("gap_ms", 500))
+    output_format = request.form.get("output_format", "mp3")
+    if len(files) < 2:
+        return jsonify({"error": "Upload at least 2 files to merge."}), 400
+    try:
+        pairs = [(f.read(), f.filename) for f in files]
+        out_bytes = audio_tools.merge(pairs, gap_ms, output_format)
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"merged-{int(time.time())}.{output_format}",
+                         "format": output_format})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/cutter/duration", methods=["POST"])
+def api_cutter_duration():
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        data = file.read()
+        duration = audio_tools.get_duration_sec(data, file.filename)
+        return jsonify({"duration_sec": duration})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/cutter/trim", methods=["POST"])
+def api_cutter_trim():
+    if not _check_and_bump("usage_cutter", FREE_DAILY_ACTIONS):
+        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    start_sec = float(request.form.get("start_sec", 0))
+    end_sec = float(request.form.get("end_sec", 0))
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.trim(file.read(), file.filename, start_sec, end_sec)
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"trimmed-{int(time.time())}.mp3"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/cutter/split", methods=["POST"])
+def api_cutter_split():
+    if not _check_and_bump("usage_cutter", FREE_DAILY_ACTIONS):
+        return jsonify({"error": f"Free daily limit reached ({FREE_DAILY_ACTIONS}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    split_sec = float(request.form.get("split_sec", 0))
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        part1, part2 = audio_tools.split(file.read(), file.filename, split_sec)
+        return jsonify({
+            "part1_b64": base64.b64encode(part1).decode("ascii"),
+            "part2_b64": base64.b64encode(part2).decode("ascii"),
+            "filename_base": f"part-{int(time.time())}",
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tts/preview", methods=["POST"])

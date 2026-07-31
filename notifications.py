@@ -1,0 +1,154 @@
+"""
+notifications.py — ported from _notify_admin / _send_key_email.
+Resend is tried first (matches your other apps' pattern — SMTP is blocked on
+Railway; unclear if Render blocks it too, so SMTP fallback is kept, just
+untested on this specific host).
+"""
+
+import os
+import smtplib
+import requests
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+
+def _secret(key: str) -> str:
+    return os.environ.get(key, "").strip()
+
+
+def notify_admin_new_request(name, email, phone, req_id, payment_method="", txn_id="", screenshot_b64=""):
+    message_body = f"""New VoxCraft Pro Request!
+
+Name: {name}
+Email: {email}
+Phone: {phone or 'N/A'}
+Request ID: {req_id}
+Payment: {payment_method or 'Not submitted'}
+{'Txn/Ref ID: ' + txn_id if txn_id else ''}
+
+Go to Admin Panel -> Pro Requests to approve.
+"""
+    notified = False
+    errors = []
+    resend_key = _secret("RESEND_API_KEY")
+    admin_email = _secret("ADMIN_EMAIL")
+
+    if resend_key and admin_email:
+        try:
+            pay_badge = f"<span style='background:#E8A93C;color:#000;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700'>{payment_method}</span>" if payment_method else "<span style='background:#555;color:#fff;padding:2px 10px;border-radius:20px;font-size:12px'>Not provided</span>"
+            txn_row = f"<tr><td style='padding:6px 0;color:#888;font-size:13px'>Transaction ID</td><td style='padding:6px 0;color:#fff;font-size:13px;font-weight:700'>{txn_id}</td></tr>" if txn_id else ""
+            admin_html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">New Pro Request</div>
+    <div style="color:#1A1204;font-size:13px">VoxCraft Payment Received</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Name</td><td style="padding:6px 0;color:#fff;font-size:13px;font-weight:700">{name}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Email</td><td style="padding:6px 0;color:#E8A93C;font-size:13px">{email}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Phone</td><td style="padding:6px 0;color:#fff;font-size:13px">{phone or "—"}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Request ID</td><td style="padding:6px 0;color:#fff;font-size:11px;font-family:monospace">{req_id}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Payment</td><td style="padding:6px 0">{pay_badge}</td></tr>
+      {txn_row}
+    </table>
+  </div>
+  <div style="text-align:center;color:#444;font-size:11px">VoxCraft Admin</div>
+</div></body></html>"""
+
+            attachments = []
+            if screenshot_b64:
+                admin_html = admin_html.replace(
+                    "</div></body></html>",
+                    """<div style="margin-top:16px"><div style="color:#888;font-size:11px;margin-bottom:6px">PAYMENT SCREENSHOT</div><img src="cid:payment_screenshot" style="max-width:100%;border-radius:8px;border:1px solid #222"></div></div></body></html>""",
+                )
+                attachments = [{"filename": "payment_proof.jpg", "content": screenshot_b64, "content_type": "image/jpeg", "inline": True, "content_id": "payment_screenshot"}]
+
+            payload = {"from": "VoxCraft <onboarding@resend.dev>", "to": [admin_email],
+                       "subject": f"New Pro Payment — {name}", "html": admin_html, "text": message_body}
+            if attachments:
+                payload["attachments"] = attachments
+
+            r = requests.post("https://api.resend.com/emails",
+                               headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                               json=payload, timeout=20)
+            if r.status_code in (200, 201):
+                notified = True
+            else:
+                errors.append(f"Resend admin: {r.status_code} {r.text[:100]}")
+
+            if email and notified:
+                user_html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">Payment Received</div>
+    <div style="color:#1A1204;font-size:13px">VoxCraft Pro — verification in progress</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Hi <strong style="color:#fff">{name}</strong>,</p>
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">We received your payment for VoxCraft Pro. We'll verify and send your license key within a few hours.</p>
+    <div style="background:#101820;border-radius:8px;padding:12px;margin:16px 0">
+      <div style="color:#888;font-size:11px;margin-bottom:4px">Your Request ID</div>
+      <div style="color:#E8A93C;font-size:13px;font-family:monospace;font-weight:700">{req_id}</div>
+    </div>
+  </div>
+</div></body></html>"""
+                try:
+                    requests.post("https://api.resend.com/emails",
+                                   headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                                   json={"from": "VoxCraft <onboarding@resend.dev>", "to": [email],
+                                         "subject": "Payment Received — VoxCraft Pro", "html": user_html}, timeout=15)
+                except Exception:
+                    pass
+        except Exception as e:
+            errors.append(f"Resend: {e}")
+
+    elif _secret("SMTP_HOST") and _secret("SMTP_USER") and _secret("SMTP_PASS") and admin_email:
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = _secret("SMTP_USER")
+            msg["To"] = admin_email
+            msg["Subject"] = f"VoxCraft Pro Request - {name}"
+            msg.attach(MIMEText(message_body, "plain", "utf-8"))
+            port = int(_secret("SMTP_PORT") or "587")
+            if port == 465:
+                import ssl
+                server = smtplib.SMTP_SSL(_secret("SMTP_HOST"), port, context=ssl.create_default_context())
+            else:
+                server = smtplib.SMTP(_secret("SMTP_HOST"), port, timeout=15)
+                server.starttls()
+            server.login(_secret("SMTP_USER"), _secret("SMTP_PASS").replace(" ", ""))
+            server.send_message(msg)
+            server.quit()
+            notified = True
+        except Exception as e:
+            errors.append(f"SMTP: {e}")
+
+    return notified
+
+
+def send_key_email(user_email: str, user_name: str, license_key: str) -> bool:
+    resend_key = _secret("RESEND_API_KEY")
+    if not resend_key:
+        return False
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">Welcome to VoxCraft Pro</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Hi <strong style="color:#fff">{user_name}</strong>,</p>
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Your license key is below — enter it on the Studio page to activate Pro.</p>
+    <div style="background:#101820;border-radius:8px;padding:14px;margin:16px 0;text-align:center">
+      <div style="color:#E8A93C;font-size:15px;font-family:monospace;font-weight:700;letter-spacing:1px">{license_key}</div>
+    </div>
+  </div>
+</div></body></html>"""
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [user_email],
+                                 "subject": "Your VoxCraft Pro License Key", "html": html}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
