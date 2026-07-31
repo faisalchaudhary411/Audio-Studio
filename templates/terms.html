@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Terms of Service — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:720px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Legal</span>
+    <h2 class="section__title">Terms of Service</h2>
+    <p class="section__sub">Last updated: {{ '2026-07-31' }} — this is a starting template, not legal advice. Have it reviewed before relying on it.</p>
+  </div>
+
+  <div class="panel" style="color:var(--text-mid);line-height:1.7;">
+    <h3 style="color:var(--text-hi);margin-bottom:8px;">Using VoxCraft</h3>
+    <p>You may use VoxCraft to generate speech and process audio for lawful purposes. You're responsible for the content you submit and for having the rights to any voices, audio, or text you upload.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Free and Pro tiers</h3>
+    <p>Free tier usage limits are set at our discretion and enforced per device/network. Pro licenses are tied to a single device and are non-transferable except through support.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Prohibited use</h3>
+    <p>No generating voice content to impersonate a real person without consent, no illegal content, no attempting to circumvent usage limits or reverse-engineer the service.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Availability</h3>
+    <p>VoxCraft is provided "as is" — we aim for reliability but don't guarantee uninterrupted availability.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Changes</h3>
+    <p>We may update these terms; continued use after changes means you accept the updated terms.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Contact</h3>
+    <p>Questions? See <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">Contact</a>.</p>
+  </div>
+</section>
+{% endblock %}

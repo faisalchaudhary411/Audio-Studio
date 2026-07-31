@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:720px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Legal</span>
+    <h2 class="section__title">Privacy Policy</h2>
+    <p class="section__sub">Last updated: {{ '2026-07-31' }} — this is a starting template, not legal advice. Have it reviewed before relying on it.</p>
+  </div>
+
+  <div class="panel" style="color:var(--text-mid);line-height:1.7;">
+    <h3 style="color:var(--text-hi);margin-bottom:8px;">What we collect</h3>
+    <p>Text you submit for speech generation, uploaded audio files for our tools, your email if you request Pro access or contact support, and a hashed (not raw) version of your IP address used to enforce free-tier usage limits.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">How we use it</h3>
+    <p>To generate the audio/text output you request, to enforce free-tier limits fairly, to send license keys and support replies, and to improve the service. We do not sell your data.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Third parties</h3>
+    <p>We use Microsoft Edge's and Google's text-to-speech services to generate audio, Resend to send transactional email, and Adsterra to serve ads to free-tier users. Each has its own privacy practices.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Data retention</h3>
+    <p>Uploaded audio for tool processing is not stored beyond the request. Usage records are pruned after roughly 2 months. License and account data is kept as long as needed to provide the service.</p>
+
+    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Your choices</h3>
+    <p>Contact us (see <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">Contact</a>) to request deletion of your data.</p>
+  </div>
+</section>
+{% endblock %}

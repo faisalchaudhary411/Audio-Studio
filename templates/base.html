@@ -19,7 +19,9 @@
   </a>
   <nav class="nav__links">
     <a href="{{ url_for('studio') }}">Studio</a>
+    <a href="{{ url_for('tools_hub') }}">Tools</a>
     <a href="{{ url_for('pricing') }}">Pricing</a>
+    <a href="{{ url_for('blog_list') }}">Blog</a>
     <a href="{{ url_for('landing') }}#voices">Voices</a>
   </nav>
   <a href="{{ url_for('studio') }}" class="btn btn--brass btn--sm nav__cta">Open Studio</a>
@@ -32,10 +34,20 @@
 <footer class="footer">
   <div class="footer__row">
     <span>VoxCraft</span>
+    <span style="display:flex;gap:16px;">
+      <a href="{{ url_for('privacy') }}">Privacy</a>
+      <a href="{{ url_for('terms') }}">Terms</a>
+      <a href="{{ url_for('contact') }}">Contact</a>
+    </span>
     <span>&copy; {{ 2026 }} — text to voice, crafted.</span>
   </div>
 </footer>
 
+<script src="{{ url_for('static', filename='js/ads.js') }}"></script>
+<script>window.VOXCRAFT_IS_PRO = {{ 'true' if is_pro_ctx else 'false' }};</script>
+{% if not is_pro_ctx %}
+{% include "partials/ads_global.html" %}
+{% endif %}
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

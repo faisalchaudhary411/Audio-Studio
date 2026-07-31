@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Tools — VoxCraft{% endblock %}
+
+{% block content %}
+<div class="section" style="padding-bottom:0;">
+  <div class="section__head">
+    <span class="section__eyebrow">Audio toolkit</span>
+    <h2 class="section__title">Transcribe, convert, merge, cut.</h2>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+    <button class="btn btn--sm btn--brass" data-tool-tab="transcribe">Transcribe</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="convert">Convert</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="merge">Merge</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="cutter">Cutter</button>
+  </div>
+</div>
+
+{% if not is_pro_ctx %}
+{% include "partials/ads_banner.html" %}
+{% endif %}
+
+<!-- Transcribe -->
+<div class="section" style="padding-top:0;" id="panel-transcribe">
+  <div class="panel">
+    <span class="panel__label">Transcribe</span>
+    <input type="file" id="transcribe-file" accept=".wav,.mp3,.m4a,.ogg,.flac" style="margin-bottom:10px;">
+    <select id="transcribe-lang" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
+      {% for name, code in lang_options.items() %}
+      <option value="{{ code }}">{{ name }}</option>
+      {% endfor %}
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="transcribe-btn">Transcribe</button>
+      <span class="render-status" data-transcribe-status></span>
+    </div>
+    <div id="transcribe-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- Convert -->
+<div class="section" style="padding-top:0;display:none;" id="panel-convert">
+  <div class="panel">
+    <span class="panel__label">Convert</span>
+    <input type="file" id="convert-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <select id="convert-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
+        <option value="mp3">MP3</option><option value="wav">WAV</option>
+        <option value="ogg">OGG</option><option value="m4a">M4A</option><option value="flac">FLAC</option>
+      </select>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Quality: <span id="convert-quality-label">192</span> kbps</label>
+        <input type="range" min="64" max="320" step="16" value="192" id="convert-quality" style="width:100%;">
+      </div>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="convert-btn">Convert</button>
+      <span class="render-status" data-convert-status></span>
+    </div>
+    <div id="convert-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- Merge -->
+<div class="section" style="padding-top:0;display:none;" id="panel-merge">
+  <div class="panel">
+    <span class="panel__label">Merge (order = upload order)</span>
+    <input type="file" id="merge-files" accept=".wav,.mp3,.ogg,.m4a,.flac" multiple style="margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Gap: <span id="merge-gap-label">500</span> ms</label>
+        <input type="range" min="0" max="3000" step="100" value="500" id="merge-gap" style="width:100%;">
+      </div>
+      <select id="merge-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
+        <option value="mp3">MP3</option><option value="wav">WAV</option><option value="ogg">OGG</option>
+      </select>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="merge-btn">Merge audio</button>
+      <span class="render-status" data-merge-status></span>
+    </div>
+    <div id="merge-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- Cutter -->
+<div class="section" style="padding-top:0;display:none;" id="panel-cutter">
+  <div class="panel">
+    <span class="panel__label">Cutter</span>
+    <input type="file" id="cutter-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
+    <div id="cutter-duration" style="font-family:var(--mono);font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="btn btn--sm btn--brass" data-cutter-mode="trim">Trim (start-end)</button>
+      <button class="btn btn--sm btn--ghost" data-cutter-mode="split">Split at time</button>
+    </div>
+
+    <div id="cutter-trim-controls">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Start (s)</label>
+      <input type="number" id="cutter-start" value="0" min="0" step="0.1" class="admin-input" style="width:100%;margin-bottom:8px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">End (s)</label>
+      <input type="number" id="cutter-end" value="0" min="0" step="0.1" class="admin-input" style="width:100%;">
+    </div>
+    <div id="cutter-split-controls" style="display:none;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Split at (s)</label>
+      <input type="number" id="cutter-split-at" value="0" min="0" step="0.1" class="admin-input" style="width:100%;">
+    </div>
+
+    <div class="render-bar">
+      <button class="btn btn--brass" id="cutter-btn">Run</button>
+      <span class="render-status" data-cutter-status></span>
+    </div>
+    <div id="cutter-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/tools.js') }}"></script>
+{% endblock %}

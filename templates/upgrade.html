@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Get Pro — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:560px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Get Pro</span>
+    <h2 class="section__title">Manual payment (Pakistan)</h2>
+    <p class="section__sub">Pay via EasyPaisa, JazzCash, or HBL bank transfer, then submit proof below — we'll verify and email your license key within a few hours.</p>
+  </div>
+
+  <div class="panel">
+    {% if submitted %}
+      <p style="color:var(--jade-hi);">Request submitted — reference ID <strong>{{ req_id }}</strong>. We'll email your license key once verified.</p>
+    {% else %}
+      {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
+
+      <div style="font-family:var(--mono);font-size:0.85rem;color:var(--text-mid);margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:14px;">
+        <strong style="color:var(--text-hi);">EasyPaisa/JazzCash:</strong> 0300-XXXXXXX (Faisal Chaudhary)<br>
+        <strong style="color:var(--text-hi);">HBL Bank:</strong> XXXX-XXXX-XXXX (Faisal Chaudhary)<br>
+        <span style="color:var(--brass-hi);">TODO: replace with your real account details.</span>
+      </div>
+
+      <form method="post" enctype="multipart/form-data">
+        <input type="text" name="name" placeholder="Full name" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
+        <input type="email" name="email" placeholder="Email" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
+        <input type="tel" name="phone" placeholder="Phone (optional)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
+        <select name="payment_method" class="admin-input" style="width:100%;padding:12px;font-family:var(--body);margin-bottom:10px;">
+          <option value="EasyPaisa">EasyPaisa</option>
+          <option value="JazzCash">JazzCash</option>
+          <option value="HBL Bank Transfer">HBL Bank Transfer</option>
+        </select>
+        <input type="text" name="txn_id" placeholder="Transaction / reference ID" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Payment screenshot (optional)</label>
+        <input type="file" name="screenshot" accept="image/*" style="margin:6px 0 14px;">
+        <button type="submit" class="btn btn--brass btn--block">Submit for verification</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

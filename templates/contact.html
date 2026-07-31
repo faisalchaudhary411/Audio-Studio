@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Contact — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:560px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Contact</span>
+    <h2 class="section__title">Get in touch</h2>
+  </div>
+  <div class="panel">
+    <p style="color:var(--text-mid);line-height:1.7;">
+      For support, Pro license issues, or general questions, email us at
+      <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi)">support@voxcraft.site</a>
+      <span style="color:var(--text-dim);"> (TODO: point this at your real support inbox).</span>
+    </p>
+    <p style="color:var(--text-mid);line-height:1.7;margin-top:14px;">
+      For Pro payment verification specifically, include your request ID from the
+      <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">upgrade</a> confirmation.
+    </p>
+  </div>
+</section>
+{% endblock %}

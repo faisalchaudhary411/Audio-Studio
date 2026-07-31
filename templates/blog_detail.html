@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ post.title }} — VoxCraft Blog{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:720px;">
+  <span class="voice-card__tag" style="margin-bottom:14px;display:inline-block;">{{ post.category or 'General' }}</span>
+  <h1 class="hero__title" style="font-size:clamp(1.8rem,4vw,2.6rem);max-width:none;">{{ post.title }}</h1>
+  <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:10px 0 24px;">{{ post.date }}</div>
+  <div style="color:var(--text-mid);line-height:1.75;font-size:1.02rem;">
+    {{ post_html|safe }}
+  </div>
+  <div style="margin-top:32px;"><a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">← Back to blog</a></div>
+</section>
+{% endblock %}
