@@ -17,13 +17,22 @@
     </span>
     VoxCraft
   </a>
-  <nav class="nav__links">
+  <nav class="nav__links" id="nav-links">
     <a href="{{ url_for('studio') }}">Studio</a>
     <a href="{{ url_for('tools_hub') }}">Tools</a>
     <a href="{{ url_for('pricing') }}">Pricing</a>
     <a href="{{ url_for('blog_list') }}">Blog</a>
     <a href="{{ url_for('landing') }}#voices">Voices</a>
+    {% if is_pro_ctx %}
+    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);">Pro ✓</a>
+    {% else %}
+    <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">Get Pro</a>
+    <a href="{{ url_for('activate') }}">Activate</a>
+    {% endif %}
   </nav>
+  <button class="nav__hamburger" id="nav-hamburger" aria-label="Menu" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
   <a href="{{ url_for('studio') }}" class="btn btn--brass btn--sm nav__cta">Open Studio</a>
 </header>
 
@@ -33,13 +42,14 @@
 
 <footer class="footer">
   <div class="footer__row">
-    <span>VoxCraft</span>
-    <span style="display:flex;gap:16px;">
+    <span class="footer__brand">VoxCraft</span>
+    <span class="footer__links">
       <a href="{{ url_for('privacy') }}">Privacy</a>
       <a href="{{ url_for('terms') }}">Terms</a>
       <a href="{{ url_for('contact') }}">Contact</a>
+      <a href="{{ url_for('activate') }}">Activate</a>
     </span>
-    <span>&copy; {{ 2026 }} — text to voice, crafted.</span>
+    <span class="footer__copy">&copy; 2026 — text to voice, crafted.</span>
   </div>
 </footer>
 

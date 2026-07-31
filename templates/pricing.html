@@ -22,11 +22,19 @@
         <li>{{ item }}</li>
         {% endfor %}
       </ul>
-      <button class="btn {% if p.get('featured') %}btn--brass{% else %}btn--ghost{% endif %} btn--block">
+      {% if p.cta_url %}
+      <a href="{{ p.cta_url }}" class="btn {% if p.get('featured') %}btn--brass{% else %}btn--ghost{% endif %} btn--block">
         {{ p.cta }}
-      </button>
+      </a>
+      {% else %}
+      <button class="btn btn--ghost btn--block" disabled>{{ p.cta }}</button>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
+
+  <p style="text-align:center;color:var(--text-dim);font-size:0.88rem;margin-top:24px;">
+    Already have a license key? <a href="{{ url_for('activate') }}" style="color:var(--brass-hi)">Activate it here</a>.
+  </p>
 </section>
 {% endblock %}
