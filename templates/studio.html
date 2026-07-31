@@ -1,10 +1,18 @@
 {% extends "base.html" %}
+{% from "partials/usage_bar.html" import usage_bar %}
 {% block title %}Studio — VoxCraft{% endblock %}
 
 {% block content %}
 <div class="studio">
 
   <div class="panel">
+    {% if not pro %}
+    <span class="panel__label">Today's usage</span>
+    {{ usage_bar('Generations', usage.singles.used, usage.singles.limit) }}
+    {{ usage_bar('Characters', usage.chars.used, usage.chars.limit) }}
+    {{ usage_bar('Batch runs', usage.batches.used, usage.batches.limit) }}
+    <div style="border-top:1px solid var(--line);margin:14px 0;"></div>
+    {% endif %}
     <span class="panel__label">Voice &amp; language</span>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <select id="language-select" class="admin-input" style="width:100%;font-family:var(--body);padding:10px;">

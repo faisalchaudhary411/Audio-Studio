@@ -5,9 +5,17 @@
 <section class="section" style="max-width:560px;">
   <div class="section__head">
     <span class="section__eyebrow">Get Pro</span>
-    <h2 class="section__title">Manual payment (Pakistan)</h2>
-    <p class="section__sub">Pay via EasyPaisa, JazzCash, or HBL bank transfer, then submit proof below — we'll verify and email your license key within a few hours.</p>
+    <h2 class="section__title">Choose how to pay</h2>
   </div>
+
+  {% if checkout_url %}
+  <div class="panel" style="margin-bottom:16px;">
+    <span class="panel__label">Pay by card (international)</span>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:12px;">Instant activation via Freemius — card or PayPal.</p>
+    <a href="{{ checkout_url }}" class="btn btn--brass btn--block">Pay with card →</a>
+  </div>
+  <div style="text-align:center;color:var(--text-dim);font-size:0.82rem;margin:16px 0;">— or pay manually (Pakistan) —</div>
+  {% endif %}
 
   <div class="panel">
     {% if submitted %}
@@ -15,10 +23,10 @@
     {% else %}
       {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
 
-      <div style="font-family:var(--mono);font-size:0.85rem;color:var(--text-mid);margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:14px;">
-        <strong style="color:var(--text-hi);">EasyPaisa/JazzCash:</strong> 0300-XXXXXXX (Faisal Chaudhary)<br>
-        <strong style="color:var(--text-hi);">HBL Bank:</strong> XXXX-XXXX-XXXX (Faisal Chaudhary)<br>
-        <span style="color:var(--brass-hi);">TODO: replace with your real account details.</span>
+      <div style="font-family:var(--mono);font-size:0.85rem;color:var(--text-mid);margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:14px;display:grid;gap:10px;">
+        <div><strong style="color:var(--text-hi);">📱 EasyPaisa:</strong> 0334-1771875 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Open EasyPaisa app → Send Money → Mobile Account</span></div>
+        <div><strong style="color:var(--text-hi);">💚 NayaPay:</strong> 0334-1771875 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Open NayaPay app → Send Money → Mobile Account</span></div>
+        <div><strong style="color:var(--text-hi);">🏦 UBL Bank:</strong> 0430292120673 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Any bank app/digital wallet → Send Money → Bank Account</span></div>
       </div>
 
       <form method="post" enctype="multipart/form-data">
@@ -27,8 +35,11 @@
         <input type="tel" name="phone" placeholder="Phone (optional)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
         <select name="payment_method" class="admin-input" style="width:100%;padding:12px;font-family:var(--body);margin-bottom:10px;">
           <option value="EasyPaisa">EasyPaisa</option>
+          <option value="NayaPay">NayaPay</option>
+          <option value="UBL Bank">UBL Bank</option>
           <option value="JazzCash">JazzCash</option>
-          <option value="HBL Bank Transfer">HBL Bank Transfer</option>
+          <option value="HBL Bank">HBL Bank</option>
+          <option value="Other">Other</option>
         </select>
         <input type="text" name="txn_id" placeholder="Transaction / reference ID" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Payment screenshot (optional)</label>

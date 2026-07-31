@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/usage_bar.html" import usage_bar %}
 {% block title %}Tools — VoxCraft{% endblock %}
 
 {% block content %}
@@ -7,6 +8,15 @@
     <span class="section__eyebrow">Audio toolkit</span>
     <h2 class="section__title">Transcribe, convert, merge, cut.</h2>
   </div>
+  {% if not is_pro_ctx %}
+  <div class="panel" style="margin-bottom:16px;">
+    <span class="panel__label">Today's usage (per tool)</span>
+    {{ usage_bar('Transcribe', usage.transcribe.used, usage.transcribe.limit) }}
+    {{ usage_bar('Convert', usage.convert.used, usage.convert.limit) }}
+    {{ usage_bar('Merge', usage.merge.used, usage.merge.limit) }}
+    {{ usage_bar('Cutter', usage.cutter.used, usage.cutter.limit) }}
+  </div>
+  {% endif %}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
     <button class="btn btn--sm btn--brass" data-tool-tab="transcribe">Transcribe</button>
     <button class="btn btn--sm btn--ghost" data-tool-tab="convert">Convert</button>
