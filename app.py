@@ -186,9 +186,12 @@ def activate():
     key = (request.form.get("license_key") or "").strip()
     if not key:
         return render_template("activate.html", error="Enter a license key.")
-    result = licensing.activate_vox_license(key, request)
+    result = licensing.activate_any_license(key, request)
     if result.get("valid"):
-        session["license_key"] = key
+        # Store the INTERNAL key in the session (not whatever the customer typed —
+        # if they entered a Freemius key, result["internal_key"] is the wrapper key
+        # that everything else in the app checks against).
+        session["license_key"] = result.get("internal_key", key)
         return render_template("activate.html", success=True, name=result.get("name"))
     return render_template("activate.html", error=result.get("error", "Invalid license key."))
 

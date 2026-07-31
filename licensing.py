@@ -167,6 +167,55 @@ def activate_vox_license(key: str, request) -> dict:
     return {"valid": True, "name": info.get("customer_name", "Pro User")}
 
 
+def find_key_by_freemius_id(freemius_license_id: str) -> str:
+    """Avoids minting a fresh internal key every time the same Freemius
+    license is entered — reuse the one already created for it, if any."""
+    if not freemius_license_id:
+        return ""
+    for key, info in _keys().items():
+        if info.get("freemius_license_id") == freemius_license_id:
+            return key
+    return ""
+
+
+def activate_via_freemius(freemius_key: str, request) -> dict:
+    """Verify a key against Freemius, then wrap it in one of our own internal
+    keys so it flows through the same activate/check/device-binding/admin
+    visibility as every other key. Called only when the key isn't found in
+    our own license_keys.json (see activate_any_license below)."""
+    result = verify_freemius_license(freemius_key)
+    if not result.get("success"):
+        return {"valid": False, "error": result.get("error") or "Could not reach Freemius to verify this key."}
+    if not result.get("valid"):
+        return {"valid": False, "error": result.get("error") or "This Freemius license isn't active."}
+
+    fs_id = result.get("freemius_license_id", "")
+    internal_key = find_key_by_freemius_id(fs_id)
+    if not internal_key:
+        internal_key = create_subscription_key(
+            result.get("customer_name", "Pro User"),
+            result.get("customer_email", ""),
+            subscription_type="recurring",
+            freemius_license_id=fs_id,
+        )
+
+    activation = activate_vox_license(internal_key, request)
+    if not activation.get("valid"):
+        return activation
+    return {"valid": True, "name": activation.get("name"), "internal_key": internal_key}
+
+
+def activate_any_license(key: str, request) -> dict:
+    """Single entry point for the /activate page: tries our own internal keys
+    first (no network call), and only falls back to Freemius verification if
+    the key isn't one of ours — avoids an unnecessary Freemius API call for
+    the common case (manual bank-transfer customers)."""
+    key = key.strip()
+    if key in _keys():
+        return activate_vox_license(key, request)
+    return activate_via_freemius(key, request)
+
+
 def check_vox_license(key: str) -> dict:
     """Read-only check — used to keep a session's Pro status accurate without
     re-triggering activation/device-binding logic on every request."""
