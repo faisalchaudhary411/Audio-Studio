@@ -28,6 +28,7 @@ import markdown as md_lib
 from voices import VOICES, FREE_VOICES, default_preview_text
 from tts_engine import tts_dispatch
 from clone_engine import start_clone_job, get_job
+import music_engine
 import audio_tools
 import persistence
 import licensing
@@ -103,6 +104,9 @@ def _reset_daily_if_needed():
         session["usage_convert"] = 0
         session["usage_merge"] = 0
         session["usage_cutter"] = 0
+        session["usage_denoise"] = 0
+        session["usage_voicechange"] = 0
+        session["usage_videoxtract"] = 0
 
 
 def _check_and_bump(counter_key: str, limit: int) -> bool:
@@ -141,6 +145,9 @@ def usage_summary() -> dict:
         "convert": {"used": session.get("usage_convert", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
         "merge": {"used": session.get("usage_merge", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
         "cutter": {"used": session.get("usage_cutter", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "denoise": {"used": session.get("usage_denoise", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "voicechange": {"used": session.get("usage_voicechange", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "videoxtract": {"used": session.get("usage_videoxtract", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
@@ -417,7 +424,8 @@ def ads_slot(slot):
 
 @app.route("/tools")
 def tools_hub():
-    return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
+    return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary(),
+                            filedesk_url=os.environ.get("FILEDESK_URL", "").strip())
 
 
 @app.route("/api/tools/transcribe", methods=["POST"])
@@ -522,6 +530,67 @@ def api_cutter_split():
             "part2_b64": base64.b64encode(part2).decode("ascii"),
             "filename_base": f"part-{int(time.time())}",
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/denoise", methods=["POST"])
+def api_denoise():
+    lim = get_limits()
+    if not _check_and_bump("usage_denoise", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    strength = float(request.form.get("strength", 0.5))
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.denoise(file.read(), file.filename, strength)
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"denoised-{int(time.time())}.mp3"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/voicechange", methods=["POST"])
+def api_voicechange():
+    lim = get_limits()
+    if not _check_and_bump("usage_voicechange", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    effect = request.form.get("effect", "pitch_shift")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        params = {}
+        if effect == "pitch_shift":
+            params["semitones"] = int(request.form.get("semitones", 0))
+        elif effect == "robot":
+            params["intensity"] = float(request.form.get("intensity", 0.5))
+        elif effect == "echo":
+            params["delay_ms"] = int(request.form.get("delay_ms", 200))
+            params["decay"] = float(request.form.get("decay", 0.5))
+        out_bytes = audio_tools.voice_change(file.read(), file.filename, effect, **params)
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"voicechange-{effect}-{int(time.time())}.mp3"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/videoxtract", methods=["POST"])
+def api_videoxtract():
+    lim = get_limits()
+    if not _check_and_bump("usage_videoxtract", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    output_format = request.form.get("output_format", "mp3")
+    quality = int(request.form.get("quality", 192))
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.video_to_audio(file.read(), file.filename, output_format, quality)
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"extracted-{int(time.time())}.{output_format}",
+                         "format": output_format, "size_kb": round(len(out_bytes) / 1024, 1)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -699,6 +768,46 @@ def api_clone_status(job_id):
     if not job:
         return jsonify({"error": "Unknown job."}), 404
 
+    if job["status"] == "done":
+        return jsonify({"status": "done", "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
+    if job["status"] == "error":
+        return jsonify({"status": "error", "error": job["error"]})
+    return jsonify({"status": job["status"]})
+
+
+# ---------------------------------------------------------------------------
+# Music generation (Replicate-hosted ACE-Step) — Pro-only, real $ cost per run
+# ---------------------------------------------------------------------------
+MUSIC_MAX_DURATION_SEC = 120  # keep runs (and cost) bounded — tune in admin later if you add a limits field
+
+
+@app.route("/api/music/generate", methods=["POST"])
+def api_music_generate():
+    if not is_pro():
+        return jsonify({"error": "Music generation is a Pro feature."}), 402
+
+    data = request.get_json(force=True) or {}
+    tags = (data.get("tags") or "").strip()
+    lyrics = (data.get("lyrics") or "").strip()
+    duration = int(data.get("duration", 60))
+    instrumental = bool(data.get("instrumental", True))
+
+    if not tags:
+        return jsonify({"error": "Describe the style (e.g. 'lofi, chill, piano, 90 bpm')."}), 400
+    if duration < 10 or duration > MUSIC_MAX_DURATION_SEC:
+        return jsonify({"error": f"Duration must be between 10 and {MUSIC_MAX_DURATION_SEC} seconds."}), 400
+
+    result = music_engine.start_music_job(tags, "" if instrumental else lyrics, duration)
+    if result.get("error"):
+        return jsonify(result), 503
+    return jsonify(result)
+
+
+@app.route("/api/music/status/<job_id>")
+def api_music_status(job_id):
+    job = music_engine.get_job(job_id)
+    if not job:
+        return jsonify({"error": "Unknown job."}), 404
     if job["status"] == "done":
         return jsonify({"status": "done", "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
     if job["status"] == "error":
