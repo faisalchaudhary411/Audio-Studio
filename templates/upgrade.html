@@ -19,7 +19,18 @@
 
   <div class="panel">
     {% if submitted %}
-      <p style="color:var(--jade-hi);">Request submitted — reference ID <strong>{{ req_id }}</strong>. We'll email your license key once verified.</p>
+      {% if auto_approved %}
+        <p style="color:var(--jade-hi);font-weight:600;margin-bottom:12px;">✓ Activated instantly on this device — reference ID <strong>{{ req_id }}</strong>.</p>
+        <div style="background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.25);border-radius:12px;padding:14px;margin-top:12px;">
+          <div style="color:var(--brass-hi);font-weight:600;font-size:0.88rem;margin-bottom:6px;">⏳ This access is temporary until verified</div>
+          <p style="color:var(--text-mid);font-size:0.85rem;line-height:1.6;">
+            We manually verify every payment. Your Pro access will <strong style="color:var(--text-hi);">automatically stop working after {{ grace_hours }} hours</strong>
+            if we haven't confirmed your payment by then. Once verified, it becomes permanent — no action needed on your end.
+          </p>
+        </div>
+      {% else %}
+        <p style="color:var(--jade-hi);">Request submitted — reference ID <strong>{{ req_id }}</strong>. We'll email your license key once verified.</p>
+      {% endif %}
     {% else %}
       {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
 
@@ -41,9 +52,10 @@
           <option value="HBL Bank">HBL Bank</option>
           <option value="Other">Other</option>
         </select>
-        <input type="text" name="txn_id" placeholder="Transaction / reference ID" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Payment screenshot (optional)</label>
+        <input type="text" name="txn_id" placeholder="Transaction / reference ID *" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Payment screenshot (recommended, for instant activation)</label>
         <input type="file" name="screenshot" accept="image/*" style="margin:6px 0 14px;">
+        <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:14px;">Both are required for instant activation. Without them, your request goes to manual review instead.</p>
         <button type="submit" class="btn btn--brass btn--block">Submit for verification</button>
       </form>
     {% endif %}

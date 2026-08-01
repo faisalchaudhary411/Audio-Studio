@@ -9,7 +9,7 @@
     {% if not pro %}
     <span class="panel__label">Today's usage</span>
     {{ usage_bar('Generations', usage.singles.used, usage.singles.limit) }}
-    {{ usage_bar('Characters', usage.chars.used, usage.chars.limit) }}
+    {{ usage_bar('Characters (this month)', usage.chars_monthly.used, usage.chars_monthly.limit) }}
     {{ usage_bar('Batch runs', usage.batches.used, usage.batches.limit) }}
     <div style="border-top:1px solid var(--line);margin:14px 0;"></div>
     {% endif %}
@@ -35,7 +35,7 @@
     <audio id="preview-player" style="display:none;width:100%;margin-top:8px;" controls></audio>
 
     {% if not pro %}
-    <p class="limit-note">Free plan: {{ free_char_limit }} chars/generation · 10 generations/day · 5 batch/day · {{ batch_max }} lines max.
+    <p class="limit-note">Free plan: {{ free_char_limit }} chars/generation · {{ monthly_char_quota }} chars/month total · 10 generations/day · 5 batch/day · {{ batch_max }} lines max.
       <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to remove all limits.</p>
     {% endif %}
   </div>
