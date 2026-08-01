@@ -6,7 +6,7 @@
 <div class="section" style="padding-bottom:0;">
   <div class="section__head">
     <span class="section__eyebrow">Audio toolkit</span>
-    <h2 class="section__title">Transcribe, convert, merge, cut.</h2>
+    <h2 class="section__title">Transcribe, convert, merge, cut, denoise, and more.</h2>
   </div>
   {% if not is_pro_ctx %}
   <div class="panel" style="margin-bottom:16px;">
@@ -15,6 +15,9 @@
     {{ usage_bar('Convert', usage.convert.used, usage.convert.limit) }}
     {{ usage_bar('Merge', usage.merge.used, usage.merge.limit) }}
     {{ usage_bar('Cutter', usage.cutter.used, usage.cutter.limit) }}
+    {{ usage_bar('Denoise', usage.denoise.used, usage.denoise.limit) }}
+    {{ usage_bar('Voice Changer', usage.voicechange.used, usage.voicechange.limit) }}
+    {{ usage_bar('Video Extract', usage.videoxtract.used, usage.videoxtract.limit) }}
   </div>
   {% endif %}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
@@ -22,6 +25,13 @@
     <button class="btn btn--sm btn--ghost" data-tool-tab="convert">Convert</button>
     <button class="btn btn--sm btn--ghost" data-tool-tab="merge">Merge</button>
     <button class="btn btn--sm btn--ghost" data-tool-tab="cutter">Cutter</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="denoise">Denoise</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="voicechange">Voice Changer</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="videoxtract">Video Extract</button>
+    <button class="btn btn--sm btn--ghost" data-tool-tab="music">Music {% if not is_pro_ctx %}🔒{% endif %}</button>
+    {% if filedesk_url %}
+    <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="btn btn--sm btn--ghost">FileDesk ↗</a>
+    {% endif %}
   </div>
 </div>
 
@@ -122,8 +132,121 @@
   </div>
 </div>
 
+<!-- Denoise -->
+<div class="section" style="padding-top:0;display:none;" id="panel-denoise">
+  <div class="panel">
+    <span class="panel__label">Denoise</span>
+    <input type="file" id="denoise-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Strength: <span id="denoise-strength-label">0.5</span></label>
+    <input type="range" id="denoise-strength" min="0" max="1" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
+    <div class="render-bar">
+      <button class="btn btn--brass" id="denoise-btn">Remove noise</button>
+      <span class="render-status" data-denoise-status></span>
+    </div>
+    <div id="denoise-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- Voice Changer -->
+<div class="section" style="padding-top:0;display:none;" id="panel-voicechange">
+  <div class="panel">
+    <span class="panel__label">Voice Changer</span>
+    <input type="file" id="voicechange-file" accept=".wav,.mp3,.ogg,.m4a" style="margin-bottom:10px;">
+    <select id="voicechange-effect" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
+      <option value="pitch_shift">Pitch Shift</option>
+      <option value="robot">Robot</option>
+      <option value="echo">Echo</option>
+      <option value="chipmunk">Chipmunk</option>
+      <option value="deep_voice">Deep Voice</option>
+    </select>
+
+    <div id="voicechange-pitch-controls">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Semitones: <span id="voicechange-semitones-label">0</span></label>
+      <input type="range" id="voicechange-semitones" min="-12" max="12" step="1" value="0" style="width:100%;margin-bottom:10px;">
+    </div>
+    <div id="voicechange-robot-controls" style="display:none;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Robot intensity: <span id="voicechange-intensity-label">0.5</span></label>
+      <input type="range" id="voicechange-intensity" min="0" max="1" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
+    </div>
+    <div id="voicechange-echo-controls" style="display:none;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Delay (ms): <span id="voicechange-delay-label">200</span></label>
+      <input type="range" id="voicechange-delay" min="50" max="1000" step="10" value="200" style="width:100%;margin-bottom:8px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Decay: <span id="voicechange-decay-label">0.5</span></label>
+      <input type="range" id="voicechange-decay" min="0.1" max="0.9" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
+    </div>
+
+    <div class="render-bar">
+      <button class="btn btn--brass" id="voicechange-btn">Apply effect</button>
+      <span class="render-status" data-voicechange-status></span>
+    </div>
+    <div id="voicechange-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- Video Extract -->
+<div class="section" style="padding-top:0;display:none;" id="panel-videoxtract">
+  <div class="panel">
+    <span class="panel__label">Video to Audio</span>
+    <input type="file" id="videoxtract-file" accept=".mp4,.avi,.mov,.mkv,.webm" style="margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <select id="videoxtract-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
+        <option value="mp3">MP3</option><option value="wav">WAV</option><option value="ogg">OGG</option>
+      </select>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Quality: <span id="videoxtract-quality-label">192</span> kbps</label>
+        <input type="range" id="videoxtract-quality" min="64" max="320" step="16" value="192" style="width:100%;">
+      </div>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="videoxtract-btn">Extract audio</button>
+      <span class="render-status" data-videoxtract-status></span>
+    </div>
+    <div id="videoxtract-result" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<!-- Music -->
+<div class="section" style="padding-top:0;display:none;" id="panel-music">
+  <div class="panel">
+    <span class="panel__label">Music generator {% if not is_pro_ctx %}— Pro only{% endif %}</span>
+    {% if not is_pro_ctx %}
+    <p style="color:var(--text-mid);font-size:0.9rem;">Generate real instrumental or vocal tracks from a text description — for videos, projects, anything.
+      <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to unlock this.</p>
+    {% else %}
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:14px;">
+      Powered by ACE-Step (Apache 2.0 — safe for commercial use). Takes ~30-60 seconds per track.
+      Describe genre/mood/instruments as comma-separated tags.
+    </p>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Style tags</label>
+    <input type="text" id="music-tags" placeholder="e.g. lofi, chill, piano, 90 bpm, warm" class="script-input" style="min-height:auto;padding:12px;margin:6px 0 12px;">
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;color:var(--text-mid);margin-bottom:10px;">
+      <input type="checkbox" id="music-instrumental" checked> Instrumental (no vocals)
+    </label>
+
+    <div id="music-lyrics-wrap" style="display:none;margin-bottom:12px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Lyrics (use [verse], [chorus], [bridge] to structure)</label>
+      <textarea id="music-lyrics" class="script-input" style="min-height:120px;margin-top:6px;" placeholder="[verse]&#10;Your lyrics here..."></textarea>
+    </div>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Duration: <span id="music-duration-label">60</span>s</label>
+    <input type="range" id="music-duration" min="10" max="120" step="5" value="60" style="width:100%;margin-bottom:14px;">
+
+    <div class="render-bar">
+      <button class="btn btn--brass" id="music-generate-btn">Generate track</button>
+      <span class="render-status" data-music-status></span>
+    </div>
+    <div id="music-result" style="margin-top:16px;"></div>
+    {% endif %}
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/tools.js') }}"></script>
+{% if is_pro_ctx %}
+<script src="{{ url_for('static', filename='js/music.js') }}"></script>
+{% endif %}
 {% endblock %}
