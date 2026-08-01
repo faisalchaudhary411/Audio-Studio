@@ -38,12 +38,17 @@
   };
 
   // ---- Popunder: once per session, on first button-like click (ported from POPUNDER_SCRIPT) ----
+  // BUG FIX: this used to fire on ANY button/link click site-wide, including
+  // the mobile nav hamburger toggle — so simply opening the nav menu popped
+  // an ad tab. Excluding clicks inside the nav header entirely; this is
+  // meant to trigger on content/tool interactions, not UI chrome.
   window.VoxCraftAds.initPopunder = function () {
     if (window.VOXCRAFT_IS_PRO) return;
     if (sessionStorage.getItem('voxcraft_popunder_shown')) return;
     let triggered = false;
     document.addEventListener('click', function (e) {
       if (triggered) return;
+      if (e.target.closest('.nav')) return; // nav header (hamburger, nav links) never triggers this
       if (e.target.closest('button, a, [role="button"]')) {
         triggered = true;
         sessionStorage.setItem('voxcraft_popunder_shown', '1');
