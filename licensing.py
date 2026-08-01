@@ -57,10 +57,15 @@ def is_subscription_active(key_info: dict) -> bool:
 def create_subscription_key(customer_name: str, customer_email: str,
                              subscription_type: str = "monthly",
                              amount_paid: float = 0,
-                             freemius_license_id: str = "") -> str:
+                             freemius_license_id: str = "",
+                             expires_in_hours: float = None) -> str:
     key = generate_license_key()
-    expires_at = (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M") \
-        if subscription_type in ("monthly", "recurring") else ""
+    if expires_in_hours is not None:
+        expires_at = (dt.datetime.now() + dt.timedelta(hours=expires_in_hours)).strftime("%Y-%m-%d %H:%M")
+    elif subscription_type in ("monthly", "recurring"):
+        expires_at = (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+    else:
+        expires_at = ""
     keys = _keys()
     keys[key] = {
         "used": False, "revoked": False,

@@ -25,7 +25,8 @@ GH_FILES = {
 }
 
 DEFAULT_LIMITS = {
-    "FREE_CHAR_LIMIT": 5000,
+    "FREE_CHAR_LIMIT": 5000,           # max chars per SINGLE generation
+    "FREE_MONTHLY_CHAR_QUOTA": 50000,  # cumulative chars across the whole month
     "FREE_DAILY_ACTIONS": 10,
     "FREE_BATCH_LIMIT": 5,
     "FREE_BATCH_MAX_LINES": 20,
@@ -38,6 +39,8 @@ DEFAULT_LIMITS = {
     "CHECKOUT_URL": "",
     "FREE_FEATURES": "",
     "PRO_FEATURES": "",
+    "AUTO_APPROVE_MANUAL": True,
+    "MANUAL_GRACE_HOURS": 72,
 }
 
 

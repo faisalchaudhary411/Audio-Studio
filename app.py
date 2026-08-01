@@ -93,13 +93,16 @@ def _today() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d")
 
 
+def _this_month() -> str:
+    return dt.datetime.now().strftime("%Y-%m")
+
+
 def _reset_daily_if_needed():
     if session.get("usage_date") != _today():
         session["usage_date"] = _today()
         session["usage_singles"] = 0
         session["usage_batches"] = 0
         session["usage_previews"] = 0
-        session["usage_chars"] = 0
         session["usage_transcribe"] = 0
         session["usage_convert"] = 0
         session["usage_merge"] = 0
@@ -107,6 +110,19 @@ def _reset_daily_if_needed():
         session["usage_denoise"] = 0
         session["usage_voicechange"] = 0
         session["usage_videoxtract"] = 0
+
+
+def _reset_monthly_if_needed():
+    """Separate from the daily reset above — BUG FIX: the character quota is
+    meant to be a monthly budget (matches what it's actually labeled as
+    everywhere: 'chars/generation' is the per-request cap, but the usage bar
+    showing a running total was being reset DAILY alongside the daily action
+    counters, comparing a daily-reset number against what's really meant to
+    be a much longer-period allowance. Chars now track and reset on their own
+    monthly cycle, independent of the daily counters."""
+    if session.get("usage_month") != _this_month():
+        session["usage_month"] = _this_month()
+        session["usage_chars_monthly"] = 0
 
 
 def _check_and_bump(counter_key: str, limit: int) -> bool:
@@ -121,24 +137,46 @@ def _check_and_bump(counter_key: str, limit: int) -> bool:
     return True
 
 
+def _monthly_chars_used() -> int:
+    _reset_monthly_if_needed()
+    return session.get("usage_chars_monthly", 0)
+
+
+def _would_exceed_monthly_quota(char_count: int, monthly_quota: int) -> bool:
+    """Read-only check — does NOT bump the counter. Used before generating,
+    so a failed generation (e.g. TTS engine error) never consumes quota."""
+    if is_pro():
+        return False
+    return _monthly_chars_used() + char_count > monthly_quota
+
+
+def _bump_monthly_chars(char_count: int):
+    """Only call this AFTER a generation actually succeeds."""
+    if is_pro():
+        return
+    _reset_monthly_if_needed()
+    session["usage_chars_monthly"] = session.get("usage_chars_monthly", 0) + char_count
+
+
 @app.route("/")
 def landing():
     return render_template("landing.html")
 
 
 def usage_summary() -> dict:
-    """Surfaces the SAME counters that _check_and_bump actually enforces —
-    this is deliberately the session-cookie numbers, not usage_tracking.py's
-    IP-based numbers, so what's displayed always matches what's enforced.
-    Limits themselves now come from get_limits() (GitHub-backed, editable in
-    /admin/limits), not hardcoded constants.
+    """Surfaces the SAME counters that _check_and_bump / _check_monthly_chars
+    actually enforce — this is deliberately the session-cookie numbers, not
+    usage_tracking.py's IP-based numbers, so what's displayed always matches
+    what's enforced. Limits themselves come from get_limits() (GitHub-backed,
+    editable in /admin/limits).
     (Note: usage_tracking.py's IP-based module exists for licensing checks
     but isn't wired into daily-limit enforcement here — see README.)"""
     _reset_daily_if_needed()
+    _reset_monthly_if_needed()
     lim = get_limits()
     return {
         "singles": {"used": session.get("usage_singles", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "chars": {"used": session.get("usage_chars", 0), "limit": lim["FREE_CHAR_LIMIT"]},
+        "chars_monthly": {"used": session.get("usage_chars_monthly", 0), "limit": lim["FREE_MONTHLY_CHAR_QUOTA"]},
         "batches": {"used": session.get("usage_batches", 0), "limit": lim["FREE_BATCH_LIMIT"]},
         "previews": {"used": session.get("usage_previews", 0), "limit": lim["FREE_PREVIEW_LIMIT"]},
         "transcribe": {"used": session.get("usage_transcribe", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
@@ -157,6 +195,7 @@ def studio():
     active_voices = VOICES if is_pro() else FREE_VOICES
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
                             free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=lim["FREE_BATCH_MAX_LINES"],
+                            monthly_char_quota=lim["FREE_MONTHLY_CHAR_QUOTA"],
                             usage=usage_summary())
 
 
@@ -223,7 +262,11 @@ def upgrade():
 
     result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64)
     if result.get("success"):
-        return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url)
+        if result.get("auto_approved") and result.get("license_key"):
+            session["license_key"] = result["license_key"]  # instant unlock on this device
+        return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url,
+                                auto_approved=result.get("auto_approved", False),
+                                grace_hours=result.get("grace_hours"))
     return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."), checkout_url=checkout_url)
 
 
@@ -306,6 +349,7 @@ def admin_limits():
     if request.method == "POST":
         limits = {
             "FREE_CHAR_LIMIT": int(request.form.get("FREE_CHAR_LIMIT", 5000)),
+            "FREE_MONTHLY_CHAR_QUOTA": int(request.form.get("FREE_MONTHLY_CHAR_QUOTA", 50000)),
             "FREE_DAILY_ACTIONS": int(request.form.get("FREE_DAILY_ACTIONS", 10)),
             "FREE_BATCH_LIMIT": int(request.form.get("FREE_BATCH_LIMIT", 5)),
             "FREE_BATCH_MAX_LINES": int(request.form.get("FREE_BATCH_MAX_LINES", 20)),
@@ -318,6 +362,8 @@ def admin_limits():
             "CHECKOUT_URL": request.form.get("CHECKOUT_URL", ""),
             "FREE_FEATURES": request.form.get("FREE_FEATURES", ""),
             "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
+            "AUTO_APPROVE_MANUAL": request.form.get("AUTO_APPROVE_MANUAL") == "on",
+            "MANUAL_GRACE_HOURS": int(request.form.get("MANUAL_GRACE_HOURS", 72)),
         }
         ok, err = persistence.save_limits(limits)
         _limits_cache["data"] = None  # force refresh so the change is visible immediately, not after LIMITS_CACHE_TTL
@@ -635,7 +681,10 @@ def api_generate():
     lim = get_limits()
     char_limit_widget = None if is_pro() else lim["FREE_CHAR_LIMIT"]
     if char_limit_widget and len(text) > char_limit_widget:
-        return jsonify({"error": f"Free plan is capped at {char_limit_widget:,} characters. Upgrade to Pro for unlimited length."}), 402
+        return jsonify({"error": f"Free plan is capped at {char_limit_widget:,} characters per generation. Upgrade to Pro for unlimited length."}), 402
+
+    if _would_exceed_monthly_quota(len(text), lim["FREE_MONTHLY_CHAR_QUOTA"]):
+        return jsonify({"error": f"Free plan's monthly quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters is used up. Upgrade to Pro for unlimited, or wait until next month."}), 402
 
     if not _check_and_bump("usage_singles", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Upgrade to Pro for unlimited."}), 402
@@ -646,9 +695,7 @@ def api_generate():
     except Exception as e:
         return jsonify({"error": f"Error generating audio: {str(e)}"}), 500
 
-    if not is_pro():
-        _reset_daily_if_needed()
-        session["usage_chars"] = session.get("usage_chars", 0) + len(text)
+    _bump_monthly_chars(len(text))
 
     timestamp = int(time.time())
     filename = f"tts-{timestamp}.mp3"
@@ -679,6 +726,10 @@ def api_batch():
     if not _check_and_bump("usage_batches", lim["FREE_BATCH_LIMIT"]):
         return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for unlimited."}), 402
 
+    total_chars = sum(len(ln) for ln in lines)
+    if _would_exceed_monthly_quota(total_chars, lim["FREE_MONTHLY_CHAR_QUOTA"]):
+        return jsonify({"error": f"This batch would exceed your monthly quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters. Upgrade to Pro for unlimited, or wait until next month."}), 402
+
     rate_str = f"{speed_pct - 100:+d}%"
     results = []
     errors = []
@@ -689,6 +740,7 @@ def api_batch():
             audio = tts_dispatch(line, voice_id, rate=rate_str, speed_pct=speed_pct)
             fname = f"tts-batch-{idx + 1:02d}-{timestamp_base}.mp3"
             results.append({"idx": idx + 1, "text": line, "filename": fname, "audio": audio})
+            _bump_monthly_chars(len(line))  # only bump for lines that actually succeeded
         except Exception as e:
             errors.append(f"Line {idx + 1}: {str(e)}")
 
