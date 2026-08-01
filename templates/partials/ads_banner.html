@@ -1,4 +1,6 @@
 {# Inline banner/native ad — include inside a page body where not pro. #}
-<div style="display:flex;justify-content:center;padding:8px 0;margin:16px 0;">
-  <iframe src="{{ url_for('ads_slot', slot='banner') }}" style="width:100%;max-width:468px;height:90px;border:0;" scrolling="no"></iframe>
+<div style="display:flex;justify-content:center;padding:8px 0;margin:16px 0;max-width:100%;">
+  <div style="width:100%;max-width:468px;height:90px;overflow:hidden;">
+    <iframe src="{{ url_for('ads_slot', slot='banner') }}" style="width:100%;height:90px;border:0;" scrolling="no"></iframe>
+  </div>
 </div>
