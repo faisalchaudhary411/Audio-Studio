@@ -116,7 +116,7 @@
     if (!items.length) { historyList.innerHTML = ''; return; }
     historyList.innerHTML = '<p class="panel__label">Recent generations</p>' + items.map((item, i) => `
       <div style="border-top:1px solid var(--line);padding:10px 0;">
-        <div style="font-size:0.88rem;color:var(--text-mid);">${item.text}</div>
+        <div style="font-size:0.88rem;color:var(--text-mid);overflow-wrap:anywhere;word-break:break-word;">${item.text}</div>
         <div style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);margin:4px 0 6px;">${item.size_kb} KB · ${item.time}</div>
         <audio controls style="width:100%;" src="data:audio/mpeg;base64,${item.audio_b64}"></audio>
       </div>
@@ -219,7 +219,7 @@
       const clipsHtml = data.clips.map(c => `
         <div style="border-top:1px solid var(--line);padding:10px 0;">
           <div style="font-size:0.85rem;color:var(--brass-hi);font-family:var(--mono);">CLIP ${c.idx}</div>
-          <div style="font-size:0.88rem;color:var(--text-mid);font-style:italic;margin:4px 0;">"${c.text.slice(0,80)}"</div>
+          <div style="font-size:0.88rem;color:var(--text-mid);font-style:italic;margin:4px 0;overflow-wrap:anywhere;word-break:break-word;">"${c.text.slice(0,80)}"</div>
           <audio controls style="width:100%;" src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
         </div>
       `).join('');
