@@ -315,12 +315,14 @@ textarea.script-input:focus{border-color:var(--brass);outline:none;}
 .admin{max-width:1100px;margin:0 auto;padding:40px 28px 80px;display:grid;gap:24px;}
 .admin__grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;}
 @media (max-width:800px){.admin__grid{grid-template-columns:1fr;}}
-table.admin-table{width:100%;border-collapse:collapse;font-size:0.9rem;}
+table.admin-table{width:100%;border-collapse:collapse;font-size:0.9rem;overflow-wrap:normal;word-break:normal;}
 table.admin-table th{
   text-align:left;font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);
   text-transform:uppercase;letter-spacing:0.05em;padding:10px 8px;border-bottom:1px solid var(--line);
+  white-space:nowrap;
 }
-table.admin-table td{padding:12px 8px;border-bottom:1px solid var(--line);}
+table.admin-table td{padding:12px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+table.admin-table td.wrap-ok{white-space:normal;overflow-wrap:anywhere;}
 input.admin-input{
   background:var(--ink);border:1px solid var(--line);border-radius:6px;
   color:var(--text-hi);padding:6px 10px;font-family:var(--mono);font-size:0.85rem;width:90px;
