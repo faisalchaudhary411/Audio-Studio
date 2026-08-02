@@ -20,6 +20,13 @@
     });
   });
 
+  // BUG FIX: browsers don't recognize "audio/m4a" as a MIME type (that's just
+  // the file extension convention) — the actual container is MP4, so the
+  // correct MIME type is audio/mp4. Using the wrong MIME type can make the
+  // <audio> element fail to play the file even though it downloaded fine.
+  const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', flac: 'audio/flac' };
+  function mimeFor(fmt) { return AUDIO_MIME[fmt] || 'audio/mpeg'; }
+
   function audioPlayerHtml(b64, filename, mime = 'audio/mpeg') {
     return `
       <audio controls style="width:100%;" src="data:${mime};base64,${b64}"></audio>
@@ -83,7 +90,7 @@
       const data = await res.json();
       if (!res.ok) { convertStatus.textContent = data.error || 'Failed.'; return; }
       convertStatus.textContent = `Converted to ${data.format.toUpperCase()}`;
-      convertResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, `audio/${data.format}`);
+      convertResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       convertStatus.textContent = 'Network error.';
     } finally {
@@ -97,26 +104,57 @@
   mergeGap.addEventListener('input', () => {
     document.getElementById('merge-gap-label').textContent = mergeGap.value;
   });
+  const mergeAddBtn = document.getElementById('merge-add-btn');
+  const mergeFilesInput = document.getElementById('merge-files');
+  const mergeFileList = document.getElementById('merge-file-list');
   const mergeBtn = document.getElementById('merge-btn');
   const mergeStatus = document.querySelector('[data-merge-status]');
   const mergeResult = document.getElementById('merge-result');
+  let mergeSelectedFiles = []; // accumulates across multiple picks, unlike the raw <input> which replaces on reselect
+
+  function renderMergeList() {
+    if (!mergeSelectedFiles.length) {
+      mergeFileList.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No files added yet.</p>';
+      return;
+    }
+    mergeFileList.innerHTML = mergeSelectedFiles.map((f, i) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--ink);border-radius:8px;margin-bottom:6px;">
+        <span style="font-size:0.85rem;color:var(--text-mid);overflow-wrap:anywhere;">${i + 1}. ${f.name}</span>
+        <button type="button" data-remove-idx="${i}" class="btn btn--ghost btn--sm" style="padding:4px 10px;">Remove</button>
+      </div>
+    `).join('');
+    mergeFileList.querySelectorAll('[data-remove-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        mergeSelectedFiles.splice(parseInt(btn.dataset.removeIdx, 10), 1);
+        renderMergeList();
+      });
+    });
+  }
+  renderMergeList();
+
+  mergeAddBtn.addEventListener('click', () => mergeFilesInput.click());
+  mergeFilesInput.addEventListener('change', () => {
+    for (const f of mergeFilesInput.files) mergeSelectedFiles.push(f);
+    mergeFilesInput.value = ''; // reset so picking the same file again still fires 'change'
+    renderMergeList();
+  });
+
   mergeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runMerge); });
   async function runMerge() {
-    const files = document.getElementById('merge-files').files;
-    if (files.length < 2) { mergeStatus.textContent = 'Choose at least 2 files.'; return; }
+    if (mergeSelectedFiles.length < 2) { mergeStatus.textContent = 'Add at least 2 files first.'; return; }
     mergeBtn.disabled = true;
-    mergeStatus.textContent = `Merging ${files.length} files…`;
+    mergeStatus.textContent = `Merging ${mergeSelectedFiles.length} files…`;
     mergeResult.innerHTML = '';
     const form = new FormData();
-    for (const f of files) form.append('files', f);
+    for (const f of mergeSelectedFiles) form.append('files', f);
     form.append('gap_ms', mergeGap.value);
     form.append('output_format', document.getElementById('merge-format').value);
     try {
       const res = await fetch('/api/tools/merge', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) { mergeStatus.textContent = data.error || 'Failed.'; return; }
-      mergeStatus.textContent = `Merged ${files.length} files`;
-      mergeResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, `audio/${data.format}`);
+      mergeStatus.textContent = `Merged ${mergeSelectedFiles.length} files`;
+      mergeResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       mergeStatus.textContent = 'Network error.';
     } finally {
@@ -322,7 +360,7 @@
       const data = await res.json();
       if (!res.ok) { vxStatus.textContent = data.error || 'Failed.'; return; }
       vxStatus.textContent = `Extracted · ${data.size_kb} KB`;
-      vxResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, `audio/${data.format}`);
+      vxResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       vxStatus.textContent = 'Network error.';
     } finally {
