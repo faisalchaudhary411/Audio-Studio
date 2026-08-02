@@ -5,6 +5,10 @@
 {% block content %}
 <div class="studio">
 
+  <p style="color:var(--text-dim);font-size:0.85rem;padding:0 28px;max-width:900px;margin:0 auto 16px;">
+    Text-to-speech in {{ voices.keys()|list|length }}+ languages, powered by neural voices. Type or paste a script and generate natural narration — for videos, podcasts, or anything that needs a voice.
+  </p>
+
   <div class="panel">
     {% if not pro %}
     <span class="panel__label">Today's usage</span>
@@ -97,24 +101,8 @@
 <!-- ===== Clone a voice (Pro) ===== -->
 <div class="section" style="padding-top:0;">
   <div class="panel">
-    <span class="panel__label">Clone a voice {% if not pro %}— Pro only{% endif %}</span>
-    {% if not pro %}
-    <p style="color:var(--text-mid);font-size:0.9rem;">Upload a reference clip and generate speech in that voice.
-      <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to unlock this.</p>
-    {% else %}
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
-      Runs on CPU — generation takes 10-60+ seconds. Reference clip: 10+ seconds of clean speech works best.
-      Max {{ '500' }} chars per generation while cloning is CPU-hosted.
-    </p>
-    <input type="file" id="clone-file-input" accept=".wav,.mp3,.m4a,.ogg" style="margin-bottom:10px;">
-    <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);" data-clone-upload-status></div>
-    <textarea class="script-input" id="clone-text" placeholder="Text to speak in the cloned voice…" style="min-height:100px;margin-top:10px;"></textarea>
-    <div class="render-bar">
-      <button class="btn btn--jade" id="clone-generate-btn">Generate cloned speech</button>
-      <span class="render-status" data-clone-status></span>
-    </div>
-    <div id="clone-result" style="margin-top:16px;"></div>
-    {% endif %}
+    <span class="panel__label">Clone a voice</span>
+    <p style="color:var(--text-mid);font-size:0.9rem;">🚧 Coming soon — upload a reference clip and generate speech in that voice.</p>
   </div>
 </div>
 
@@ -125,7 +113,4 @@
   window.VOXCRAFT_VOICES = {{ voices|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/studio.js') }}"></script>
-{% if pro %}
-<script src="{{ url_for('static', filename='js/clone.js') }}"></script>
-{% endif %}
 {% endblock %}

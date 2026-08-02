@@ -43,6 +43,7 @@
 <div class="section" style="padding-top:0;" id="panel-transcribe">
   <div class="panel">
     <span class="panel__label">Transcribe</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Converts speech in an audio file to text. Supports WAV, MP3, M4A, OGG, FLAC — up to 10MB. Long files are processed in chunks, so it works for anything from a voice memo to a full interview.</p>
     <input type="file" id="transcribe-file" accept=".wav,.mp3,.m4a,.ogg,.flac" style="margin-bottom:10px;">
     <select id="transcribe-lang" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
       {% for name, code in lang_options.items() %}
@@ -61,6 +62,7 @@
 <div class="section" style="padding-top:0;display:none;" id="panel-convert">
   <div class="panel">
     <span class="panel__label">Convert</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Changes an audio file's format and bitrate. Supports MP3, WAV, OGG, M4A, FLAC — up to 10MB.</p>
     <input type="file" id="convert-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <select id="convert-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
@@ -83,8 +85,12 @@
 <!-- Merge -->
 <div class="section" style="padding-top:0;display:none;" id="panel-merge">
   <div class="panel">
-    <span class="panel__label">Merge (order = upload order)</span>
-    <input type="file" id="merge-files" accept=".wav,.mp3,.ogg,.m4a,.flac" multiple style="margin-bottom:10px;">
+    <span class="panel__label">Merge — combine 2 or more clips, in order</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:4px;">Stitches multiple clips into one file with a configurable silence gap between them. Up to 10MB per file.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;">Tap "Add files" as many times as you need — each pick adds to the list below rather than replacing it. Max 10MB per file.</p>
+    <button type="button" class="btn btn--ghost btn--sm" id="merge-add-btn" style="margin-bottom:10px;">+ Add files</button>
+    <input type="file" id="merge-files" accept=".wav,.mp3,.ogg,.m4a,.flac" multiple style="display:none;">
+    <div id="merge-file-list" style="margin-bottom:14px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Gap: <span id="merge-gap-label">500</span> ms</label>
@@ -106,6 +112,7 @@
 <div class="section" style="padding-top:0;display:none;" id="panel-cutter">
   <div class="panel">
     <span class="panel__label">Cutter</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Trim a clip to a start/end range, or split it into two files at a chosen point. Up to 10MB.</p>
     <input type="file" id="cutter-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
     <div id="cutter-duration" style="font-family:var(--mono);font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;"></div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -136,6 +143,7 @@
 <div class="section" style="padding-top:0;display:none;" id="panel-denoise">
   <div class="panel">
     <span class="panel__label">Denoise</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Reduces background hiss/hum using spectral noise reduction. Works best on speech with fairly steady background noise (fans, room tone) — won't remove sudden noises like claps or barks. Up to 10MB. Output is mono.</p>
     <input type="file" id="denoise-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
     <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Strength: <span id="denoise-strength-label">0.5</span></label>
     <input type="range" id="denoise-strength" min="0" max="1" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
@@ -151,6 +159,7 @@
 <div class="section" style="padding-top:0;display:none;" id="panel-voicechange">
   <div class="panel">
     <span class="panel__label">Voice Changer</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Applies an effect to a voice clip — Pitch Shift preserves the original speaking speed while changing pitch; Chipmunk/Deep Voice intentionally change both pitch and speed for a character-voice effect. Up to 10MB.</p>
     <input type="file" id="voicechange-file" accept=".wav,.mp3,.ogg,.m4a" style="margin-bottom:10px;">
     <select id="voicechange-effect" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
       <option value="pitch_shift">Pitch Shift</option>
@@ -187,6 +196,7 @@
 <div class="section" style="padding-top:0;display:none;" id="panel-videoxtract">
   <div class="panel">
     <span class="panel__label">Video to Audio</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Extracts the audio track from a video file. Supports MP4, AVI, MOV, MKV, WEBM — <strong style="color:var(--brass-hi);">up to 50MB</strong> (larger than the other tools, since video files are naturally bigger). Files over the limit, or corrupted/incomplete uploads, will fail with an error rather than a silent hang.</p>
     <input type="file" id="videoxtract-file" accept=".mp4,.avi,.mov,.mkv,.webm" style="margin-bottom:10px;">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <select id="videoxtract-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
