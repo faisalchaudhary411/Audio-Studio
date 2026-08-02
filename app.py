@@ -20,6 +20,7 @@ from flask import Flask, render_template, request, jsonify, session, send_file, 
 import os
 import io
 import time
+import threading
 import zipfile
 import base64
 import datetime as dt
@@ -42,6 +43,39 @@ CLONE_CHAR_LIMIT = 500  # tighter than normal TTS — keeps CPU generation time 
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+
+# BUG FIX (critical): sessions were never made permanent, so Flask's default
+# session cookie had NO explicit expiry at all — a true browser "session"
+# cookie, meant to last only until the browser fully closes. On mobile,
+# Android (and iOS) routinely kill backgrounded browser tabs/apps to save
+# memory/battery — very commonly overnight while the phone charges — which
+# clears exactly this kind of cookie. That matches the "Pro resets around
+# midnight" symptom far better than anything server-side/date-based, since
+# there's no actual date-based reset logic touching license_key anywhere in
+# this file. Making sessions permanent with an explicit long lifetime means
+# the cookie gets a real expiry date, so it survives the browser/OS clearing
+# out non-permanent session-scoped cookies.
+app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
+
+
+@app.before_request
+def _make_session_permanent():
+    session.permanent = True
+
+# librosa's pitch_shift uses numba, which JIT-compiles on first call —
+# ~20s the very first time, milliseconds after. Warming it up here (module
+# level, so this runs under gunicorn too, not just `python app.py` directly)
+# means the first real Voice Changer user doesn't eat that cost.
+def _warm_up_librosa():
+    try:
+        import numpy as _np
+        import librosa as _librosa
+        _librosa.effects.pitch_shift(_np.zeros(2048, dtype=_np.float32), sr=22050, n_steps=1)
+    except Exception:
+        pass  # non-fatal — worst case, the first real request just pays the JIT cost instead
+
+
+threading.Thread(target=_warm_up_librosa, daemon=True).start()
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
@@ -125,8 +159,32 @@ def _reset_monthly_if_needed():
         session["usage_chars_monthly"] = 0
 
 
+def _under_limit(counter_key: str, limit: int) -> bool:
+    """Read-only check — does NOT increment. Use this before doing the actual
+    work, then call _bump_counter only if it succeeds."""
+    _reset_daily_if_needed()
+    if is_pro():
+        return True
+    return session.get(counter_key, 0) < limit
+
+
+def _bump_counter(counter_key: str):
+    """Only call this AFTER the operation actually succeeds."""
+    if is_pro():
+        return
+    _reset_daily_if_needed()
+    session[counter_key] = session.get(counter_key, 0) + 1
+
+
 def _check_and_bump(counter_key: str, limit: int) -> bool:
-    """Returns True if under limit (and increments), False if limit hit."""
+    """Returns True if under limit (and increments), False if limit hit.
+    BUG FIX: every /api/tools/* endpoint used to call this BEFORE attempting
+    the actual operation, so a failed generation (bad file, oversized upload,
+    corrupted upload, etc.) still consumed a daily quota slot. Kept here for
+    the couple of call sites where check+bump-immediately is still correct
+    (e.g. previews, where there's no separate 'did it succeed' step worth
+    splitting out) — but the tool endpoints below now use _under_limit +
+    _bump_counter instead, bumping only after success."""
     _reset_daily_if_needed()
     if is_pro():
         return True
@@ -217,7 +275,7 @@ def pricing():
          "limits": free_features, "cta": "Current plan", "cta_url": None},
         {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_LABEL", "840 PKR"), "period": "/month",
          "limits": pro_features, "cta": "Get Pro", "featured": True,
-         "cta_url": limits.get("CHECKOUT_URL") or url_for("upgrade")},
+         "cta_url": url_for("upgrade")},
     ]
     return render_template("pricing.html", plans=plans)
 
@@ -468,6 +526,64 @@ def ads_slot(slot):
     return render_template(tpl)
 
 
+@app.route("/fs-callback")
+def fs_callback():
+    """Freemius redirects the customer's browser here after a successful
+    checkout (appends ?license_id=X&email=Y as real query params — this is
+    NOT a webhook, the customer's own browser lands on this page). Ported
+    from the original app's fs_callback page: verify with Freemius, mint (or
+    reuse) an internal key, show it with an inline Activate button.
+
+    IMPORTANT — this only works if Freemius is configured to redirect here:
+    in your Freemius checkout link settings, set the after-purchase redirect
+    URL to https://<your-domain>/fs-callback. Without that, customers land
+    on Freemius's own generic thank-you page instead of this one.
+    """
+    fs_license_id = request.args.get("license_id", "")
+    fs_email = request.args.get("email", "")
+
+    if not fs_license_id:
+        return render_template("fs_callback.html", error="no_license_id")
+
+    verify_result = licensing.verify_freemius_license(fs_license_id)
+
+    if not verify_result.get("valid"):
+        return render_template("fs_callback.html", error="not_verified",
+                                license_id=fs_license_id,
+                                verify_error=verify_result.get("error", "unknown"))
+
+    # Reuse an existing internal key if this Freemius license was already
+    # converted before (e.g. customer refreshed this page)
+    keys = persistence.load_license_keys()
+    existing_key = next((k for k, v in keys.items() if v.get("freemius_license_id") == fs_license_id), None)
+
+    if existing_key:
+        license_key = existing_key
+    else:
+        limits = persistence.load_limits()
+        license_key = licensing.create_subscription_key(
+            customer_name=verify_result.get("user_name") or "Pro User",
+            customer_email=verify_result.get("user_email") or fs_email,
+            subscription_type="monthly",
+            freemius_license_id=fs_license_id,
+            amount_paid=limits.get("PRO_PRICE_PKR", 0),
+        )
+
+    return render_template("fs_callback.html", success=True, license_key=license_key)
+
+
+@app.route("/fs-callback/activate", methods=["POST"])
+def fs_callback_activate():
+    """The inline 'Activate Pro Now' button on the fs_callback success page."""
+    key = request.form.get("license_key", "").strip()
+    result = licensing.activate_vox_license(key, request)
+    if result.get("valid"):
+        session["license_key"] = key
+        return redirect(url_for("studio"))
+    return render_template("fs_callback.html", success=True, license_key=key,
+                            activate_error=result.get("error", "Activation failed."))
+
+
 @app.route("/tools")
 def tools_hub():
     return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary(),
@@ -477,7 +593,7 @@ def tools_hub():
 @app.route("/api/tools/transcribe", methods=["POST"])
 def api_transcribe():
     lim = get_limits()
-    if not _check_and_bump("usage_transcribe", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_transcribe", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     lang_code = request.form.get("lang_code", "en-US")
@@ -485,6 +601,7 @@ def api_transcribe():
         return jsonify({"error": "No file uploaded."}), 400
     try:
         result = audio_tools.transcribe(file.read(), file.filename, lang_code)
+        _bump_counter("usage_transcribe")
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -493,7 +610,7 @@ def api_transcribe():
 @app.route("/api/tools/convert", methods=["POST"])
 def api_convert():
     lim = get_limits()
-    if not _check_and_bump("usage_convert", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_convert", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
@@ -502,6 +619,7 @@ def api_convert():
         return jsonify({"error": "No file uploaded."}), 400
     try:
         out_bytes = audio_tools.convert(file.read(), file.filename, output_format, quality)
+        _bump_counter("usage_convert")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"converted-{int(time.time())}.{output_format}",
                          "format": output_format})
@@ -512,16 +630,17 @@ def api_convert():
 @app.route("/api/tools/merge", methods=["POST"])
 def api_merge():
     lim = get_limits()
-    if not _check_and_bump("usage_merge", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_merge", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     files = request.files.getlist("files")
     gap_ms = int(request.form.get("gap_ms", 500))
     output_format = request.form.get("output_format", "mp3")
     if len(files) < 2:
-        return jsonify({"error": "Upload at least 2 files to merge."}), 400
+        return jsonify({"error": "Add at least 2 files to merge."}), 400
     try:
         pairs = [(f.read(), f.filename) for f in files]
         out_bytes = audio_tools.merge(pairs, gap_ms, output_format)
+        _bump_counter("usage_merge")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"merged-{int(time.time())}.{output_format}",
                          "format": output_format})
@@ -545,7 +664,7 @@ def api_cutter_duration():
 @app.route("/api/tools/cutter/trim", methods=["POST"])
 def api_cutter_trim():
     lim = get_limits()
-    if not _check_and_bump("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     start_sec = float(request.form.get("start_sec", 0))
@@ -554,6 +673,7 @@ def api_cutter_trim():
         return jsonify({"error": "No file uploaded."}), 400
     try:
         out_bytes = audio_tools.trim(file.read(), file.filename, start_sec, end_sec)
+        _bump_counter("usage_cutter")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"trimmed-{int(time.time())}.mp3"})
     except Exception as e:
@@ -563,7 +683,7 @@ def api_cutter_trim():
 @app.route("/api/tools/cutter/split", methods=["POST"])
 def api_cutter_split():
     lim = get_limits()
-    if not _check_and_bump("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     split_sec = float(request.form.get("split_sec", 0))
@@ -571,6 +691,7 @@ def api_cutter_split():
         return jsonify({"error": "No file uploaded."}), 400
     try:
         part1, part2 = audio_tools.split(file.read(), file.filename, split_sec)
+        _bump_counter("usage_cutter")
         return jsonify({
             "part1_b64": base64.b64encode(part1).decode("ascii"),
             "part2_b64": base64.b64encode(part2).decode("ascii"),
@@ -583,7 +704,7 @@ def api_cutter_split():
 @app.route("/api/tools/denoise", methods=["POST"])
 def api_denoise():
     lim = get_limits()
-    if not _check_and_bump("usage_denoise", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_denoise", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     strength = float(request.form.get("strength", 0.5))
@@ -591,6 +712,7 @@ def api_denoise():
         return jsonify({"error": "No file uploaded."}), 400
     try:
         out_bytes = audio_tools.denoise(file.read(), file.filename, strength)
+        _bump_counter("usage_denoise")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"denoised-{int(time.time())}.mp3"})
     except Exception as e:
@@ -600,7 +722,7 @@ def api_denoise():
 @app.route("/api/tools/voicechange", methods=["POST"])
 def api_voicechange():
     lim = get_limits()
-    if not _check_and_bump("usage_voicechange", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_voicechange", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     effect = request.form.get("effect", "pitch_shift")
@@ -616,6 +738,7 @@ def api_voicechange():
             params["delay_ms"] = int(request.form.get("delay_ms", 200))
             params["decay"] = float(request.form.get("decay", 0.5))
         out_bytes = audio_tools.voice_change(file.read(), file.filename, effect, **params)
+        _bump_counter("usage_voicechange")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"voicechange-{effect}-{int(time.time())}.mp3"})
     except Exception as e:
@@ -625,7 +748,7 @@ def api_voicechange():
 @app.route("/api/tools/videoxtract", methods=["POST"])
 def api_videoxtract():
     lim = get_limits()
-    if not _check_and_bump("usage_videoxtract", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_videoxtract", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
@@ -634,6 +757,7 @@ def api_videoxtract():
         return jsonify({"error": "No file uploaded."}), 400
     try:
         out_bytes = audio_tools.video_to_audio(file.read(), file.filename, output_format, quality)
+        _bump_counter("usage_videoxtract")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"extracted-{int(time.time())}.{output_format}",
                          "format": output_format, "size_kb": round(len(out_bytes) / 1024, 1)})
@@ -652,7 +776,7 @@ def api_preview():
         return jsonify({"error": "No voice selected."}), 400
 
     lim = get_limits()
-    if not _check_and_bump("usage_previews", lim["FREE_PREVIEW_LIMIT"]):
+    if not _under_limit("usage_previews", lim["FREE_PREVIEW_LIMIT"]):
         return jsonify({"error": f"Free preview limit reached ({lim['FREE_PREVIEW_LIMIT']}/day). Upgrade to Pro for unlimited previews."}), 402
 
     text = default_preview_text(language)
@@ -662,6 +786,7 @@ def api_preview():
     except Exception as e:
         return jsonify({"error": f"Preview error: {str(e)}"}), 500
 
+    _bump_counter("usage_previews")
     return send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="preview.mp3")
 
 
@@ -686,7 +811,7 @@ def api_generate():
     if _would_exceed_monthly_quota(len(text), lim["FREE_MONTHLY_CHAR_QUOTA"]):
         return jsonify({"error": f"Free plan's monthly quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters is used up. Upgrade to Pro for unlimited, or wait until next month."}), 402
 
-    if not _check_and_bump("usage_singles", lim["FREE_DAILY_ACTIONS"]):
+    if not _under_limit("usage_singles", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Upgrade to Pro for unlimited."}), 402
 
     rate_str = f"{speed_pct - 100:+d}%"
@@ -695,6 +820,7 @@ def api_generate():
     except Exception as e:
         return jsonify({"error": f"Error generating audio: {str(e)}"}), 500
 
+    _bump_counter("usage_singles")
     _bump_monthly_chars(len(text))
 
     timestamp = int(time.time())
@@ -723,7 +849,7 @@ def api_batch():
     if len(lines) > max_lines:
         return jsonify({"error": f"{'Pro' if is_pro() else 'Free'} plan limit is {max_lines} lines."}), 402
 
-    if not _check_and_bump("usage_batches", lim["FREE_BATCH_LIMIT"]):
+    if not _under_limit("usage_batches", lim["FREE_BATCH_LIMIT"]):
         return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for unlimited."}), 402
 
     total_chars = sum(len(ln) for ln in lines)
@@ -746,6 +872,8 @@ def api_batch():
 
     if not results:
         return jsonify({"error": "All lines failed to generate.", "details": errors}), 500
+
+    _bump_counter("usage_batches")  # only counts against the daily batch-run quota if something actually succeeded
 
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:

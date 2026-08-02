@@ -50,10 +50,24 @@ def _load_segment(file_bytes: bytes, filename: str) -> AudioSegment:
 
 def _export_bytes(segment: AudioSegment, fmt: str, bitrate_kbps: int = None) -> bytes:
     buf = io.BytesIO()
-    kwargs = {"format": fmt}
+    kwargs = {}
     if bitrate_kbps:
         kwargs["bitrate"] = f"{bitrate_kbps}k"
-    segment.export(buf, **kwargs)
+
+    # BUG FIX: "m4a" isn't a real ffmpeg muxer name (it's just the file
+    # extension convention) — ffmpeg needs the "ipod" muxer + aac codec to
+    # actually produce a valid .m4a file. Passing format="m4a" straight
+    # through failed with "Requested output format 'm4a' is not known."
+    if fmt == "m4a":
+        kwargs["format"] = "ipod"
+        kwargs["codec"] = "aac"
+    else:
+        kwargs["format"] = fmt
+
+    try:
+        segment.export(buf, **kwargs)
+    except Exception as e:
+        raise Exception(f"Could not encode to {fmt.upper()}: {str(e)[:200]}")
     return buf.getvalue()
 
 
@@ -187,20 +201,40 @@ def voice_change(file_bytes: bytes, filename: str, effect: str, **params) -> byt
     audio = _load_segment(file_bytes, filename)
 
     if effect == "pitch_shift":
+        # BUG FIX: the old implementation changed the sample rate to fake a
+        # pitch shift (the classic "cheap" trick), but that also sped up or
+        # slowed down playback — shifting up 5 semitones made the clip ~25%
+        # shorter, which isn't what a "Pitch Shift" effect should do. Real
+        # pitch-shifting needs to change pitch WITHOUT changing duration —
+        # librosa.effects.pitch_shift does this properly (phase vocoder +
+        # resampling under the hood), verified it preserves exact sample
+        # count before wiring this in.
         semitones = params.get("semitones", 0)
         if semitones != 0:
-            new_rate = int(audio.frame_rate * (2.0 ** (semitones / 12.0)))
-            pitched = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
-            result = pitched.set_frame_rate(audio.frame_rate)  # preserve duration
+            import librosa
+            samples_f = np.array(audio.get_array_of_samples()).astype(np.float32) / 32768.0
+            if audio.channels == 2:
+                samples_f = samples_f.reshape((-1, 2)).T  # librosa wants (channels, samples) for stereo
+                shifted = librosa.effects.pitch_shift(samples_f, sr=audio.frame_rate, n_steps=semitones)
+                shifted = shifted.T.flatten()
+            else:
+                shifted = librosa.effects.pitch_shift(samples_f, sr=audio.frame_rate, n_steps=semitones)
+            shifted_int16 = np.clip(shifted * 32768.0, -32768, 32767).astype(np.int16)
+            result = AudioSegment(shifted_int16.tobytes(), frame_rate=audio.frame_rate,
+                                   sample_width=2, channels=audio.channels)
         else:
             result = audio
 
     elif effect == "robot":
+        # Slight improvement: bounded modulation depth (never fully inverts
+        # phase at max intensity, which caused harsh digital clicking) and a
+        # lower carrier frequency more typical of a "robotic" ring-mod effect.
         intensity = params.get("intensity", 0.5)
         samples = np.array(audio.get_array_of_samples())
         t = np.linspace(0, len(samples) / audio.frame_rate, len(samples))
-        carrier = np.sin(2 * np.pi * 200 * t)
-        robot_samples = samples * (1 - intensity + intensity * carrier)
+        carrier = np.sin(2 * np.pi * 60 * t)
+        depth = 0.75 * intensity  # capped so the modulation never fully cancels the signal
+        robot_samples = samples * (1 - depth + depth * carrier)
         robot_samples = np.clip(robot_samples, -32768, 32767).astype(np.int16)
         result = AudioSegment(robot_samples.tobytes(), frame_rate=audio.frame_rate,
                                sample_width=audio.sample_width, channels=audio.channels)

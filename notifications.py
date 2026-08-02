@@ -16,7 +16,8 @@ def _secret(key: str) -> str:
     return os.environ.get(key, "").strip()
 
 
-def notify_admin_new_request(name, email, phone, req_id, payment_method="", txn_id="", screenshot_b64=""):
+def notify_admin_new_request(name, email, phone, req_id, payment_method="", txn_id="", screenshot_b64="", site_url=""):
+    admin_link = f"{site_url.rstrip('/')}/admin/requests" if site_url else "/admin/requests"
     message_body = f"""New VoxCraft Pro Request!
 
 Name: {name}
@@ -26,7 +27,7 @@ Request ID: {req_id}
 Payment: {payment_method or 'Not submitted'}
 {'Txn/Ref ID: ' + txn_id if txn_id else ''}
 
-Go to Admin Panel -> Pro Requests to approve.
+Approve here: {admin_link}
 """
     notified = False
     errors = []
@@ -52,6 +53,9 @@ Go to Admin Panel -> Pro Requests to approve.
       <tr><td style="padding:6px 0;color:#888;font-size:13px">Payment</td><td style="padding:6px 0">{pay_badge}</td></tr>
       {txn_row}
     </table>
+  </div>
+  <div style="text-align:center;margin-bottom:16px;">
+    <a href="{admin_link}" style="display:inline-block;background:#E8A93C;color:#1A1204;padding:10px 24px;border-radius:12px;font-weight:700;text-decoration:none;font-size:14px;">Review &amp; Approve →</a>
   </div>
   <div style="text-align:center;color:#444;font-size:11px">VoxCraft Admin</div>
 </div></body></html>"""

@@ -93,7 +93,8 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
     reqs.insert(0, new_req)
     notified = notifications.notify_admin_new_request(name, email, phone, req_id,
                                                         payment_method=payment_method,
-                                                        txn_id=txn_id, screenshot_b64=screenshot_b64)
+                                                        txn_id=txn_id, screenshot_b64=screenshot_b64,
+                                                        site_url=request.url_root)
     new_req["notified"] = notified
     if auto_approved and email:
         notifications.send_key_email(email, name, internal_key)
