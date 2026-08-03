@@ -75,3 +75,13 @@ def start_clone_job(text: str, reference_audio_path: str) -> str:
 
 def get_job(job_id: str):
     return _jobs.get(job_id)
+
+
+def unload_model():
+    """Free the Chatterbox model from RAM after cloning is done.
+    Call this from app.py after a job reaches 'done' or 'error' status."""
+    global _model
+    with _model_lock:
+        _model = None
+    import gc
+    gc.collect()
