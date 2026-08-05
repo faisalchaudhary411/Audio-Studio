@@ -23,6 +23,7 @@ from usage_tracking import get_client_ip, hash_ip, get_browser_fingerprint
 
 FREEMIUS_API_TOKEN = os.environ.get("FREEMIUS_API_TOKEN", "").strip()
 FREEMIUS_PRODUCT_ID = os.environ.get("FREEMIUS_PRODUCT_ID", "").strip()
+FREEMIUS_SECRET_KEY = os.environ.get("FREEMIUS_SECRET_KEY", "").strip()
 
 
 def _keys() -> dict:
@@ -270,3 +271,70 @@ def verify_freemius_license(license_key: str) -> dict:
         }
     except Exception as e:
         return {"success": False, "valid": False, "error": str(e)}
+
+
+def _normalize_freemius_date(raw: str) -> str:
+    """Freemius's API/webhooks return dates like '2026-09-04 12:00:00'
+    (with seconds); our internal storage format is '%Y-%m-%d %H:%M' (no
+    seconds, matching create_subscription_key/is_subscription_active).
+    Falls back to a blind +30-days-from-now if the date can't be parsed at
+    all, so a malformed/unexpected payload never leaves the key stuck with
+    no expiry — worse case is one cycle needs a manual look, not silent
+    infinite access."""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return dt.datetime.strptime(raw, fmt).strftime("%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+    return (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+
+
+def sync_license_from_freemius_event(freemius_license_id: str, event_type: str, new_expiration: str = "") -> dict:
+    """Called from the /webhook/freemius route on license.extended /
+    license.cancelled / license.expired events — keeps our internal key's
+    expiry in sync with what Freemius actually billed, rather than blindly
+    assuming every renewal is exactly +30 days (wrong for annual plans, and
+    wrong if Freemius ever prorates/adjusts a period).
+
+    This is the piece that was missing entirely before: nothing previously
+    extended a key's expiry when a recurring subscription renewed, so every
+    Pro customer — even ones still being billed monthly — would lose access
+    at the 30-day mark regardless of continued payment.
+    """
+    if not freemius_license_id:
+        return {"success": False, "error": "No freemius_license_id in webhook payload."}
+
+    key = find_key_by_freemius_id(freemius_license_id)
+    if not key:
+        return {"success": False, "error": f"No internal key found for Freemius license {freemius_license_id} — was it ever activated via fs_callback?"}
+
+    keys = _keys()
+    info = keys[key]
+
+    if event_type == "license.extended":
+        info["expires_at"] = _normalize_freemius_date(new_expiration) if new_expiration else \
+            (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+        info["revoked"] = False  # a successful renewal recovers from any prior dunning-related revoke
+        info["renewal_count"] = info.get("renewal_count", 0) + 1
+        _save(keys)
+        return {"success": True, "action": "extended", "key": key, "new_expiry": info["expires_at"]}
+
+    if event_type == "license.expired":
+        # Safety-net revoke — if our expires_at was already in sync via
+        # license.extended events this is usually redundant, but covers the
+        # case where a renewal silently failed to sync for any reason.
+        info["revoked"] = True
+        _save(keys)
+        return {"success": True, "action": "revoked_expired", "key": key}
+
+    if event_type == "license.cancelled":
+        # Deliberately NOT revoking here — Freemius keeps the license valid
+        # through the end of the period the customer already paid for, and
+        # simply won't fire another license.extended after this. Just
+        # tagging it for admin visibility so cancellations are visible in
+        # the admin keys list without cutting the customer off early.
+        info["subscription_type"] = "cancelled"
+        _save(keys)
+        return {"success": True, "action": "tagged_cancelled", "key": key}
+
+    return {"success": False, "error": f"Unhandled event type: {event_type}"}

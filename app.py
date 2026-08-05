@@ -28,25 +28,9 @@ import markdown as md_lib
 
 from voices import VOICES, FREE_VOICES, default_preview_text
 from tts_engine import tts_dispatch
+from clone_engine import start_clone_job, get_job
+import music_engine
 import audio_tools
-
-# Lazy-load heavy modules to avoid OOM on Render's 512 MB free tier
-_clone_engine = None
-_music_engine = None
-
-def get_clone_engine():
-    global _clone_engine
-    if _clone_engine is None:
-        from clone_engine import start_clone_job, get_job, unload_model
-        _clone_engine = {"start": start_clone_job, "get": get_job, "unload": unload_model}
-    return _clone_engine
-
-def get_music_engine():
-    global _music_engine
-    if _music_engine is None:
-        import music_engine
-        _music_engine = music_engine
-    return _music_engine
 import persistence
 import licensing
 import usage_tracking
@@ -78,8 +62,20 @@ app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
 def _make_session_permanent():
     session.permanent = True
 
-# NOTE: librosa warm-up removed to save ~200-300 MB RAM on Render free tier.
-# The first pitch_shift request pays the JIT cost instead.
+# librosa's pitch_shift uses numba, which JIT-compiles on first call —
+# ~20s the very first time, milliseconds after. Warming it up here (module
+# level, so this runs under gunicorn too, not just `python app.py` directly)
+# means the first real Voice Changer user doesn't eat that cost.
+def _warm_up_librosa():
+    try:
+        import numpy as _np
+        import librosa as _librosa
+        _librosa.effects.pitch_shift(_np.zeros(2048, dtype=_np.float32), sr=22050, n_steps=1)
+    except Exception:
+        pass  # non-fatal — worst case, the first real request just pays the JIT cost instead
+
+
+threading.Thread(target=_warm_up_librosa, daemon=True).start()
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
@@ -592,6 +588,40 @@ def ads_slot(slot):
     return render_template(tpl)
 
 
+@app.route("/webhook/freemius", methods=["POST"])
+def freemius_webhook():
+    """Freemius server-to-server webhook — this is what actually keeps a
+    recurring subscriber's access alive past the first 30 days. Complements
+    fs_callback (which only handles the customer's browser landing back
+    after the FIRST purchase) — this route handles every renewal after that,
+    with no browser involved at all.
+
+    Set up in Freemius: Developer Dashboard → your product → Webhooks →
+    Listeners → Add Webhook → URL: https://<your-domain>/webhook/freemius →
+    select at minimum: license.extended, license.cancelled, license.expired.
+    """
+    signature = request.headers.get("X-Signature", "")
+    if licensing.FREEMIUS_SECRET_KEY:
+        if not signature:
+            return jsonify({"error": "Missing signature"}), 401
+        import hmac, hashlib
+        expected = hmac.new(licensing.FREEMIUS_SECRET_KEY.encode(), request.get_data(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return jsonify({"error": "Invalid signature"}), 401
+
+    data = request.get_json(silent=True) or {}
+    event_type = data.get("event", data.get("type", ""))
+    license_obj = (data.get("objects") or {}).get("license") or {}
+    freemius_license_id = str(license_obj.get("id", ""))
+    new_expiration = license_obj.get("expiration", "")
+
+    if event_type not in ("license.extended", "license.cancelled", "license.expired"):
+        return jsonify({"success": True, "ignored": event_type}), 200
+
+    result = licensing.sync_license_from_freemius_event(freemius_license_id, event_type, new_expiration)
+    return jsonify(result), (200 if result.get("success") else 404)
+
+
 @app.route("/fs-callback")
 def fs_callback():
     """Freemius redirects the customer's browser here after a successful
@@ -1004,21 +1034,19 @@ def api_clone_generate():
     if not os.path.exists(path):
         return jsonify({"error": "Reference clip not found — please re-upload."}), 400
 
-    job_id = get_clone_engine()["start"](text, path)
+    job_id = start_clone_job(text, path)
     return jsonify({"job_id": job_id})
 
 
 @app.route("/api/clone/status/<job_id>")
 def api_clone_status(job_id):
-    job = get_clone_engine()["get"](job_id)
+    job = get_job(job_id)
     if not job:
         return jsonify({"error": "Unknown job."}), 404
 
     if job["status"] == "done":
-        get_clone_engine()["unload"]()
         return jsonify({"status": "done", "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
     if job["status"] == "error":
-        get_clone_engine()["unload"]()
         return jsonify({"status": "error", "error": job["error"]})
     return jsonify({"status": job["status"]})
 
@@ -1045,7 +1073,7 @@ def api_music_generate():
     if duration < 10 or duration > MUSIC_MAX_DURATION_SEC:
         return jsonify({"error": f"Duration must be between 10 and {MUSIC_MAX_DURATION_SEC} seconds."}), 400
 
-    result = get_music_engine().start_music_job(tags, "" if instrumental else lyrics, duration)
+    result = music_engine.start_music_job(tags, "" if instrumental else lyrics, duration)
     if result.get("error"):
         return jsonify(result), 503
     return jsonify(result)
@@ -1053,7 +1081,7 @@ def api_music_generate():
 
 @app.route("/api/music/status/<job_id>")
 def api_music_status(job_id):
-    job = get_music_engine().get_job(job_id)
+    job = music_engine.get_job(job_id)
     if not job:
         return jsonify({"error": "Unknown job."}), 404
     if job["status"] == "done":
@@ -1062,29 +1090,6 @@ def api_music_status(job_id):
         return jsonify({"status": "error", "error": job["error"]})
     return jsonify({"status": job["status"]})
 
-
-
-
-# ---------------------------------------------------------------------------
-# Health / Memory monitoring (for debugging Render OOM issues)
-# ---------------------------------------------------------------------------
-@app.route("/api/health")
-def api_health():
-    """Returns current memory usage so you can monitor how close to 512MB you are."""
-    try:
-        import os
-        import psutil
-        process = psutil.Process(os.getpid())
-        mem_mb = process.memory_info().rss / 1024 / 1024
-        return jsonify({
-            "status": "ok",
-            "memory_mb": round(mem_mb, 1),
-            "memory_percent": round(mem_mb / 512 * 100, 1),  # Render free tier = 512MB
-            "worker": 1,
-            "clone_model_loaded": get_clone_engine() is not None and get_clone_engine().get("unload") is not None,
-        })
-    except ImportError:
-        return jsonify({"status": "ok", "memory_mb": "unknown (install psutil)"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
