@@ -16,7 +16,7 @@ REQUIRED ENV VARS for this pass to actually work (see README):
 - FREEMIUS_API_TOKEN, FREEMIUS_PRODUCT_ID — only if you want Freemius checkout wired live
 """
 
-from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response
 import os
 import io
 import time
@@ -159,6 +159,7 @@ def inject_globals():
     return {
         "is_pro_ctx": is_pro(),
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
+        "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
     }
 
 
@@ -602,6 +603,22 @@ def admin_blog():
             persistence.save_blogs(posts)
         return redirect(url_for("admin_blog"))
     return render_template("admin/blog.html", posts=posts)
+
+
+@app.route("/ads.txt")
+def ads_txt():
+    """AdSense site-verification / IAB ads.txt. Publisher ID comes from an
+    env var so it can be changed without a code deploy — set
+    ADSENSE_PUBLISHER_ID to the pub-XXXXXXXXXXXXXXXX value AdSense gave you
+    (the part after 'ca-' in your ca-pub-... client ID).
+    Must be served at the domain root, exactly at /ads.txt — Google checks
+    this exact path, not /static/ads.txt.
+    """
+    pub_id = os.environ.get("ADSENSE_PUBLISHER_ID", "")
+    if not pub_id:
+        return "", 404
+    content = f"google.com, {pub_id}, DIRECT, f08c47fec0942fa0\n"
+    return Response(content, mimetype="text/plain")
 
 
 @app.route("/ads/slot/<slot>")
