@@ -36,13 +36,49 @@ import licensing
 import usage_tracking
 import pro_requests
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
+import hmac
 
 CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
 os.makedirs(CLONE_UPLOAD_DIR, exist_ok=True)
 CLONE_CHAR_LIMIT = 500  # tighter than normal TTS — keeps CPU generation time bounded
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+
+# HARDENING: no insecure fallback secret. A hardcoded SECRET_KEY means anyone
+# can forge a session cookie — including admin_authed=True, which bypasses
+# /admin login entirely. Fail loudly at startup instead of silently running
+# with a public, guessable key. Set SECRET_KEY as a real env var on the VPS
+# (e.g. `python3 -c "import secrets; print(secrets.token_hex(32))"`).
+_secret_key = os.environ.get("SECRET_KEY", "")
+if not _secret_key:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. Refusing to start with "
+        "an insecure default — set SECRET_KEY before running the app."
+    )
+app.secret_key = _secret_key
+
+# HARDENING: on the VPS, Flask sits behind Nginx as a reverse proxy. Without
+# ProxyFix, Flask doesn't know the original request was HTTPS or came from
+# the real client, which breaks secure cookies and url_for(..., _external=True).
+# x_for/x_proto/x_host=1 means "trust exactly one hop" — i.e. trust Nginx,
+# and only Nginx, to set these headers accurately (Nginx overwrites rather
+# than blindly forwards client-supplied values — see deploy notes).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# HARDENING: cap request body size globally (50 MB) so a single huge upload
+# (clone reference audio, tool file uploads) can't exhaust RAM/disk on a
+# single-worker VPS process — the same class of bug as the WealthThroughAges
+# OOM crash. Nginx should also set client_max_body_size to match (see notes).
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
+
+# HARDENING: explicit session cookie flags. SECURE requires the app to only
+# ever be reached over HTTPS (true once Nginx+certbot is set up) — browsers
+# will simply refuse to send the cookie over plain HTTP, which is fine since
+# Nginx will redirect http->https anyway.
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # BUG FIX (critical): sessions were never made permanent, so Flask's default
 # session cookie had NO explicit expiry at all — a true browser "session"
@@ -436,7 +472,11 @@ def admin_login():
     if request.method == "GET":
         return render_template("admin/login.html")
     password = request.form.get("password", "")
-    if ADMIN_PASSWORD and password == ADMIN_PASSWORD:
+    # HARDENING: constant-time comparison instead of == — plain string
+    # comparison short-circuits on the first mismatched character, which
+    # theoretically leaks timing info about the correct password. hmac.compare_digest
+    # runs in constant time regardless of where the strings first differ.
+    if ADMIN_PASSWORD and hmac.compare_digest(password, ADMIN_PASSWORD):
         session["admin_authed"] = True
         next_url = request.args.get("next") or url_for("admin_dashboard")
         return redirect(next_url)
@@ -1092,5 +1132,12 @@ def api_music_status(job_id):
 
 
 if __name__ == "__main__":
+    # HARDENING: debug=True enables the Werkzeug interactive debugger, which
+    # allows arbitrary remote code execution if the debug console is ever
+    # reachable. Gunicorn (the real entrypoint on the VPS) never runs this
+    # __main__ block, but keeping debug=True here is a landmine if this file
+    # is ever run directly with `python app.py` on the server as a quick test.
+    # Set FLASK_DEBUG=1 explicitly on your own machine if you need it locally.
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode)

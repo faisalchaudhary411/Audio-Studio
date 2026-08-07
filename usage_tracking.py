@@ -22,10 +22,19 @@ GH_REPO = persistence.GH_REPO  # noqa: for clarity when reading this file
 
 
 def get_client_ip(request) -> str:
-    for header in ("X-Forwarded-For", "X-Real-IP"):
-        val = request.headers.get(header, "")
-        if val:
-            return val.split(",")[0].strip()
+    """HARDENING (VPS deploy): the old version trusted the *first* entry in
+    X-Forwarded-For. That's exactly the part a client fully controls — anyone
+    could send their own fake X-Forwarded-For header and get a fresh "IP" on
+    every request, bypassing IP-based usage limits and license binding
+    entirely. With ProxyFix + a correctly configured Nginx (see deploy
+    notes), request.remote_addr is now Nginx's trusted resolution of the
+    real client IP — the one signal a client cannot spoof — so that's the
+    primary source. X-Real-IP (set once by Nginx, never client-supplied) is
+    kept as a fallback for setups where ProxyFix isn't in the request path.
+    """
+    real_ip = request.headers.get("X-Real-IP", "")
+    if real_ip:
+        return real_ip.strip()
     return request.remote_addr or "unknown"
 
 
