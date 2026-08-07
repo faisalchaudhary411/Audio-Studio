@@ -160,6 +160,12 @@ def inject_globals():
         "is_pro_ctx": is_pro(),
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
+        # Popunder is OFF by default — deliberately paused while AdSense
+        # reviews the site (popunders are on Google/Coalition for Better Ads'
+        # disallowed list; running one during review risks rejection). Set
+        # ENABLE_POPUNDER=1 in Render's env vars to switch it back on after
+        # approval — no code change or redeploy needed beyond the env var.
+        "enable_popunder_ctx": os.environ.get("ENABLE_POPUNDER", "") == "1",
     }
 
 
