@@ -80,6 +80,7 @@
 
 <script src="{{ url_for('static', filename='js/ads.js') }}"></script>
 <script>window.VOXCRAFT_IS_PRO = {{ 'true' if is_pro_ctx else 'false' }};</script>
+<script>window.VOXCRAFT_ENABLE_POPUNDER = {{ 'true' if enable_popunder_ctx else 'false' }};</script>
 {% if not is_pro_ctx %}
 {% include "partials/ads_global.html" %}
 {% endif %}
