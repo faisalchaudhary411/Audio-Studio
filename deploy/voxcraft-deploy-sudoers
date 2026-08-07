@@ -1,0 +1,18 @@
+# voxcraft-deploy-sudoers
+#
+# Grants the `deploy` user passwordless sudo for EXACTLY ONE command: restarting
+# the voxcraft service. Nothing broader — the webhook listener runs as this
+# user and calls this one command after a verified push; it should never be
+# able to do anything else as root, even if the webhook listener itself were
+# somehow compromised.
+#
+# Install with:
+#   sudo cp voxcraft-deploy-sudoers /etc/sudoers.d/voxcraft-deploy
+#   sudo chmod 440 /etc/sudoers.d/voxcraft-deploy
+#   sudo visudo -c        # ALWAYS validate syntax before trusting this file —
+#                          # a broken sudoers file can lock out sudo entirely
+#
+# Full path is specified (not just "systemctl") so this rule can't be
+# satisfied by some other systemctl binary earlier in $PATH.
+
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart voxcraft

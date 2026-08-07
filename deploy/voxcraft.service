@@ -1,0 +1,40 @@
+[Unit]
+Description=VoxCraft Flask app (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/home/deploy/voxcraft
+EnvironmentFile=/home/deploy/voxcraft/.env
+# --preload: loads the app (incl. librosa/numba warm-up) once in the master
+# process before forking workers, so the OS shares that ~300MB of loaded
+# libraries across workers via copy-on-write instead of duplicating it per
+# worker. On a 2GB/1-vCPU box this is the difference between "workable" and
+# "OOM" with 2 workers.
+# --workers 2: measured ~358MB/worker post-warm-up; 2 workers + preload
+# sharing is the safe ceiling for 2GB total RAM alongside OS + nginx.
+# --max-requests: recycles workers periodically to bound slow memory creep
+# from librosa/numba/audio processing over the process lifetime.
+ExecStart=/home/deploy/voxcraft/venv/bin/gunicorn app:app \
+    --workers 2 \
+    --threads 4 \
+    --preload \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --max-requests 200 \
+    --max-requests-jitter 50 \
+    --bind 127.0.0.1:8000
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=5
+
+# Hardening: minimal filesystem/privilege surface for the service.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/deploy/voxcraft /tmp
+
+[Install]
+WantedBy=multi-user.target
