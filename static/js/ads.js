@@ -9,6 +9,20 @@
       return;
     }
 
+    // Show the interstitial only every 3rd generation, not on every single
+    // click — the previous version fired before literally every generate
+    // action across all 8 tools, which reads as disruptive/intrusive to
+    // ad-experience reviews. Counter persists per-session (sessionStorage)
+    // so it holds across navigating between different tool pages.
+    const GEN_INTERVAL = 3;
+    const count = (parseInt(sessionStorage.getItem('voxcraft_gen_count') || '0', 10) + 1);
+    sessionStorage.setItem('voxcraft_gen_count', String(count));
+
+    if (count % GEN_INTERVAL !== 0) {
+      onDone();
+      return;
+    }
+
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;display:flex;align-items:center;justify-content:center;';
     const iframe = document.createElement('iframe');
@@ -43,6 +57,10 @@
   // an ad tab. Excluding clicks inside the nav header entirely; this is
   // meant to trigger on content/tool interactions, not UI chrome.
   window.VoxCraftAds.initPopunder = function () {
+    // Paused while AdSense reviews the site — see enable_popunder_ctx in
+    // app.py for how to switch this back on (ENABLE_POPUNDER=1 env var,
+    // no code change needed).
+    if (!window.VOXCRAFT_ENABLE_POPUNDER) return;
     if (window.VOXCRAFT_IS_PRO) return;
     if (sessionStorage.getItem('voxcraft_popunder_shown')) return;
     let triggered = false;
