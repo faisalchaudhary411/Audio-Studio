@@ -20,6 +20,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+{# AdSense Auto ads — deliberately NOT run through the /ads/slot/ iframe
+   isolation used for Adsterra. Adsterra's isolation exists to work around
+   its script hardcoding one singleton container ID (duplicate-ID conflicts
+   if reused on the same page). AdSense doesn't have that problem — each
+   auto-placed ad gets its own unique unit — and it needs to see the real
+   page in the main document to place ads contextually and pass Google's
+   site review. Skipped entirely for Pro users, same as Adsterra. #}
+{% if adsense_publisher_id and not is_pro_ctx %}
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-{{ adsense_publisher_id }}" crossorigin="anonymous"></script>
+{% endif %}
 </head>
 <body class="{% block bodyclass %}{% endblock %} {% if not is_pro_ctx %}has-sticky-ad{% endif %}">
 
