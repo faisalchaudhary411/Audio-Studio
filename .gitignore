@@ -1,0 +1,19 @@
+# Secrets â€” NEVER commit these. This is the file that would otherwise leak
+# SECRET_KEY, ADMIN_PASSWORD, GITHUB_TOKEN, WEBHOOK_SECRET, etc. to a public repo.
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+*.venv/
+
+# OS/editor cruft
+.DS_Store
+*.swp
+
+# Local temp/output that shouldn't be tracked
+/tmp/
+*.log
