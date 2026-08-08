@@ -19,7 +19,15 @@
 
   <div class="panel">
     {% if submitted %}
-      {% if auto_approved %}
+      {% if already_pro %}
+        <p style="color:var(--jade-hi);font-weight:600;margin-bottom:12px;">✓ Payment request submitted — reference ID <strong>{{ req_id }}</strong>.</p>
+        <div style="background:rgba(120,200,160,0.08);border:1px solid rgba(120,200,160,0.25);border-radius:12px;padding:14px;margin-top:12px;">
+          <p style="color:var(--text-mid);font-size:0.85rem;line-height:1.6;">
+            You already have active Pro access on this device, so nothing has changed for you right now — your existing access keeps working exactly as before.
+            We'll review this payment and apply it as a renewal/extension once verified.
+          </p>
+        </div>
+      {% elif auto_approved %}
         <p style="color:var(--jade-hi);font-weight:600;margin-bottom:12px;">✓ Activated instantly on this device — reference ID <strong>{{ req_id }}</strong>.</p>
         <div style="background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.25);border-radius:12px;padding:14px;margin-top:12px;">
           <div style="color:var(--brass-hi);font-weight:600;font-size:0.88rem;margin-bottom:6px;">⏳ This access is temporary until verified</div>
