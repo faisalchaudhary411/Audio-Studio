@@ -55,6 +55,44 @@ def is_subscription_active(key_info: dict) -> bool:
     return True
 
 
+def sweep_expired_keys() -> int:
+    """Explicitly marks any key past its expires_at as revoked=True.
+
+    Access was already correctly being cut off without this — is_subscription_active()
+    checks the expiry live on every call, so an expired key stops working
+    immediately regardless of this sweep. This function exists purely so the
+    admin panel's 'revoked' column is honest: without it, an expired
+    grace-period or subscription key sits there looking identical to a
+    genuinely active one until someone happens to look closely at
+    expires_at. Safe to call as often as you like — already-revoked keys
+    are simply skipped, and it never touches keys that are still within
+    their valid window.
+
+    Called from the admin dashboard and keys page on every load, so the
+    picture is always current when you're actually looking at it — no
+    separate scheduled job needed for a page nobody's looking at anyway.
+    """
+    keys = _keys()
+    changed = 0
+    now = dt.datetime.now()
+    for key, info in keys.items():
+        if info.get("revoked"):
+            continue
+        expires_at = info.get("expires_at")
+        if not expires_at:
+            continue
+        try:
+            expiry = dt.datetime.strptime(expires_at, "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        if now > expiry:
+            keys[key]["revoked"] = True
+            changed += 1
+    if changed:
+        _save(keys)
+    return changed
+
+
 def create_subscription_key(customer_name: str, customer_email: str,
                              subscription_type: str = "monthly",
                              amount_paid: float = 0,

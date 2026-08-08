@@ -354,7 +354,12 @@ def activate():
 def upgrade():
     checkout_url = persistence.load_limits().get("CHECKOUT_URL") or None
     if request.method == "GET":
-        return render_template("upgrade.html", checkout_url=checkout_url)
+        # BUG FIX: this previously never read MANUAL_GRACE_HOURS at all on
+        # the initial page load — only after submitting the form — so the
+        # "access stops working after X hours" text was disconnected from
+        # whatever was actually set in /admin/limits.
+        grace_hours = persistence.load_limits().get("MANUAL_GRACE_HOURS", 72)
+        return render_template("upgrade.html", checkout_url=checkout_url, grace_hours=grace_hours)
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
@@ -368,13 +373,24 @@ def upgrade():
     if file and file.filename:
         screenshot_b64 = base64.b64encode(file.read()).decode("ascii")
 
+    # BUG FIX: check Pro status BEFORE processing the submission. Without
+    # this, submitting a second payment request while already Pro (e.g. an
+    # early renewal attempt, or just clicking submit twice) would
+    # unconditionally overwrite the session's license_key with a brand-new
+    # TEMPORARY grace key — silently swapping a permanent, already-valid key
+    # for one on a 24-hour countdown. Combined with sweep_expired_keys(),
+    # that meant a genuinely paying customer could lose Pro access after the
+    # grace window, even though their real key was never actually invalid.
+    already_pro = is_pro()
+
     result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64)
     if result.get("success"):
-        if result.get("auto_approved") and result.get("license_key"):
+        if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
         return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url,
                                 auto_approved=result.get("auto_approved", False),
-                                grace_hours=result.get("grace_hours"))
+                                grace_hours=result.get("grace_hours"),
+                                already_pro=already_pro)
     return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."), checkout_url=checkout_url)
 
 
@@ -503,6 +519,7 @@ def admin_logout():
 @app.route("/admin")
 @admin_required
 def admin_dashboard():
+    licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before counting
     keys = persistence.load_license_keys()
     reqs = persistence.load_requests()
     posts = persistence.load_blogs()
@@ -558,6 +575,7 @@ def admin_keys():
         elif action == "delete":
             licensing.delete_key(key)
         return redirect(url_for("admin_keys"))
+    licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before displaying
     keys = persistence.load_license_keys()
     rows = [{"key": k, **v} for k, v in keys.items()]
     rows.sort(key=lambda r: r.get("created", ""), reverse=True)
