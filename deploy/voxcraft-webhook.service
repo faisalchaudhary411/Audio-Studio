@@ -9,7 +9,10 @@ Group=deploy
 WorkingDirectory=/home/deploy/voxcraft
 EnvironmentFile=/home/deploy/voxcraft/.env
 Environment=APP_DIR=/home/deploy/voxcraft
-Environment=DEPLOY_BRANCH=main
+Environment=DEPLOY_BRANCH=vps-sqlite
+# ^ Change to "main" once you've merged the vps-sqlite branch into main
+# after Render is decommissioned (see GO_LIVE_GUIDE.md Phase 12) — until
+# then this must match whatever branch app_setup.sh cloned.
 Environment=WEBHOOK_PORT=9001
 ExecStart=/home/deploy/voxcraft/venv/bin/python /home/deploy/voxcraft/deploy/webhook_listener.py
 Restart=always

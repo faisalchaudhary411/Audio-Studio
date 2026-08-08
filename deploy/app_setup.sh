@@ -9,19 +9,30 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/YOUR_GITHUB_USERNAME/Audio-Studio.git"   # EDIT THIS
+BRANCH="vps-sqlite"   # EDIT THIS if you used a different branch name — see note below
 APP_DIR="$HOME/voxcraft"
+
+# IMPORTANT: the SQLite-backed code (persistence.py, licensing.py, etc.)
+# should live on a SEPARATE branch, not main, until you're actually ready
+# to go live. Render auto-deploys from main, and Render's disk isn't
+# persistent — if this code reaches main while Render is still live, it
+# redeploys with a brand-new EMPTY database and every real customer's Pro
+# key breaks on the site that's currently serving traffic. Push the new
+# files to a branch (e.g. "vps-sqlite") in GitHub's web editor instead, and
+# only merge to main after Render is fully decommissioned (see Phase 12 of
+# GO_LIVE_GUIDE.md).
 
 if [[ "$REPO_URL" == *"YOUR_GITHUB_USERNAME"* ]]; then
     echo "ERROR: edit app_setup.sh and set REPO_URL to your actual repo first."
     exit 1
 fi
 
-echo "=== Cloning repo ==="
+echo "=== Cloning repo (branch: $BRANCH) ==="
 if [[ -d "$APP_DIR" ]]; then
     echo "$APP_DIR already exists — pulling latest instead of cloning."
-    cd "$APP_DIR" && git pull
+    cd "$APP_DIR" && git fetch origin && git checkout "$BRANCH" && git pull origin "$BRANCH"
 else
-    git clone "$REPO_URL" "$APP_DIR"
+    git clone -b "$BRANCH" "$REPO_URL" "$APP_DIR"
     cd "$APP_DIR"
 fi
 
@@ -43,12 +54,16 @@ if [[ ! -f "$APP_DIR/.env" ]]; then
 
 SECRET_KEY=
 ADMIN_PASSWORD=
-GITHUB_TOKEN=
 RESEND_API_KEY=
 ADMIN_EMAIL=
 FREEMIUS_API_TOKEN=
 FREEMIUS_PRODUCT_ID=
 PORT=8000
+
+# Only needed TEMPORARILY if running deploy/migrate_to_sqlite.py to bring
+# over existing data from the old GitHub-JSON storage. Not used by the app
+# itself anymore — safe to remove after migration.
+GITHUB_TOKEN=
 
 # Shared secret for the GitHub webhook auto-deploy listener. Generate with:
 #   python3 -c "import secrets; print(secrets.token_hex(32))"
