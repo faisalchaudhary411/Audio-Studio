@@ -3,12 +3,8 @@ usage_tracking.py — ported from _get_user_ip / _hash_ip / _get_browser_fingerp
 / _is_same_device / get_ip_usage / update_ip_usage / ip_check_limit.
 
 This is the piece that was previously a session-cookie stub in app.py's
-is_pro()/_check_and_bump — now it's real IP-based tracking synced to GitHub,
-matching your original Streamlit app's actual behavior (not per-browser).
-
-Note on Render specifically: Render sits behind a proxy, so request.remote_addr
-alone gives the proxy's IP, not the visitor's. X-Forwarded-For is what you want,
-same as the original code's header-checking logic.
+is_pro()/_check_and_bump — now it's real IP-based tracking, persisted via
+persistence.py (SQLite on the VPS) rather than per-browser state.
 """
 
 import os
@@ -17,8 +13,6 @@ import datetime as dt
 import threading
 
 import persistence
-
-GH_REPO = persistence.GH_REPO  # noqa: for clarity when reading this file
 
 
 def get_client_ip(request) -> str:

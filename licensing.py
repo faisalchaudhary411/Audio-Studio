@@ -129,48 +129,85 @@ def renew_subscription(key: str) -> bool:
     return True
 
 
+def _push_history(existing: list, value: str, cap: int = 5) -> list:
+    """Append value to a rolling history list, most-recent-last, deduped,
+    capped at `cap` entries (oldest dropped first). Used for both IP hashes
+    and browser fingerprints so a key remembers the last few devices/browsers
+    it was used from instead of only the single most recent one."""
+    history = list(existing or [])
+    if value and value in history:
+        history.remove(value)
+    if value:
+        history.append(value)
+    return history[-cap:]
+
+
 def _is_same_device(info: dict, request) -> bool:
+    """'Same device' = matches ANY recently-seen IP hash or fingerprint for
+    this key, not just the single latest one. A key is meant to be locked to
+    one physical device but usable from any browser on it — since IP is a
+    network-level signal (not browser-specific), matching against a short
+    rolling history covers the common case of switching browsers on the same
+    wifi, or switching networks on the same browser, without requiring both
+    to line up in the same instant the way a single "last seen" value did."""
     current_ip = get_client_ip(request)
-    if current_ip != "unknown" and info.get("activated_by") == hash_ip(current_ip):
+    ip_history = info.get("activated_ips") or ([info["activated_by"]] if info.get("activated_by") else [])
+    if current_ip != "unknown" and hash_ip(current_ip) in ip_history:
         return True
     current_fp = get_browser_fingerprint(request)
-    stored_fp = info.get("activated_fp", "")
-    return bool(stored_fp) and current_fp == stored_fp
+    fp_history = info.get("activated_fps") or ([info["activated_fp"]] if info.get("activated_fp") else [])
+    return bool(current_fp) and current_fp in fp_history
 
 
 def activate_vox_license(key: str, request) -> dict:
     """Activate/re-activate a key. Same-device re-activation is allowed even
-    if IP changed (mirrors your original fix for mobile network switching)."""
+    if IP changed (mirrors your original fix for mobile network switching).
+
+    Uses persistence.license_key_transaction() instead of the old
+    load-whole-dict/mutate/save-whole-dict pattern — that had a real race
+    condition where two people activating the same not-yet-used key at
+    nearly the same instant could both read "unused" before either write
+    landed, and both succeed. The transaction closes that window: a second
+    concurrent call for the same key blocks until the first fully commits.
+    """
     key = key.strip()
-    keys = _keys()
-    if key not in keys:
-        return {"valid": False, "error": "Invalid license key."}
+    with persistence.license_key_transaction(key) as holder:
+        info = holder["info"]
+        if info is None:
+            return {"valid": False, "error": "Invalid license key."}
 
-    info = keys[key]
-    if not is_subscription_active(info):
-        return {"valid": False, "error": "Your subscription has expired. Please renew your plan."}
-    if info.get("revoked"):
-        return {"valid": False, "error": "This key has been revoked. Contact support."}
+        if not is_subscription_active(info):
+            return {"valid": False, "error": "Your subscription has expired. Please renew your plan."}
+        if info.get("revoked"):
+            return {"valid": False, "error": "This key has been revoked. Contact support."}
 
-    if info.get("used"):
-        if _is_same_device(info, request):
-            current_ip = get_client_ip(request)
-            if current_ip != "unknown":
-                keys[key]["activated_by"] = hash_ip(current_ip)
-            keys[key]["activated_fp"] = get_browser_fingerprint(request)
-            keys[key]["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-            _save(keys)
-            return {"valid": True, "name": info.get("customer_name", "Pro User")}
-        return {"valid": False, "error": "This key has already been used on another device."}
+        if info.get("used"):
+            if _is_same_device(info, request):
+                current_ip = get_client_ip(request)
+                if current_ip != "unknown":
+                    ip_hash = hash_ip(current_ip)
+                    info["activated_ips"] = _push_history(info.get("activated_ips"), ip_hash)
+                    info["activated_by"] = ip_hash  # kept for backward compat / admin display
+                current_fp = get_browser_fingerprint(request)
+                info["activated_fps"] = _push_history(info.get("activated_fps"), current_fp)
+                info["activated_fp"] = current_fp  # kept for backward compat / admin display
+                info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                holder["info"] = info
+                return {"valid": True, "name": info.get("customer_name", "Pro User")}
+            return {"valid": False, "error": "This key has already been used on another device."}
 
-    keys[key]["used"] = True
-    keys[key]["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-    current_ip = get_client_ip(request)
-    if current_ip != "unknown":
-        keys[key]["activated_by"] = hash_ip(current_ip)
-    keys[key]["activated_fp"] = get_browser_fingerprint(request)
-    _save(keys)
-    return {"valid": True, "name": info.get("customer_name", "Pro User")}
+        info["used"] = True
+        info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+        current_ip = get_client_ip(request)
+        if current_ip != "unknown":
+            ip_hash = hash_ip(current_ip)
+            info["activated_by"] = ip_hash
+            info["activated_ips"] = [ip_hash]
+        current_fp = get_browser_fingerprint(request)
+        info["activated_fp"] = current_fp
+        info["activated_fps"] = [current_fp]
+        holder["info"] = info
+        return {"valid": True, "name": info.get("customer_name", "Pro User")}
 
 
 def find_key_by_freemius_id(freemius_license_id: str) -> str:

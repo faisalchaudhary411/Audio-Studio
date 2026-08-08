@@ -10,10 +10,14 @@ Still NOT ported: Music tool, Denoise, Voice Changer, Video-to-Audio extractor.
 Paddle is intentionally NOT ported (Freemius replaced it per your own history).
 
 REQUIRED ENV VARS for this pass to actually work (see README):
-- GITHUB_TOKEN      — repo-scope PAT for faisalchaudhary411/faisalchaudhary411.github.io
+- SECRET_KEY        — Flask session signing key (app refuses to start without it)
 - ADMIN_PASSWORD    — gates /admin (there was NO auth on the original admin page — added here)
 - RESEND_API_KEY, ADMIN_EMAIL — for pro-request notification emails
 - FREEMIUS_API_TOKEN, FREEMIUS_PRODUCT_ID — only if you want Freemius checkout wired live
+
+GITHUB_TOKEN is no longer needed — persistence.py moved from GitHub-JSON to
+a local SQLite database (see persistence.py's docstring and
+deploy/migrate_to_sqlite.py if migrating existing data over).
 """
 
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response
@@ -507,7 +511,7 @@ def admin_dashboard():
     return render_template("admin/dashboard.html",
                             total_keys=len(keys), active_keys=active_keys,
                             pending_reqs=pending_reqs, total_posts=len(posts),
-                            github_configured=bool(os.environ.get("GITHUB_TOKEN")))
+                            db_path=persistence.DB_PATH)
 
 
 @app.route("/admin/limits", methods=["GET", "POST"])

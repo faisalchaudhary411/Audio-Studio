@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Admin — VoxCraft{% endblock %}
+
+{% block content %}
+<div class="admin">
+  <div class="section__head" style="margin:40px 28px 0;">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Dashboard</h2>
+    {% if db_path %}
+    <p style="color:var(--text-dim);margin-top:8px;font-size:0.85rem;">Storage: {{ db_path }}</p>
+    {% endif %}
+  </div>
+
+  <div style="padding:0 28px;">
+    <div class="admin__grid">
+      <div class="panel">
+        <span class="panel__label">License keys</span>
+        <div style="font-family:var(--display);font-size:2rem;">{{ active_keys }} <span style="font-size:1rem;color:var(--text-dim);">active / {{ total_keys }} total</span></div>
+        <a href="{{ url_for('admin_keys') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage keys</a>
+      </div>
+      <div class="panel">
+        <span class="panel__label">Pro requests</span>
+        <div style="font-family:var(--display);font-size:2rem;">{{ pending_reqs }} <span style="font-size:1rem;color:var(--text-dim);">pending</span></div>
+        <a href="{{ url_for('admin_requests') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Review requests</a>
+      </div>
+      <div class="panel">
+        <span class="panel__label">Blog</span>
+        <div style="font-family:var(--display);font-size:2rem;">{{ total_posts }} <span style="font-size:1rem;color:var(--text-dim);">posts</span></div>
+        <a href="{{ url_for('admin_blog') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage blog</a>
+      </div>
+      <div class="panel">
+        <span class="panel__label">Pricing & limits</span>
+        <p style="color:var(--text-mid);font-size:0.88rem;">Free-tier limits, pricing labels, checkout URL.</p>
+        <a href="{{ url_for('admin_limits') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Edit limits</a>
+      </div>
+    </div>
+    <div style="margin-top:20px;"><a href="{{ url_for('admin_logout') }}" class="btn btn--ghost btn--sm">Log out</a></div>
+  </div>
+</div>
+{% endblock %}

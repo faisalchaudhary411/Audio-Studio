@@ -1,102 +1,209 @@
-# VoxCraft — Flask migration
+# VoxCraft — InterServer VPS Deploy Guide
 
-## Status: TTS + 4 audio tools + full management layer ported. 4 audio tools remain.
+Target: InterServer slice 1 (1 vCPU, 2GB RAM, 30GB SSD, Ubuntu 22.04/24.04).
+Written for a mobile-only workflow (Termux + GitHub web editor, no local dev machine).
 
-### This round: licensing, admin, ads, blog, legal pages
-Ported from your Streamlit backend and functionally tested end-to-end in this
-environment (not just route wiring — actual license activation/device-binding,
-IP usage limits, request approval → key email, and blog markdown rendering
-were all verified with real test data before handing off):
+Do these steps **in order**. Each one assumes the previous one finished successfully.
 
-- **Licensing** (`licensing.py`) — your internal key system: generate, activate
-  (with same-device re-activation via IP+fingerprint matching), revoke,
-  unrevoke, delete, renew. Plus Freemius verification. **Paddle was NOT
-  ported** — per your own project history, Freemius replaced Paddle after
-  Paddle rejected the app, so Paddle was already dead code in the original.
-- **Usage tracking** (`usage_tracking.py`) — real IP-based (not session-cookie)
-  free-tier limits, hashed IP + browser fingerprint, synced to GitHub.
-- **Manual pro requests** (`pro_requests.py`) — EasyPaisa/JazzCash/HBL bank
-  transfer flow: customer submits proof at `/upgrade`, you approve in
-  `/admin/requests`, they get an emailed license key automatically.
-- **Admin panel** (`/admin/*`) — dashboard, pricing/limits editor, license key
-  manager, pro-requests queue, blog manager. **Password-gated — the original
-  had NO auth on `/admin` at all, which I added here** (`ADMIN_PASSWORD`).
-- **Ads** — your real Adsterra codes (sticky footer, in-page push, banner,
-  interstitial), ported as-is, gated to free users only.
-- **Blog** — public `/blog` + `/blog/<id>`, Markdown body rendering, full CRUD
-  in the admin panel, persisted to GitHub same as your other config data.
-- **Privacy / Terms / Contact** — new pages (didn't exist in the original).
-  These are starting templates, not legal advice — have them reviewed,
-  especially before handling Pakistani payment data.
+---
 
-### One thing worth fixing (found while testing, ported faithfully rather than
-silently changed): your original `check_vox_license()` has the revoked-key
-check placed after the expiry check, which already returns early for revoked
-keys — so revoked keys report "Subscription expired" instead of "revoked".
-Cosmetic only, but flagging since you may want the message accurate.
+## 0. Before you start
 
-## REQUIRED environment variables (set these in Render before deploying)
-| Variable | Purpose | What breaks without it |
-|---|---|---|
-| `GITHUB_TOKEN` | repo-scope PAT for `faisalchaudhary411/faisalchaudhary411.github.io` | Nothing persists — limits/keys/requests/blog all silently no-op |
-| `ADMIN_PASSWORD` | gates `/admin` | Admin panel redirects to login forever (no password = can't log in) |
-| `SECRET_KEY` | Flask session signing | Sessions won't persist reliably across restarts |
-| `RESEND_API_KEY` + `ADMIN_EMAIL` | pro-request notification emails | Requests still queue in admin, just no email alert |
-| `FREEMIUS_API_TOKEN` + `FREEMIUS_PRODUCT_ID` | Freemius license verification | Only needed if you wire up Freemius checkout; manual bank-transfer flow works without it |
+- [ ] InterServer VPS provisioned, you have the root IP + password from their email
+- [ ] Termux installed (from F-Droid, not Play Store)
+- [ ] A domain name pointed at the VPS IP (an A record) — needed for Certbot/HTTPS and the webhook
+- [ ] Your VoxCraft code pushed to a GitHub repo (the hardened `app.py` / `usage_tracking.py` from the code-hardening pass should already be in it)
 
-## Newly ported earlier: Transcribe, Convert, Merge, Cutter
-Live under `/tools` — pydub + ffmpeg (preinstalled on Render). See git history
-of this README for details.
+---
 
-**Still NOT ported**: Music tool, Denoise, Voice Changer, Video-to-Audio
-extractor.
+## 1. SSH key + first login (Termux, on your phone)
 
-## Voice cloning — deliberately NOT deployed yet
-See earlier note: no free tier has enough RAM for Chatterbox, and the free
-hosted alternative (HF's public Chatterbox Space) is currently paused. Hold
-off until you're ready to pay for ~2GB RAM somewhere.
-
-## Deploying on Render
-1. Push to GitHub, including all the env vars above set in Render's dashboard.
-2. New → Blueprint → point at the repo (reads `render.yaml` automatically).
-3. Free tier is fine for everything in this app — no heavy ML deps.
-
-## Testing locally / on Replit
+```bash
+pkg update && pkg upgrade -y
+pkg install openssh -y
+ssh-keygen -t ed25519 -C "voxcraft-vps"
+cat ~/.ssh/id_ed25519.pub        # copy this whole line, you'll need it in step 2
+ssh root@YOUR_VPS_IP             # first login, password from InterServer's email
 ```
-pip install -r requirements.txt
-python app.py
+
+## 2. Run `setup.sh` (as root, once)
+
+Upload `setup.sh` to the VPS (easiest: `nano setup.sh` on the VPS and paste the
+contents, since you're mobile-only and this is a one-time file).
+
+**Edit two lines at the top of the file first:**
+```bash
+DEPLOY_USER="deploy"
+SSH_PUBLIC_KEY="ssh-ed25519 AAAA...your key from step 1..."
 ```
-Visit `/`, `/studio`, `/pricing`, `/admin`.
 
-## Deploying on Render (not Vercel — see why below)
-1. Push this repo to GitHub.
-2. In Render: New → Blueprint → point at the repo (it'll read `render.yaml` automatically),
-   or New → Web Service manually with:
-   - Build command: `pip install -r requirements.txt`
-   - Start command: `gunicorn app:app --workers 2 --threads 4 --timeout 60 --bind 0.0.0.0:$PORT`
-3. Free tier works fine for this app (landing + TTS via edge-tts, no heavy ML deps).
-   Free services spin down after 15 min idle and take ~30-60s to wake back up on
-   the next request — acceptable for a solo project, upgrade to Starter ($7/mo)
-   if the cold start becomes annoying.
+Then run it:
+```bash
+bash setup.sh
+```
 
-### Why not Vercel for this app
-Vercel is serverless — no persistent process, ephemeral filesystem, and a strict
-function timeout (10s free / 60s Pro by default). Fine for simple stateless APIs,
-bad fit for anything with real generation time or that needs to hold state
-between requests. Render (or Railway) is the better fit for a Flask app like this.
+This creates the `deploy` user, locks down SSH (key-only, no root login),
+enables the firewall + fail2ban, and installs Python 3.12.7, Nginx, Certbot,
+git, ffmpeg, and build deps.
 
-## Voice cloning — deliberately NOT deployed yet
-`clone_engine.py` + the `/api/clone/*` routes exist in the code but need
-`requirements-clone.txt` installed (Chatterbox-Turbo + CPU torch) on an instance
-with real RAM — no free tier anywhere (Render, Railway, Vercel) has enough RAM
-for this. The one free hosted alternative (Hugging Face's public Chatterbox
-Space) is currently paused, which is exactly the reliability risk with
-depending on someone else's free Space for a paid feature.
-**Recommendation: hold off on shipping cloning until you're ready to pay for
-~2GB RAM somewhere (~$25/mo), rather than build it against something fragile.**
-The main app works fully without it — cloning is additive.
+**Before closing this root session**, open a *new* Termux tab and confirm:
+```bash
+ssh deploy@YOUR_VPS_IP
+sudo whoami   # should print "root"
+```
+Only close the root session after that works — root login is disabled after this point.
 
-## Design notes
-The whole visual identity is built around the product's actual mechanism — text → voice → audio —
-rather than generic dashboard styling. The hero waveform is live CSS/JS, not a static image.
-Palette: ink-teal `#101820` bg, brass `#E8A93C` primary accent, jade `#4FA69C` secondary.
+## 3. Clone the app + build the venv (as `deploy` user)
+
+SSH in as `deploy` now (not root) and run `app_setup.sh`:
+
+```bash
+ssh deploy@YOUR_VPS_IP
+nano app_setup.sh     # paste contents, edit REPO_URL to your GitHub repo
+bash app_setup.sh
+```
+
+Then fill in real secrets:
+```bash
+nano ~/voxcraft/.env
+```
+At minimum: `SECRET_KEY`, `ADMIN_PASSWORD`, `GITHUB_TOKEN`, `WEBHOOK_SECRET`.
+Generate strong random values with:
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+## 4. Migrate existing data (if you have real customers already)
+
+If you have existing license keys, blog posts, or usage data in the old
+GitHub-JSON files, migrate them into SQLite **now, before starting the
+service** — otherwise the app starts with an empty database and existing
+Pro customers' keys will show as invalid.
+
+Temporarily add `GITHUB_TOKEN` to `.env` if it isn't already there (it's
+only needed for this one-time read; you can remove it afterward):
+
+```bash
+python3 deploy/migrate_to_sqlite.py
+```
+
+Verify it worked:
+```bash
+python3 -c "import persistence; print(len(persistence.load_license_keys()), 'keys loaded')"
+```
+
+If you're starting fresh with no existing customers, skip this step — the
+database is created automatically on first run with sensible defaults.
+
+## 5. Install the gunicorn service
+
+```bash
+sudo cp deploy/voxcraft.service /etc/systemd/system/voxcraft.service
+sudo systemctl daemon-reload
+sudo systemctl enable voxcraft
+sudo systemctl start voxcraft
+sudo systemctl status voxcraft   # should say "active (running)"
+```
+
+If it fails, check logs: `sudo journalctl -u voxcraft -n 50 --no-pager`
+(most likely cause: a missing/blank value in `.env` — remember `app.py` now
+refuses to start without `SECRET_KEY`).
+
+## 6. Install Nginx + HTTPS
+
+```bash
+sudo cp deploy/nginx-voxcraft.conf /etc/nginx/sites-available/voxcraft
+sudo nano /etc/nginx/sites-available/voxcraft   # edit server_name to your real domain
+sudo ln -s /etc/nginx/sites-available/voxcraft /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t                                    # must say "syntax is ok" before continuing
+sudo systemctl reload nginx
+
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+```
+
+Certbot edits the Nginx config in place to add HTTPS + auto-redirect from
+port 80. At this point `https://yourdomain.com` should load VoxCraft.
+
+## 7. Auto-deploy webhook (push-to-deploy from GitHub web editor)
+
+Install the sudoers rule first — **always validate with `visudo -c` before
+trusting a sudoers file**, a broken one can lock out sudo entirely:
+
+```bash
+sudo cp deploy/voxcraft-deploy-sudoers /etc/sudoers.d/voxcraft-deploy
+sudo chmod 440 /etc/sudoers.d/voxcraft-deploy
+sudo visudo -c
+```
+
+Install the webhook listener's service:
+```bash
+sudo cp deploy/voxcraft-webhook.service /etc/systemd/system/voxcraft-webhook.service
+sudo systemctl daemon-reload
+sudo systemctl enable voxcraft-webhook
+sudo systemctl start voxcraft-webhook
+sudo systemctl status voxcraft-webhook
+```
+
+Add a location block to route the webhook path through Nginx — append this
+inside the existing `server { ... }` block in
+`/etc/nginx/sites-available/voxcraft` (the one Certbot already added HTTPS to):
+
+```nginx
+    location /webhook/ {
+        proxy_pass http://127.0.0.1:9001;
+        proxy_set_header Host $host;
+    }
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**On GitHub:** repo → Settings → Webhooks → Add webhook
+- Payload URL: `https://yourdomain.com/webhook/voxcraft-deploy`
+- Content type: `application/json`
+- Secret: the same `WEBHOOK_SECRET` value you put in `.env`
+- Events: just "push"
+
+From now on, editing a file in GitHub's web editor and committing to `main`
+automatically pulls, reinstalls deps if `requirements.txt` changed, and
+restarts the app — matching Render's old push-to-deploy convenience.
+
+## 8. Sanity checks after everything is up
+
+```bash
+curl -I https://yourdomain.com                    # should be 200
+sudo systemctl status voxcraft voxcraft-webhook nginx fail2ban
+sudo ufw status                                     # should show 22, 80, 443 open
+free -h                                             # sanity-check memory headroom
+```
+
+Push a trivial change via the GitHub web editor and confirm it shows up live
+within a few seconds — that's the webhook working end to end.
+
+---
+
+## Notes / things worth knowing later
+
+- **Data storage**: license keys, blog posts, usage tracking, and limits config
+  live in a local SQLite database (`~/voxcraft/data/voxcraft.db`), not GitHub
+  JSON — see `migrate_to_sqlite.py` if you're moving existing data over.
+  **Back this file up periodically** since it's no longer implicitly synced
+  to GitHub on every write. A simple weekly cron is enough for this scale:
+  ```
+  0 3 * * 0 cp /home/deploy/voxcraft/data/voxcraft.db /home/deploy/backups/voxcraft-$(date +\%Y\%m\%d).db
+  ```
+- **Memory budget**: gunicorn is configured for 2 workers with `--preload`
+  (~358MB/worker post warm-up, shared library pages via copy-on-write). That's
+  workable but not generous on a 2GB box — keep an eye on `free -h` under real
+  load, and drop to 1 worker in `voxcraft.service` if you see swapping.
+- **IP-based usage limits and Freemius/licensing logic depend on Nginx setting
+  `X-Real-IP` correctly** (see `nginx-voxcraft.conf`). If you ever swap
+  reverse proxies, that header must be preserved or usage tracking breaks.
+- **The webhook listener can only run one exact command as root** — restarting
+  the voxcraft service — nothing else. That scope is enforced by the sudoers
+  file, not just by the Python code.
+- `.env` is gitignored — it never leaves the VPS. If you rotate any secret,
+  edit it directly on the server and `sudo systemctl restart voxcraft` (and
+  `voxcraft-webhook` if `WEBHOOK_SECRET` changed).
