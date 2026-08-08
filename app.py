@@ -601,6 +601,19 @@ def admin_blog():
             }
             posts.insert(0, new_post)
             persistence.save_blogs(posts)
+        elif action == "update":
+            post_id = request.form.get("post_id")
+            for p in posts:
+                if str(p["id"]) == post_id:
+                    p["title"] = request.form.get("title", "").strip()
+                    p["category"] = request.form.get("category", "").strip()
+                    p["excerpt"] = request.form.get("excerpt", "").strip()
+                    p["body"] = request.form.get("body", "").strip()
+                    p["published"] = request.form.get("published") == "on"
+                    # date intentionally left as the original publish date —
+                    # editing content shouldn't bump a post back to the top
+                    # of a date-sorted list as if it were brand new.
+            persistence.save_blogs(posts)
         elif action == "toggle_publish":
             post_id = request.form.get("post_id")
             for p in posts:
@@ -612,7 +625,12 @@ def admin_blog():
             posts = [p for p in posts if str(p["id"]) != post_id]
             persistence.save_blogs(posts)
         return redirect(url_for("admin_blog"))
-    return render_template("admin/blog.html", posts=posts)
+
+    edit_id = request.args.get("edit")
+    edit_post = None
+    if edit_id:
+        edit_post = next((p for p in posts if str(p["id"]) == edit_id), None)
+    return render_template("admin/blog.html", posts=posts, edit_post=edit_post)
 
 
 @app.route("/ads.txt")
