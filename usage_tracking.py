@@ -1,13 +1,33 @@
 """
-usage_tracking.py — ported from _get_user_ip / _hash_ip / _get_browser_fingerprint
-/ _is_same_device / get_ip_usage / update_ip_usage / ip_check_limit.
+usage_tracking.py — the REAL enforcement backend for free-tier limits.
 
-This is the piece that was previously a session-cookie stub in app.py's
-is_pro()/_check_and_bump — now it's real IP-based tracking, persisted via
-persistence.py (SQLite on the VPS) rather than per-browser state.
+HISTORY: this module originally tracked IP-based usage but was never
+actually wired into limit enforcement — app.py enforced everything purely
+through the Flask session cookie, meaning any free user could reset every
+limit by opening a private/incognito window, clearing cookies, or just
+using a different browser, no network change even required. This version
+replaces that: it's now the actual source of truth app.py's helper
+functions (_under_limit, _bump_counter, etc.) delegate to.
+
+APPROACH: each counter is tracked under TWO independent keys — one derived
+from the connecting IP, one from a browser fingerprint (User-Agent +
+Accept-Language + Sec-CH-UA). On every check, we resolve the EFFECTIVE
+value as the MAX seen across both keys, then on every write we sync the
+new value back to both. Concretely:
+  - Switch browser, same network -> IP-keyed record still shows full
+    history -> still enforced.
+  - Switch network, same browser -> fingerprint-keyed record still shows
+    full history -> still enforced.
+  - Only switching BOTH simultaneously resets to zero — a meaningfully
+    higher bar than either alone, without requiring an account/login system
+    (which would be the only way to close this completely).
+
+Every counter — daily action counts per tool, monthly character quota, and
+anything else previously kept in the session — now lives in one merged
+record per signal, containing both the day's counters and the month's char
+total, so a single write always carries the complete current state.
 """
 
-import os
 import hashlib
 import datetime as dt
 import threading
@@ -16,16 +36,10 @@ import persistence
 
 
 def get_client_ip(request) -> str:
-    """HARDENING (VPS deploy): the old version trusted the *first* entry in
-    X-Forwarded-For. That's exactly the part a client fully controls — anyone
-    could send their own fake X-Forwarded-For header and get a fresh "IP" on
-    every request, bypassing IP-based usage limits and license binding
-    entirely. With ProxyFix + a correctly configured Nginx (see deploy
-    notes), request.remote_addr is now Nginx's trusted resolution of the
-    real client IP — the one signal a client cannot spoof — so that's the
-    primary source. X-Real-IP (set once by Nginx, never client-supplied) is
-    kept as a fallback for setups where ProxyFix isn't in the request path.
-    """
+    """Prefers X-Real-IP (set once by Nginx, never client-supplied) — the
+    one signal a client cannot spoof. Falls back to remote_addr, which
+    ProxyFix correctly resolves from a trusted X-Forwarded-For hop when
+    X-Real-IP isn't present."""
     real_ip = request.headers.get("X-Real-IP", "")
     if real_ip:
         return real_ip.strip()
@@ -37,9 +51,8 @@ def hash_ip(ip: str) -> str:
 
 
 def get_browser_fingerprint(request) -> str:
-    """Stable fingerprint from headers, falling back to IP hash.
-    Lets a key re-activate on the same device even if the network/IP changes
-    (e.g. mobile data <-> wifi), same rationale as your original."""
+    """Stable fingerprint from headers, falling back to IP hash if no
+    identifying headers are present at all."""
     components = []
     ua = request.headers.get("User-Agent", "")
     if ua:
@@ -55,10 +68,18 @@ def get_browser_fingerprint(request) -> str:
     return hash_ip(get_client_ip(request))
 
 
-# In-process cache so we don't hit GitHub on every single request; a background
-# thread flushes to GitHub. Fine for a single Render instance; if you ever run
-# multiple instances this cache won't be shared between them (same caveat as
-# clone_engine's job store).
+def _today() -> str:
+    return dt.datetime.now().strftime("%Y-%m-%d")
+
+
+def _this_month() -> str:
+    return dt.datetime.now().strftime("%Y-%m")
+
+
+# In-process cache so we don't hit the DB on every single request; writes
+# flush to SQLite in a background thread. Fine for a single-VPS deployment;
+# if this ever runs as multiple separate instances, this cache won't be
+# shared between them.
 _usage_cache = None
 _usage_cache_lock = threading.Lock()
 
@@ -72,29 +93,47 @@ def _load_cache() -> dict:
     return _usage_cache
 
 
-def get_ip_usage(request) -> dict:
-    month = dt.datetime.now().strftime("%Y-%m")
-    ip_hash = hash_ip(get_client_ip(request))
+def _keys_for(request) -> tuple:
+    ip_key = "ip:" + hash_ip(get_client_ip(request))
+    fp_key = "fp:" + get_browser_fingerprint(request)
+    return ip_key, fp_key
+
+
+def _fresh_record() -> dict:
+    return {"day": _today(), "daily": {}, "month": _this_month(), "chars_monthly": 0}
+
+
+def _effective_record(request) -> dict:
+    """Resolves the MAX across the IP-keyed and fingerprint-keyed records,
+    for the CURRENT day/month only — a record from a previous day/month
+    doesn't count toward today's totals, same as the old reset-if-needed
+    behavior, just computed on read instead of via a separate reset step."""
+    today = _today()
+    month = _this_month()
+    ip_key, fp_key = _keys_for(request)
     data = _load_cache()
-    record = data.get(ip_hash, {})
-    if record.get("month") != month:
-        return {"month": month, "chars_used": 0, "generations": 0}
-    return record
+    result = _fresh_record()
+    for key in (ip_key, fp_key):
+        rec = data.get(key, {})
+        if rec.get("day") == today:
+            for k, v in rec.get("daily", {}).items():
+                if v > result["daily"].get(k, 0):
+                    result["daily"][k] = v
+        if rec.get("month") == month:
+            if rec.get("chars_monthly", 0) > result["chars_monthly"]:
+                result["chars_monthly"] = rec.get("chars_monthly", 0)
+    return result
 
 
-def update_ip_usage(request, chars_added: int = 0, generations_added: int = 0):
-    month = dt.datetime.now().strftime("%Y-%m")
-    ip_hash = hash_ip(get_client_ip(request))
+def _write_record(request, rec: dict):
+    ip_key, fp_key = _keys_for(request)
     data = _load_cache()
-    record = data.get(ip_hash, {"month": month, "chars_used": 0, "generations": 0})
-    if record.get("month") != month:
-        record = {"month": month, "chars_used": 0, "generations": 0}
-    record["chars_used"] = record.get("chars_used", 0) + chars_added
-    record["generations"] = record.get("generations", 0) + generations_added
-    record["month"] = month
-    data[ip_hash] = record
+    data[ip_key] = rec
+    data[fp_key] = rec
 
-    # prune entries older than last month to keep the file small
+    # Prune anything older than last month to keep the table small — a
+    # record only needs to survive long enough for its own day/month
+    # comparison to still matter.
     last_month = (dt.datetime.now().replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
     data = {k: v for k, v in data.items() if v.get("month", "") >= last_month}
 
@@ -107,12 +146,23 @@ def update_ip_usage(request, chars_added: int = 0, generations_added: int = 0):
     threading.Thread(target=_bg_save, args=(data,), daemon=True).start()
 
 
-def ip_chars_used(request) -> int:
-    return get_ip_usage(request).get("chars_used", 0)
+# ---- public API used by app.py's _under_limit / _bump_counter / etc. ----
+
+def get_daily_counter(request, counter_key: str) -> int:
+    return _effective_record(request)["daily"].get(counter_key, 0)
 
 
-def ip_check_limit(request, text_len: int, char_limit: int, is_pro: bool) -> bool:
-    """Returns True if adding text_len chars would EXCEED the free monthly limit."""
-    if is_pro:
-        return False
-    return ip_chars_used(request) + text_len > char_limit
+def bump_daily_counter(request, counter_key: str):
+    rec = _effective_record(request)
+    rec["daily"][counter_key] = rec["daily"].get(counter_key, 0) + 1
+    _write_record(request, rec)
+
+
+def get_monthly_chars(request) -> int:
+    return _effective_record(request)["chars_monthly"]
+
+
+def bump_monthly_chars(request, chars_added: int):
+    rec = _effective_record(request)
+    rec["chars_monthly"] = rec.get("chars_monthly", 0) + chars_added
+    _write_record(request, rec)

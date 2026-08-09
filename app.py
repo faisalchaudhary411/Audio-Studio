@@ -181,73 +181,37 @@ def _this_month() -> str:
     return dt.datetime.now().strftime("%Y-%m")
 
 
-def _reset_daily_if_needed():
-    if session.get("usage_date") != _today():
-        session["usage_date"] = _today()
-        session["usage_singles"] = 0
-        session["usage_batches"] = 0
-        session["usage_previews"] = 0
-        session["usage_transcribe"] = 0
-        session["usage_convert"] = 0
-        session["usage_merge"] = 0
-        session["usage_cutter"] = 0
-        session["usage_denoise"] = 0
-        session["usage_voicechange"] = 0
-        session["usage_videoxtract"] = 0
-
-
-def _reset_monthly_if_needed():
-    """Separate from the daily reset above — BUG FIX: the character quota is
-    meant to be a monthly budget (matches what it's actually labeled as
-    everywhere: 'chars/generation' is the per-request cap, but the usage bar
-    showing a running total was being reset DAILY alongside the daily action
-    counters, comparing a daily-reset number against what's really meant to
-    be a much longer-period allowance. Chars now track and reset on their own
-    monthly cycle, independent of the daily counters."""
-    if session.get("usage_month") != _this_month():
-        session["usage_month"] = _this_month()
-        session["usage_chars_monthly"] = 0
-
-
 def _under_limit(counter_key: str, limit: int) -> bool:
     """Read-only check — does NOT increment. Use this before doing the actual
-    work, then call _bump_counter only if it succeeds."""
-    _reset_daily_if_needed()
+    work, then call _bump_counter only if it succeeds.
+    Backed by usage_tracking.py's combined IP+fingerprint store — see that
+    module's docstring for why this replaced pure session-cookie tracking
+    (which any free user could reset via private browsing or a different
+    browser, no code exploit needed, just normal browser features)."""
     if is_pro():
         return True
-    return session.get(counter_key, 0) < limit
+    return usage_tracking.get_daily_counter(request, counter_key) < limit
 
 
 def _bump_counter(counter_key: str):
     """Only call this AFTER the operation actually succeeds."""
     if is_pro():
         return
-    _reset_daily_if_needed()
-    session[counter_key] = session.get(counter_key, 0) + 1
+    usage_tracking.bump_daily_counter(request, counter_key)
 
 
 def _check_and_bump(counter_key: str, limit: int) -> bool:
-    """Returns True if under limit (and increments), False if limit hit.
-    BUG FIX: every /api/tools/* endpoint used to call this BEFORE attempting
-    the actual operation, so a failed generation (bad file, oversized upload,
-    corrupted upload, etc.) still consumed a daily quota slot. Kept here for
-    the couple of call sites where check+bump-immediately is still correct
-    (e.g. previews, where there's no separate 'did it succeed' step worth
-    splitting out) — but the tool endpoints below now use _under_limit +
-    _bump_counter instead, bumping only after success."""
-    _reset_daily_if_needed()
+    """Returns True if under limit (and increments), False if limit hit."""
     if is_pro():
         return True
-    current = session.get(counter_key, 0)
-    if current >= limit:
+    if not _under_limit(counter_key, limit):
         return False
-    session[counter_key] = current + 1
+    _bump_counter(counter_key)
     return True
 
 
 def _monthly_chars_used() -> int:
-    _reset_monthly_if_needed()
-    return session.get("usage_chars_monthly", 0)
+    return usage_tracking.get_monthly_chars(request)
 
 
 def _would_exceed_monthly_quota(char_count: int, monthly_quota: int) -> bool:
@@ -262,8 +226,7 @@ def _bump_monthly_chars(char_count: int):
     """Only call this AFTER a generation actually succeeds."""
     if is_pro():
         return
-    _reset_monthly_if_needed()
-    session["usage_chars_monthly"] = session.get("usage_chars_monthly", 0) + char_count
+    usage_tracking.bump_monthly_chars(request, char_count)
 
 
 @app.route("/")
@@ -272,28 +235,26 @@ def landing():
 
 
 def usage_summary() -> dict:
-    """Surfaces the SAME counters that _check_and_bump / _check_monthly_chars
-    actually enforce — this is deliberately the session-cookie numbers, not
-    usage_tracking.py's IP-based numbers, so what's displayed always matches
-    what's enforced. Limits themselves come from get_limits() (GitHub-backed,
-    editable in /admin/limits).
-    (Note: usage_tracking.py's IP-based module exists for licensing checks
-    but isn't wired into daily-limit enforcement here — see README.)"""
-    _reset_daily_if_needed()
-    _reset_monthly_if_needed()
+    """Surfaces the SAME counters that _under_limit / _monthly_chars_used
+    actually enforce — now backed by usage_tracking.py's combined
+    IP+fingerprint store, so what's displayed always matches what's
+    enforced (this used to read session values while enforcement quietly
+    ran on something else entirely — see usage_tracking.py's docstring for
+    the full history). Limits themselves come from get_limits() (editable
+    in /admin/limits)."""
     lim = get_limits()
     return {
-        "singles": {"used": session.get("usage_singles", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "chars_monthly": {"used": session.get("usage_chars_monthly", 0), "limit": lim["FREE_MONTHLY_CHAR_QUOTA"]},
-        "batches": {"used": session.get("usage_batches", 0), "limit": lim["FREE_BATCH_LIMIT"]},
-        "previews": {"used": session.get("usage_previews", 0), "limit": lim["FREE_PREVIEW_LIMIT"]},
-        "transcribe": {"used": session.get("usage_transcribe", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "convert": {"used": session.get("usage_convert", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "merge": {"used": session.get("usage_merge", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "cutter": {"used": session.get("usage_cutter", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "denoise": {"used": session.get("usage_denoise", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "voicechange": {"used": session.get("usage_voicechange", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "videoxtract": {"used": session.get("usage_videoxtract", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "singles": {"used": usage_tracking.get_daily_counter(request, "usage_singles"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "chars_monthly": {"used": _monthly_chars_used(), "limit": lim["FREE_MONTHLY_CHAR_QUOTA"]},
+        "batches": {"used": usage_tracking.get_daily_counter(request, "usage_batches"), "limit": lim["FREE_BATCH_LIMIT"]},
+        "previews": {"used": usage_tracking.get_daily_counter(request, "usage_previews"), "limit": lim["FREE_PREVIEW_LIMIT"]},
+        "transcribe": {"used": usage_tracking.get_daily_counter(request, "usage_transcribe"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "convert": {"used": usage_tracking.get_daily_counter(request, "usage_convert"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "merge": {"used": usage_tracking.get_daily_counter(request, "usage_merge"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "cutter": {"used": usage_tracking.get_daily_counter(request, "usage_cutter"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "denoise": {"used": usage_tracking.get_daily_counter(request, "usage_denoise"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "voicechange": {"used": usage_tracking.get_daily_counter(request, "usage_voicechange"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "videoxtract": {"used": usage_tracking.get_daily_counter(request, "usage_videoxtract"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
