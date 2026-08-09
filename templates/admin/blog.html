@@ -10,7 +10,7 @@
 
   <div class="panel" style="margin-bottom:20px;">
     <span class="panel__label">{{ 'Edit post' if edit_post else 'Write new post' }}</span>
-    <form method="post">
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       {% if edit_post %}
         <input type="hidden" name="action" value="update">
         <input type="hidden" name="post_id" value="{{ edit_post.id }}">
@@ -36,8 +36,8 @@
       </div>
       <div style="display:flex;gap:8px;">
         <a href="{{ url_for('admin_blog', edit=p.id) }}" class="btn btn--ghost btn--sm">Edit</a>
-        <form method="post"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="toggle_publish" class="btn btn--ghost btn--sm">{{ 'Unpublish' if p.published else 'Publish' }}</button></form>
-        <form method="post"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this post?')">Delete</button></form>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="toggle_publish" class="btn btn--ghost btn--sm">{{ 'Unpublish' if p.published else 'Publish' }}</button></form>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this post?')">Delete</button></form>
       </div>
     </div>
     {% else %}

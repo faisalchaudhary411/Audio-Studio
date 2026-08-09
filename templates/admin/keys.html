@@ -8,7 +8,7 @@
     <h2 class="section__title">License keys</h2>
   </div>
 
-  <form method="post" style="margin-bottom:18px;">
+  <form method="post" style="margin-bottom:18px;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="create">
     <button type="submit" class="btn btn--brass btn--sm">+ Create new key</button>
   </form>
@@ -33,7 +33,7 @@
             {% else %}—{% endif %}
           </td>
           <td style="white-space:nowrap;">
-            <form method="post" style="display:inline;">
+            <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="key" value="{{ row.key }}">
               {% if row.revoked %}
               <button type="submit" name="action" value="unrevoke" class="btn btn--jade btn--sm">Unrevoke</button>

@@ -6,7 +6,7 @@
   <div class="panel">
     <span class="panel__label">Admin login</span>
     {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
-    <form method="post">
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="password" name="password" placeholder="Admin password" class="script-input" style="min-height:auto;padding:12px;" required autofocus>
       <button type="submit" class="btn btn--brass btn--block" style="margin-top:14px;">Log in</button>
     </form>
