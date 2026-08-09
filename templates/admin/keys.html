@@ -16,7 +16,7 @@
   <div class="panel" style="overflow-x:auto;">
     <table class="admin-table">
       <thead>
-        <tr><th>Key</th><th>Customer</th><th>Status</th><th>Expires</th><th>Used</th><th></th></tr>
+        <tr><th>Key</th><th>Customer</th><th>Status</th><th>Expires</th><th>Used</th><th>Restores</th><th></th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
@@ -26,6 +26,12 @@
           <td>{% if row.revoked %}<span style="color:#e88;">Revoked</span>{% else %}<span style="color:var(--jade-hi);">Active</span>{% endif %}</td>
           <td style="font-family:var(--mono);font-size:0.78rem;">{{ row.expires_at or '—' }}</td>
           <td>{{ 'Yes' if row.used else 'No' }}</td>
+          <td style="font-size:0.78rem;color:var(--text-dim);">
+            {% if row.restore_log %}
+              {{ row.restore_log|length }} auto-restore{{ 's' if row.restore_log|length != 1 else '' }}<br>
+              last: {{ row.restore_log[-1].at }}
+            {% else %}—{% endif %}
+          </td>
           <td style="white-space:nowrap;">
             <form method="post" style="display:inline;">
               <input type="hidden" name="key" value="{{ row.key }}">
