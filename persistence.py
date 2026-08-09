@@ -104,6 +104,10 @@ def init_db():
                     ip_hash TEXT PRIMARY KEY,
                     data    TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS login_attempts (
+                    ip_hash TEXT PRIMARY KEY,
+                    data    TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -308,3 +312,44 @@ def save_usage(data: dict) -> tuple:
                 conn.close()
     except Exception as e:
         return False, str(e)
+
+
+# ---- admin login attempt tracking (brute-force lockout) ----
+# Deliberately a separate small table rather than reusing the `usage` table
+# — different access pattern (single-row get/set per IP, not a whole-table
+# load/save), and mixing concerns there would make both harder to reason
+# about. Stored in the DB rather than an in-memory dict specifically
+# because gunicorn runs multiple worker processes (see voxcraft.service) —
+# an in-memory counter would only apply per-worker, silently doubling (or
+# more) the effective attempt budget an attacker gets.
+def get_login_attempts(ip_hash: str) -> dict:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT data FROM login_attempts WHERE ip_hash = ?", (ip_hash,)).fetchone()
+        return json.loads(row[0]) if row else {}
+    finally:
+        conn.close()
+
+
+def set_login_attempts(ip_hash: str, record: dict):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO login_attempts(ip_hash, data) VALUES (?, ?) "
+                "ON CONFLICT(ip_hash) DO UPDATE SET data = excluded.data",
+                (ip_hash, json.dumps(record, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def clear_login_attempts(ip_hash: str):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("DELETE FROM login_attempts WHERE ip_hash = ?", (ip_hash,))
+            conn.commit()
+        finally:
+            conn.close()

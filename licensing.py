@@ -55,6 +55,60 @@ def is_subscription_active(key_info: dict) -> bool:
     return True
 
 
+def find_key_for_device(request) -> str:
+    """Silent Pro-status auto-restore: if this device's IP AND browser
+    fingerprint BOTH match the activation history of any active,
+    non-revoked key, return it so the session can be silently repopulated —
+    without the customer re-typing their key after clearing cookies, using
+    incognito, or switching browsers.
+
+    Uses _is_same_device_strict (BOTH signals, not just one) — unlike
+    reactivation, where the customer already typed the correct key, nothing
+    here proves they know it, so requiring both signals to coincide guards
+    against a stranger sharing a Pro customer's IP (office wifi, mobile
+    carrier CGNAT) getting silently restored too. Every successful restore
+    is logged on the key (restore_log, capped rolling history) so unusual
+    patterns are visible in /admin/keys — e.g. a key restoring across many
+    distinct devices in a short window would be worth a manual look.
+
+    Scans all keys — fine at solo-project scale; would need a proper
+    device->key index if the key count ever grows very large.
+    """
+    keys = _keys()
+    for key, info in keys.items():
+        if info.get("revoked"):
+            continue
+        if not is_subscription_active(info):
+            continue
+        if _is_same_device_strict(info, request):
+            _log_auto_restore(key, request)
+            return key
+    return ""
+
+
+def _log_auto_restore(key: str, request):
+    """Appends a lightweight, capped log entry so /admin/keys can show when
+    and how often a key has been silently auto-restored — visibility, not
+    prevention. Best-effort: failures here never block the restore itself."""
+    try:
+        keys = _keys()
+        info = keys.get(key)
+        if not info:
+            return
+        entry = {
+            "at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "ip_hash": hash_ip(get_client_ip(request)),
+            "fp": get_browser_fingerprint(request),
+        }
+        log = info.get("restore_log", [])
+        log.append(entry)
+        info["restore_log"] = log[-10:]  # keep it small — last 10 restores is plenty for a glance
+        keys[key] = info
+        _save(keys)
+    except Exception:
+        pass
+
+
 def sweep_expired_keys() -> int:
     """Explicitly marks any key past its expires_at as revoked=True.
 
@@ -187,7 +241,11 @@ def _is_same_device(info: dict, request) -> bool:
     network-level signal (not browser-specific), matching against a short
     rolling history covers the common case of switching browsers on the same
     wifi, or switching networks on the same browser, without requiring both
-    to line up in the same instant the way a single "last seen" value did."""
+    to line up in the same instant the way a single "last seen" value did.
+
+    Used for REACTIVATION, where the customer already typed the correct key
+    — OR-matching is appropriate there since they've already proven they
+    know the key; this is just deciding whether to allow it from here."""
     current_ip = get_client_ip(request)
     ip_history = info.get("activated_ips") or ([info["activated_by"]] if info.get("activated_by") else [])
     if current_ip != "unknown" and hash_ip(current_ip) in ip_history:
@@ -195,6 +253,26 @@ def _is_same_device(info: dict, request) -> bool:
     current_fp = get_browser_fingerprint(request)
     fp_history = info.get("activated_fps") or ([info["activated_fp"]] if info.get("activated_fp") else [])
     return bool(current_fp) and current_fp in fp_history
+
+
+def _is_same_device_strict(info: dict, request) -> bool:
+    """Stricter variant requiring BOTH IP and fingerprint to match recently-
+    seen history, not just one. Used for SILENT auto-restore (see
+    find_key_for_device), where nobody has typed the key — OR-matching
+    there would let a stranger sharing a Pro customer's IP (common on
+    office wifi or mobile carrier CGNAT) get silently restored into their
+    Pro access with no proof they know the key at all. Requiring both
+    signals to coincide makes that require an actual fingerprint collision
+    too, not just a shared IP."""
+    current_ip = get_client_ip(request)
+    ip_history = info.get("activated_ips") or ([info["activated_by"]] if info.get("activated_by") else [])
+    ip_matches = current_ip != "unknown" and hash_ip(current_ip) in ip_history
+
+    current_fp = get_browser_fingerprint(request)
+    fp_history = info.get("activated_fps") or ([info["activated_fp"]] if info.get("activated_fp") else [])
+    fp_matches = bool(current_fp) and current_fp in fp_history
+
+    return ip_matches and fp_matches
 
 
 def activate_vox_license(key: str, request) -> dict:

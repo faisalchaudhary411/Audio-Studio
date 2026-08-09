@@ -102,6 +102,26 @@ app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
 def _make_session_permanent():
     session.permanent = True
 
+
+@app.before_request
+def _auto_restore_pro_session():
+    """If this browser has no license_key in session (cookies cleared,
+    incognito, or a different browser than where they activated), silently
+    check whether this device's IP or fingerprint matches an already-active
+    key's history and restore it — see licensing.find_key_for_device() for
+    the deliberate convenience-vs-shared-network trade-off this makes.
+    Skipped for static assets and webhook/health endpoints, which never
+    need Pro status and would otherwise trigger a needless DB scan on
+    every single request (image, CSS, JS file, etc.)."""
+    if session.get("license_key"):
+        return
+    skip_prefixes = ("/static/", "/webhook/", "/ads.txt")
+    if request.path.startswith(skip_prefixes):
+        return
+    restored_key = licensing.find_key_for_device(request)
+    if restored_key:
+        session["license_key"] = restored_key
+
 # librosa's pitch_shift uses numba, which JIT-compiles on first call —
 # ~20s the very first time, milliseconds after. Warming it up here (module
 # level, so this runs under gunicorn too, not just `python app.py` directly)
@@ -455,19 +475,65 @@ def contact():
 # ---------------------------------------------------------------------------
 # Admin
 # ---------------------------------------------------------------------------
+ADMIN_LOGIN_MAX_ATTEMPTS = 5
+ADMIN_LOGIN_WINDOW_MINUTES = 15
+ADMIN_LOGIN_LOCKOUT_MINUTES = 15
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "GET":
         return render_template("admin/login.html")
+
+    ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
+    now = dt.datetime.now()
+    record = persistence.get_login_attempts(ip_hash)
+
+    # Currently locked out? Reject before even checking the password —
+    # otherwise a correct guess during lockout would still let an attacker
+    # in, defeating the point of the lockout.
+    locked_until_str = record.get("locked_until")
+    if locked_until_str:
+        locked_until = dt.datetime.strptime(locked_until_str, "%Y-%m-%d %H:%M:%S")
+        if now < locked_until:
+            remaining_min = max(1, int((locked_until - now).total_seconds() // 60) + 1)
+            return render_template("admin/login.html",
+                                    error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
+
     password = request.form.get("password", "")
     # HARDENING: constant-time comparison instead of == — plain string
     # comparison short-circuits on the first mismatched character, which
     # theoretically leaks timing info about the correct password. hmac.compare_digest
     # runs in constant time regardless of where the strings first differ.
     if ADMIN_PASSWORD and hmac.compare_digest(password, ADMIN_PASSWORD):
+        persistence.clear_login_attempts(ip_hash)  # legitimate login wipes any prior failed attempts
         session["admin_authed"] = True
         next_url = request.args.get("next") or url_for("admin_dashboard")
         return redirect(next_url)
+
+    # Wrong password — record the attempt. Stored in the DB (not an
+    # in-memory dict) because gunicorn runs multiple worker processes; an
+    # in-memory counter would only apply per-worker, silently doubling the
+    # effective attempt budget an attacker gets depending on which worker
+    # handles each request.
+    first_attempt_str = record.get("first_attempt")
+    if first_attempt_str:
+        first_attempt = dt.datetime.strptime(first_attempt_str, "%Y-%m-%d %H:%M:%S")
+        if (now - first_attempt).total_seconds() > ADMIN_LOGIN_WINDOW_MINUTES * 60:
+            record = {}  # window expired — start counting fresh
+
+    count = record.get("count", 0) + 1
+    new_record = {
+        "count": count,
+        "first_attempt": record.get("first_attempt", now.strftime("%Y-%m-%d %H:%M:%S")),
+    }
+    if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
+        new_record["locked_until"] = (now + dt.timedelta(minutes=ADMIN_LOGIN_LOCKOUT_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+    persistence.set_login_attempts(ip_hash, new_record)
+
+    if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
+        return render_template("admin/login.html",
+                                error=f"Too many failed attempts. Try again in {ADMIN_LOGIN_LOCKOUT_MINUTES} minutes.")
     return render_template("admin/login.html", error="Incorrect password.")
 
 
