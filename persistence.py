@@ -1,32 +1,52 @@
 """
-persistence.py — generic GitHub-backed JSON read/write, ported from your
-_gh_read / _gh_write / load_*_from_github / save_*_to_github functions.
+persistence.py — SQLite-backed storage, replacing the GitHub-JSON approach.
 
-Needs a GITHUB_TOKEN env var on Render with repo write access to
-faisalchaudhary411/faisalchaudhary411.github.io (same repo your Streamlit
-app used for blogs.json / limits.json / license_keys.json / etc.).
+Why this replaced the GitHub API version: that design existed because
+Render's filesystem isn't persistent (wiped on every redeploy), so local
+disk wasn't an option there. On the InterServer VPS, disk IS persistent, so
+a local SQLite file is simpler, faster (no network round-trip per read/
+write), has no GitHub API rate limits, and — the main motivation — supports
+real atomic transactions. The old load-whole-dict/mutate/save-whole-dict
+pattern had a genuine race condition: two people activating the same
+not-yet-used license key at nearly the same instant could both read
+"unused" before either write landed, and both succeed. `license_key_
+transaction()` below closes that window with a real SQLite transaction.
+
+PUBLIC API IS UNCHANGED from the GitHub-JSON version — every load_*/save_*
+function has the same name and signature as before, so app.py,
+pro_requests.py, and usage_tracking.py needed zero changes. Only
+licensing.py's activate_vox_license was updated, to use the new atomic
+license_key_transaction() instead of load-then-save.
+
+IMPORTANT — migrating existing data: if you have real customer data in the
+old GitHub-JSON files (license keys people already paid for!), run
+deploy/migrate_to_sqlite.py ONCE before switching the app over to this file,
+or those customers' Pro status will appear to vanish. See that script's
+docstring and the deploy README.
 """
 
 import os
 import json
-import base64
-import requests
+import sqlite3
+import contextlib
+import threading
 
-GH_REPO = "faisalchaudhary411/faisalchaudhary411.github.io"
-GH_BRANCH = "main"
+DB_PATH = os.environ.get(
+    "DB_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "voxcraft.db"),
+)
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-GH_FILES = {
-    "blogs": "blogs.json",
-    "limits": "limits.json",
-    "license_keys": "license_keys.json",
-    "requests": "pro_requests.json",
-    "cloned_voices": "cloned_voices.json",
-    "usage": "usage_tracking.json",
-}
+# Serializes writer transactions from *within this process* so concurrent
+# gunicorn threads don't collide before even reaching SQLite's own locking.
+# SQLite's own file-level locking (BEGIN IMMEDIATE) handles cross-process
+# safety across gunicorn's 2 worker processes; this lock just avoids
+# needless "database is locked" retries between threads of the SAME worker.
+_write_lock = threading.Lock()
 
 DEFAULT_LIMITS = {
-    "FREE_CHAR_LIMIT": 5000,           # max chars per SINGLE generation
-    "FREE_MONTHLY_CHAR_QUOTA": 50000,  # cumulative chars across the whole month
+    "FREE_CHAR_LIMIT": 5000,
+    "FREE_MONTHLY_CHAR_QUOTA": 50000,
     "FREE_DAILY_ACTIONS": 10,
     "FREE_BATCH_LIMIT": 5,
     "FREE_BATCH_MAX_LINES": 20,
@@ -44,100 +64,292 @@ DEFAULT_LIMITS = {
 }
 
 
-def _token() -> str:
-    return os.environ.get("GITHUB_TOKEN", "").strip()
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    # WAL: readers don't block writers and vice versa — matters once the
+    # webhook auto-deploy listener and the main app are both touching the
+    # DB (they're separate processes). busy_timeout: if two writers do
+    # collide, retry for up to 5s instead of failing immediately.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
 
 
-def gh_read(filename: str):
-    """Returns parsed JSON, or None if missing/misconfigured/error."""
-    tok = _token()
-    if not tok:
-        return None
+def init_db():
+    """Creates tables if they don't exist. Called once at import time below
+    — safe to call repeatedly (CREATE TABLE IF NOT EXISTS)."""
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS license_keys (
+                    key  TEXT PRIMARY KEY,
+                    data TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS blogs (
+                    id       TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL,
+                    data     TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS requests (
+                    id       TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL,
+                    data     TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS limits (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS usage (
+                    ip_hash TEXT PRIMARY KEY,
+                    data    TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS login_attempts (
+                    ip_hash TEXT PRIMARY KEY,
+                    data    TEXT NOT NULL
+                );
+            """)
+            conn.commit()
+        finally:
+            conn.close()
+
+
+init_db()
+
+
+def _replace_ordered_table(table: str, id_field: str, items: list) -> tuple:
+    """Shared logic for blogs/requests: both are 'save the whole list, in
+    the order given' semantics, same as the old gh_write(whole JSON list).
+    Replaces all rows in one transaction so a reader never sees a
+    half-replaced table."""
     try:
-        h = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github.v3+json"}
-        r = requests.get(
-            f"https://api.github.com/repos/{GH_REPO}/contents/{filename}?ref={GH_BRANCH}",
-            headers=h, timeout=10,
-        )
-        if r.status_code == 200:
-            return json.loads(base64.b64decode(r.json()["content"]).decode("utf-8"))
-        return None
-    except Exception:
-        return None
-
-
-def gh_write(filename: str, data, message: str) -> tuple:
-    """Returns (ok: bool, error_msg: str)."""
-    tok = _token()
-    if not tok:
-        return False, "GITHUB_TOKEN missing on this deployment."
-    try:
-        h = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github.v3+json"}
-        sha = None
-        gr = requests.get(f"https://api.github.com/repos/{GH_REPO}/contents/{filename}", headers=h, timeout=10)
-        if gr.status_code == 200:
-            sha = gr.json().get("sha")
-        elif gr.status_code == 401:
-            return False, "GitHub token is invalid or expired."
-        elif gr.status_code == 403:
-            return False, "GitHub token lacks write permission (needs repo scope)."
-
-        encoded = base64.b64encode(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")).decode("utf-8")
-        payload = {"message": message, "content": encoded, "branch": GH_BRANCH}
-        if sha:
-            payload["sha"] = sha
-        pr = requests.put(f"https://api.github.com/repos/{GH_REPO}/contents/{filename}", headers=h, json=payload, timeout=15)
-        if pr.status_code in (200, 201):
-            return True, ""
-        return False, f"GitHub API error {pr.status_code}: {pr.text[:200]}"
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(f"DELETE FROM {table}")
+                for position, item in enumerate(items):
+                    item_id = str(item.get(id_field, position))
+                    conn.execute(
+                        f"INSERT INTO {table}(id, position, data) VALUES (?, ?, ?)",
+                        (item_id, position, json.dumps(item, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return True, ""
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
     except Exception as e:
         return False, str(e)
 
 
-# ---- typed convenience wrappers ----
+def _load_ordered_table(table: str) -> list:
+    conn = _connect()
+    try:
+        rows = conn.execute(f"SELECT data FROM {table} ORDER BY position ASC").fetchall()
+        return [json.loads(r[0]) for r in rows]
+    finally:
+        conn.close()
+
+
+# ---- blogs ----
 def load_blogs() -> list:
-    data = gh_read(GH_FILES["blogs"])
-    return data if isinstance(data, list) else []
+    return _load_ordered_table("blogs")
 
 
 def save_blogs(posts: list) -> tuple:
-    return gh_write(GH_FILES["blogs"], posts, "Update blogs.json via VoxCraft Admin")
+    return _replace_ordered_table("blogs", "id", posts)
 
 
+# ---- requests ----
+def load_requests() -> list:
+    return _load_ordered_table("requests")
+
+
+def save_requests(reqs: list) -> tuple:
+    return _replace_ordered_table("requests", "id", reqs)
+
+
+# ---- limits (key/value, not JSON-list-shaped like the above two) ----
 def load_limits() -> dict:
-    data = gh_read(GH_FILES["limits"])
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT key, value FROM limits").fetchall()
+        stored = {k: json.loads(v) for k, v in rows}
+    finally:
+        conn.close()
     merged = DEFAULT_LIMITS.copy()
-    if isinstance(data, dict):
-        merged.update({k: data[k] for k in data if k in DEFAULT_LIMITS})
+    merged.update({k: stored[k] for k in stored if k in DEFAULT_LIMITS})
     return merged
 
 
 def save_limits(limits: dict) -> tuple:
-    return gh_write(GH_FILES["limits"], limits, "Update limits.json via Admin")
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("DELETE FROM limits")
+                for k, v in limits.items():
+                    conn.execute(
+                        "INSERT INTO limits(key, value) VALUES (?, ?)",
+                        (k, json.dumps(v, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return True, ""
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
 
 
+# ---- license keys (whole-dict load/save, for admin bulk ops — the
+#      activation hot path uses license_key_transaction() below instead) ----
 def load_license_keys() -> dict:
-    data = gh_read(GH_FILES["license_keys"])
-    return data if isinstance(data, dict) else {}
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT key, data FROM license_keys").fetchall()
+        return {k: json.loads(v) for k, v in rows}
+    finally:
+        conn.close()
 
 
 def save_license_keys(keys: dict) -> tuple:
-    return gh_write(GH_FILES["license_keys"], keys, "Update license keys")
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("DELETE FROM license_keys")
+                for k, v in keys.items():
+                    conn.execute(
+                        "INSERT INTO license_keys(key, data) VALUES (?, ?)",
+                        (k, json.dumps(v, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return True, ""
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
 
 
-def load_requests() -> list:
-    data = gh_read(GH_FILES["requests"])
-    return data if isinstance(data, list) else []
+@contextlib.contextmanager
+def license_key_transaction(key: str):
+    """Atomic read-modify-write for ONE license key — this is what actually
+    closes the activation race condition. BEGIN IMMEDIATE grabs SQLite's
+    write lock at the very start of the transaction (not lazily on first
+    write), so if two requests hit this for the SAME key at nearly the same
+    instant, the second one blocks until the first fully commits, then sees
+    the now-updated state (e.g. "used": True) instead of racing against it.
+
+    Usage:
+        with persistence.license_key_transaction(key) as holder:
+            info = holder["info"]          # dict, or None if key doesn't exist
+            if info is None:
+                return {"valid": False, "error": "Invalid key."}
+            ...mutate info in place, or reassign holder["info"] = info...
+            # whatever holder["info"] is when the `with` block exits gets
+            # written back automatically (unless you set it to None).
+    """
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT data FROM license_keys WHERE key = ?", (key,)).fetchone()
+            holder = {"info": json.loads(row[0]) if row else None}
+            yield holder
+            if holder["info"] is not None:
+                conn.execute(
+                    "INSERT INTO license_keys(key, data) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET data = excluded.data",
+                    (key, json.dumps(holder["info"], ensure_ascii=False)),
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
-def save_requests(reqs: list) -> tuple:
-    return gh_write(GH_FILES["requests"], reqs, "Update pro requests")
-
-
+# ---- usage tracking (dict keyed by ip_hash) ----
 def load_usage() -> dict:
-    data = gh_read(GH_FILES["usage"])
-    return data if isinstance(data, dict) else {}
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT ip_hash, data FROM usage").fetchall()
+        return {k: json.loads(v) for k, v in rows}
+    finally:
+        conn.close()
 
 
 def save_usage(data: dict) -> tuple:
-    return gh_write(GH_FILES["usage"], data, "Update usage tracking")
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("DELETE FROM usage")
+                for k, v in data.items():
+                    conn.execute(
+                        "INSERT INTO usage(ip_hash, data) VALUES (?, ?)",
+                        (k, json.dumps(v, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return True, ""
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
+
+
+# ---- admin login attempt tracking (brute-force lockout) ----
+# Deliberately a separate small table rather than reusing the `usage` table
+# — different access pattern (single-row get/set per IP, not a whole-table
+# load/save), and mixing concerns there would make both harder to reason
+# about. Stored in the DB rather than an in-memory dict specifically
+# because gunicorn runs multiple worker processes (see voxcraft.service) —
+# an in-memory counter would only apply per-worker, silently doubling (or
+# more) the effective attempt budget an attacker gets.
+def get_login_attempts(ip_hash: str) -> dict:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT data FROM login_attempts WHERE ip_hash = ?", (ip_hash,)).fetchone()
+        return json.loads(row[0]) if row else {}
+    finally:
+        conn.close()
+
+
+def set_login_attempts(ip_hash: str, record: dict):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO login_attempts(ip_hash, data) VALUES (?, ?) "
+                "ON CONFLICT(ip_hash) DO UPDATE SET data = excluded.data",
+                (ip_hash, json.dumps(record, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def clear_login_attempts(ip_hash: str):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("DELETE FROM login_attempts WHERE ip_hash = ?", (ip_hash,))
+            conn.commit()
+        finally:
+            conn.close()

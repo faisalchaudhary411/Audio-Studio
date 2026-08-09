@@ -9,15 +9,21 @@
   </div>
 
   <div class="panel" style="margin-bottom:20px;">
-    <span class="panel__label">Write new post</span>
-    <form method="post">
-      <input type="hidden" name="action" value="create">
-      <input type="text" name="title" placeholder="Title" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
-      <input type="text" name="category" placeholder="Category (e.g. Updates, Tips)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
-      <input type="text" name="excerpt" placeholder="Short excerpt (shown in list)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
-      <textarea name="body" placeholder="Full post body (Markdown supported)" class="script-input" style="min-height:200px;margin-bottom:10px;" required></textarea>
-      <label style="font-size:0.9rem;color:var(--text-mid);"><input type="checkbox" name="published" checked> Publish immediately</label>
-      <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">Save post</button>
+    <span class="panel__label">{{ 'Edit post' if edit_post else 'Write new post' }}</span>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if edit_post %}
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="post_id" value="{{ edit_post.id }}">
+      {% else %}
+        <input type="hidden" name="action" value="create">
+      {% endif %}
+      <input type="text" name="title" placeholder="Title" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.title if edit_post else '' }}" required>
+      <input type="text" name="category" placeholder="Category (e.g. Updates, Tips)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.category if edit_post else '' }}">
+      <input type="text" name="excerpt" placeholder="Short excerpt (shown in list)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.excerpt if edit_post else '' }}">
+      <textarea name="body" placeholder="Full post body (Markdown supported)" class="script-input" style="min-height:200px;margin-bottom:10px;" required>{{ edit_post.body if edit_post else '' }}</textarea>
+      <label style="font-size:0.9rem;color:var(--text-mid);"><input type="checkbox" name="published" {% if (edit_post and edit_post.published) or not edit_post %}checked{% endif %}> Publish{{ ' (visible on site)' if edit_post else ' immediately' }}</label>
+      <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">{{ 'Update post' if edit_post else 'Save post' }}</button>
+      {% if edit_post %}<a href="{{ url_for('admin_blog') }}" class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-block;">Cancel edit</a>{% endif %}
     </form>
   </div>
 
@@ -29,8 +35,9 @@
         <div style="color:var(--text-dim);font-size:0.8rem;">{{ p.date }} · {{ 'Published' if p.published else 'Draft' }}</div>
       </div>
       <div style="display:flex;gap:8px;">
-        <form method="post"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="toggle_publish" class="btn btn--ghost btn--sm">{{ 'Unpublish' if p.published else 'Publish' }}</button></form>
-        <form method="post"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this post?')">Delete</button></form>
+        <a href="{{ url_for('admin_blog', edit=p.id) }}" class="btn btn--ghost btn--sm">Edit</a>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="toggle_publish" class="btn btn--ghost btn--sm">{{ 'Unpublish' if p.published else 'Publish' }}</button></form>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="post_id" value="{{ p.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this post?')">Delete</button></form>
       </div>
     </div>
     {% else %}

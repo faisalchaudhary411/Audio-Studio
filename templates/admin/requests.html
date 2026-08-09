@@ -21,7 +21,7 @@
         <div style="text-align:right;">
           <span style="font-family:var(--mono);font-size:0.78rem;color:{% if r.status == 'approved' %}var(--jade-hi){% elif r.status == 'rejected' %}#e88{% else %}var(--brass-hi){% endif %};">{{ r.status }}</span>
           {% if r.status in ['pending', 'payment_pending'] %}
-          <form method="post" style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
+          <form method="post" style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="req_id" value="{{ r.id }}">
             <button type="submit" name="action" value="approve" class="btn btn--jade btn--sm">Approve</button>
             <button type="submit" name="action" value="reject" class="btn btn--ghost btn--sm">Reject</button>

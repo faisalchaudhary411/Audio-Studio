@@ -10,7 +10,7 @@
     {% if error %}<p style="color:#e88;">{{ error }}</p>{% endif %}
   </div>
 
-  <form method="post" class="panel">
+  <form method="post" class="panel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Max chars per generation</label>

@@ -55,6 +55,98 @@ def is_subscription_active(key_info: dict) -> bool:
     return True
 
 
+def find_key_for_device(request) -> str:
+    """Silent Pro-status auto-restore: if this device's IP AND browser
+    fingerprint BOTH match the activation history of any active,
+    non-revoked key, return it so the session can be silently repopulated —
+    without the customer re-typing their key after clearing cookies, using
+    incognito, or switching browsers.
+
+    Uses _is_same_device_strict (BOTH signals, not just one) — unlike
+    reactivation, where the customer already typed the correct key, nothing
+    here proves they know it, so requiring both signals to coincide guards
+    against a stranger sharing a Pro customer's IP (office wifi, mobile
+    carrier CGNAT) getting silently restored too. Every successful restore
+    is logged on the key (restore_log, capped rolling history) so unusual
+    patterns are visible in /admin/keys — e.g. a key restoring across many
+    distinct devices in a short window would be worth a manual look.
+
+    Scans all keys — fine at solo-project scale; would need a proper
+    device->key index if the key count ever grows very large.
+    """
+    keys = _keys()
+    for key, info in keys.items():
+        if info.get("revoked"):
+            continue
+        if not is_subscription_active(info):
+            continue
+        if _is_same_device_strict(info, request):
+            _log_auto_restore(key, request)
+            return key
+    return ""
+
+
+def _log_auto_restore(key: str, request):
+    """Appends a lightweight, capped log entry so /admin/keys can show when
+    and how often a key has been silently auto-restored — visibility, not
+    prevention. Best-effort: failures here never block the restore itself."""
+    try:
+        keys = _keys()
+        info = keys.get(key)
+        if not info:
+            return
+        entry = {
+            "at": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "ip_hash": hash_ip(get_client_ip(request)),
+            "fp": get_browser_fingerprint(request),
+        }
+        log = info.get("restore_log", [])
+        log.append(entry)
+        info["restore_log"] = log[-10:]  # keep it small — last 10 restores is plenty for a glance
+        keys[key] = info
+        _save(keys)
+    except Exception:
+        pass
+
+
+def sweep_expired_keys() -> int:
+    """Explicitly marks any key past its expires_at as revoked=True.
+
+    Access was already correctly being cut off without this — is_subscription_active()
+    checks the expiry live on every call, so an expired key stops working
+    immediately regardless of this sweep. This function exists purely so the
+    admin panel's 'revoked' column is honest: without it, an expired
+    grace-period or subscription key sits there looking identical to a
+    genuinely active one until someone happens to look closely at
+    expires_at. Safe to call as often as you like — already-revoked keys
+    are simply skipped, and it never touches keys that are still within
+    their valid window.
+
+    Called from the admin dashboard and keys page on every load, so the
+    picture is always current when you're actually looking at it — no
+    separate scheduled job needed for a page nobody's looking at anyway.
+    """
+    keys = _keys()
+    changed = 0
+    now = dt.datetime.now()
+    for key, info in keys.items():
+        if info.get("revoked"):
+            continue
+        expires_at = info.get("expires_at")
+        if not expires_at:
+            continue
+        try:
+            expiry = dt.datetime.strptime(expires_at, "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        if now > expiry:
+            keys[key]["revoked"] = True
+            changed += 1
+    if changed:
+        _save(keys)
+    return changed
+
+
 def create_subscription_key(customer_name: str, customer_email: str,
                              subscription_type: str = "monthly",
                              amount_paid: float = 0,
@@ -129,48 +221,109 @@ def renew_subscription(key: str) -> bool:
     return True
 
 
+def _push_history(existing: list, value: str, cap: int = 5) -> list:
+    """Append value to a rolling history list, most-recent-last, deduped,
+    capped at `cap` entries (oldest dropped first). Used for both IP hashes
+    and browser fingerprints so a key remembers the last few devices/browsers
+    it was used from instead of only the single most recent one."""
+    history = list(existing or [])
+    if value and value in history:
+        history.remove(value)
+    if value:
+        history.append(value)
+    return history[-cap:]
+
+
 def _is_same_device(info: dict, request) -> bool:
+    """'Same device' = matches ANY recently-seen IP hash or fingerprint for
+    this key, not just the single latest one. A key is meant to be locked to
+    one physical device but usable from any browser on it — since IP is a
+    network-level signal (not browser-specific), matching against a short
+    rolling history covers the common case of switching browsers on the same
+    wifi, or switching networks on the same browser, without requiring both
+    to line up in the same instant the way a single "last seen" value did.
+
+    Used for REACTIVATION, where the customer already typed the correct key
+    — OR-matching is appropriate there since they've already proven they
+    know the key; this is just deciding whether to allow it from here."""
     current_ip = get_client_ip(request)
-    if current_ip != "unknown" and info.get("activated_by") == hash_ip(current_ip):
+    ip_history = info.get("activated_ips") or ([info["activated_by"]] if info.get("activated_by") else [])
+    if current_ip != "unknown" and hash_ip(current_ip) in ip_history:
         return True
     current_fp = get_browser_fingerprint(request)
-    stored_fp = info.get("activated_fp", "")
-    return bool(stored_fp) and current_fp == stored_fp
+    fp_history = info.get("activated_fps") or ([info["activated_fp"]] if info.get("activated_fp") else [])
+    return bool(current_fp) and current_fp in fp_history
+
+
+def _is_same_device_strict(info: dict, request) -> bool:
+    """Stricter variant requiring BOTH IP and fingerprint to match recently-
+    seen history, not just one. Used for SILENT auto-restore (see
+    find_key_for_device), where nobody has typed the key — OR-matching
+    there would let a stranger sharing a Pro customer's IP (common on
+    office wifi or mobile carrier CGNAT) get silently restored into their
+    Pro access with no proof they know the key at all. Requiring both
+    signals to coincide makes that require an actual fingerprint collision
+    too, not just a shared IP."""
+    current_ip = get_client_ip(request)
+    ip_history = info.get("activated_ips") or ([info["activated_by"]] if info.get("activated_by") else [])
+    ip_matches = current_ip != "unknown" and hash_ip(current_ip) in ip_history
+
+    current_fp = get_browser_fingerprint(request)
+    fp_history = info.get("activated_fps") or ([info["activated_fp"]] if info.get("activated_fp") else [])
+    fp_matches = bool(current_fp) and current_fp in fp_history
+
+    return ip_matches and fp_matches
 
 
 def activate_vox_license(key: str, request) -> dict:
     """Activate/re-activate a key. Same-device re-activation is allowed even
-    if IP changed (mirrors your original fix for mobile network switching)."""
+    if IP changed (mirrors your original fix for mobile network switching).
+
+    Uses persistence.license_key_transaction() instead of the old
+    load-whole-dict/mutate/save-whole-dict pattern — that had a real race
+    condition where two people activating the same not-yet-used key at
+    nearly the same instant could both read "unused" before either write
+    landed, and both succeed. The transaction closes that window: a second
+    concurrent call for the same key blocks until the first fully commits.
+    """
     key = key.strip()
-    keys = _keys()
-    if key not in keys:
-        return {"valid": False, "error": "Invalid license key."}
+    with persistence.license_key_transaction(key) as holder:
+        info = holder["info"]
+        if info is None:
+            return {"valid": False, "error": "Invalid license key."}
 
-    info = keys[key]
-    if not is_subscription_active(info):
-        return {"valid": False, "error": "Your subscription has expired. Please renew your plan."}
-    if info.get("revoked"):
-        return {"valid": False, "error": "This key has been revoked. Contact support."}
+        if not is_subscription_active(info):
+            return {"valid": False, "error": "Your subscription has expired. Please renew your plan."}
+        if info.get("revoked"):
+            return {"valid": False, "error": "This key has been revoked. Contact support."}
 
-    if info.get("used"):
-        if _is_same_device(info, request):
-            current_ip = get_client_ip(request)
-            if current_ip != "unknown":
-                keys[key]["activated_by"] = hash_ip(current_ip)
-            keys[key]["activated_fp"] = get_browser_fingerprint(request)
-            keys[key]["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-            _save(keys)
-            return {"valid": True, "name": info.get("customer_name", "Pro User")}
-        return {"valid": False, "error": "This key has already been used on another device."}
+        if info.get("used"):
+            if _is_same_device(info, request):
+                current_ip = get_client_ip(request)
+                if current_ip != "unknown":
+                    ip_hash = hash_ip(current_ip)
+                    info["activated_ips"] = _push_history(info.get("activated_ips"), ip_hash)
+                    info["activated_by"] = ip_hash  # kept for backward compat / admin display
+                current_fp = get_browser_fingerprint(request)
+                info["activated_fps"] = _push_history(info.get("activated_fps"), current_fp)
+                info["activated_fp"] = current_fp  # kept for backward compat / admin display
+                info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                holder["info"] = info
+                return {"valid": True, "name": info.get("customer_name", "Pro User")}
+            return {"valid": False, "error": "This key has already been used on another device."}
 
-    keys[key]["used"] = True
-    keys[key]["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-    current_ip = get_client_ip(request)
-    if current_ip != "unknown":
-        keys[key]["activated_by"] = hash_ip(current_ip)
-    keys[key]["activated_fp"] = get_browser_fingerprint(request)
-    _save(keys)
-    return {"valid": True, "name": info.get("customer_name", "Pro User")}
+        info["used"] = True
+        info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+        current_ip = get_client_ip(request)
+        if current_ip != "unknown":
+            ip_hash = hash_ip(current_ip)
+            info["activated_by"] = ip_hash
+            info["activated_ips"] = [ip_hash]
+        current_fp = get_browser_fingerprint(request)
+        info["activated_fp"] = current_fp
+        info["activated_fps"] = [current_fp]
+        holder["info"] = info
+        return {"valid": True, "name": info.get("customer_name", "Pro User")}
 
 
 def find_key_by_freemius_id(freemius_license_id: str) -> str:

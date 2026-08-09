@@ -10,10 +10,14 @@ Still NOT ported: Music tool, Denoise, Voice Changer, Video-to-Audio extractor.
 Paddle is intentionally NOT ported (Freemius replaced it per your own history).
 
 REQUIRED ENV VARS for this pass to actually work (see README):
-- GITHUB_TOKEN      — repo-scope PAT for faisalchaudhary411/faisalchaudhary411.github.io
+- SECRET_KEY        — Flask session signing key (app refuses to start without it)
 - ADMIN_PASSWORD    — gates /admin (there was NO auth on the original admin page — added here)
 - RESEND_API_KEY, ADMIN_EMAIL — for pro-request notification emails
 - FREEMIUS_API_TOKEN, FREEMIUS_PRODUCT_ID — only if you want Freemius checkout wired live
+
+GITHUB_TOKEN is no longer needed — persistence.py moved from GitHub-JSON to
+a local SQLite database (see persistence.py's docstring and
+deploy/migrate_to_sqlite.py if migrating existing data over).
 """
 
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response
@@ -23,6 +27,7 @@ import time
 import threading
 import zipfile
 import base64
+import secrets
 import datetime as dt
 import markdown as md_lib
 
@@ -98,6 +103,62 @@ app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
 def _make_session_permanent():
     session.permanent = True
 
+
+@app.before_request
+def _ensure_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+
+
+@app.before_request
+def _csrf_protect():
+    """Rejects any POST that doesn't carry a matching csrf_token — closes
+    the classic CSRF hole where a malicious page tricks a logged-in admin's
+    browser into submitting a hidden form to voxcraft.site. SameSite=Lax on
+    the session cookie already blocks most of this on modern browsers, but
+    that's a browser behavior we're relying on rather than something the
+    app itself enforces — this makes it explicit and doesn't depend on
+    every visitor's browser getting SameSite right.
+
+    Scoped to real HTML forms (admin pages, /activate, /upgrade,
+    /fs-callback/activate) — NOT /api/* or /webhook/*. The /api/ tool
+    endpoints are called via JS fetch(), not a <form>, and adding tokens
+    there would mean also updating every JS file that calls them for
+    comparatively low value (worst case is someone tricking a visitor into
+    submitting an unwanted TTS generation, not an account/data compromise).
+    /webhook/* uses its own HMAC signature verification instead, which is
+    the correct mechanism for a server-to-server call with no session/
+    cookie involved at all."""
+    if request.method != "POST":
+        return
+    exempt_prefixes = ("/webhook/", "/api/")
+    if request.path.startswith(exempt_prefixes):
+        return
+    token = session.get("csrf_token", "")
+    submitted = request.form.get("csrf_token", "")
+    if not token or not submitted or not hmac.compare_digest(token, submitted):
+        return jsonify({"error": "Your session expired or the page was open too long. Please refresh and try again."}), 403
+
+
+@app.before_request
+def _auto_restore_pro_session():
+    """If this browser has no license_key in session (cookies cleared,
+    incognito, or a different browser than where they activated), silently
+    check whether this device's IP or fingerprint matches an already-active
+    key's history and restore it — see licensing.find_key_for_device() for
+    the deliberate convenience-vs-shared-network trade-off this makes.
+    Skipped for static assets and webhook/health endpoints, which never
+    need Pro status and would otherwise trigger a needless DB scan on
+    every single request (image, CSS, JS file, etc.)."""
+    if session.get("license_key"):
+        return
+    skip_prefixes = ("/static/", "/webhook/", "/ads.txt")
+    if request.path.startswith(skip_prefixes):
+        return
+    restored_key = licensing.find_key_for_device(request)
+    if restored_key:
+        session["license_key"] = restored_key
+
 # librosa's pitch_shift uses numba, which JIT-compiles on first call —
 # ~20s the very first time, milliseconds after. Warming it up here (module
 # level, so this runs under gunicorn too, not just `python app.py` directly)
@@ -114,6 +175,7 @@ def _warm_up_librosa():
 threading.Thread(target=_warm_up_librosa, daemon=True).start()
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 
 # Limits now come from persistence.load_limits() (GitHub-backed, editable in
 # /admin/limits) instead of hardcoded constants. Cached briefly so we're not
@@ -166,6 +228,7 @@ def inject_globals():
         # ENABLE_POPUNDER=1 in Render's env vars to switch it back on after
         # approval — no code change or redeploy needed beyond the env var.
         "enable_popunder_ctx": os.environ.get("ENABLE_POPUNDER", "") == "1",
+        "csrf_token": session.get("csrf_token", ""),
     }
 
 
@@ -177,73 +240,37 @@ def _this_month() -> str:
     return dt.datetime.now().strftime("%Y-%m")
 
 
-def _reset_daily_if_needed():
-    if session.get("usage_date") != _today():
-        session["usage_date"] = _today()
-        session["usage_singles"] = 0
-        session["usage_batches"] = 0
-        session["usage_previews"] = 0
-        session["usage_transcribe"] = 0
-        session["usage_convert"] = 0
-        session["usage_merge"] = 0
-        session["usage_cutter"] = 0
-        session["usage_denoise"] = 0
-        session["usage_voicechange"] = 0
-        session["usage_videoxtract"] = 0
-
-
-def _reset_monthly_if_needed():
-    """Separate from the daily reset above — BUG FIX: the character quota is
-    meant to be a monthly budget (matches what it's actually labeled as
-    everywhere: 'chars/generation' is the per-request cap, but the usage bar
-    showing a running total was being reset DAILY alongside the daily action
-    counters, comparing a daily-reset number against what's really meant to
-    be a much longer-period allowance. Chars now track and reset on their own
-    monthly cycle, independent of the daily counters."""
-    if session.get("usage_month") != _this_month():
-        session["usage_month"] = _this_month()
-        session["usage_chars_monthly"] = 0
-
-
 def _under_limit(counter_key: str, limit: int) -> bool:
     """Read-only check — does NOT increment. Use this before doing the actual
-    work, then call _bump_counter only if it succeeds."""
-    _reset_daily_if_needed()
+    work, then call _bump_counter only if it succeeds.
+    Backed by usage_tracking.py's combined IP+fingerprint store — see that
+    module's docstring for why this replaced pure session-cookie tracking
+    (which any free user could reset via private browsing or a different
+    browser, no code exploit needed, just normal browser features)."""
     if is_pro():
         return True
-    return session.get(counter_key, 0) < limit
+    return usage_tracking.get_daily_counter(request, counter_key) < limit
 
 
 def _bump_counter(counter_key: str):
     """Only call this AFTER the operation actually succeeds."""
     if is_pro():
         return
-    _reset_daily_if_needed()
-    session[counter_key] = session.get(counter_key, 0) + 1
+    usage_tracking.bump_daily_counter(request, counter_key)
 
 
 def _check_and_bump(counter_key: str, limit: int) -> bool:
-    """Returns True if under limit (and increments), False if limit hit.
-    BUG FIX: every /api/tools/* endpoint used to call this BEFORE attempting
-    the actual operation, so a failed generation (bad file, oversized upload,
-    corrupted upload, etc.) still consumed a daily quota slot. Kept here for
-    the couple of call sites where check+bump-immediately is still correct
-    (e.g. previews, where there's no separate 'did it succeed' step worth
-    splitting out) — but the tool endpoints below now use _under_limit +
-    _bump_counter instead, bumping only after success."""
-    _reset_daily_if_needed()
+    """Returns True if under limit (and increments), False if limit hit."""
     if is_pro():
         return True
-    current = session.get(counter_key, 0)
-    if current >= limit:
+    if not _under_limit(counter_key, limit):
         return False
-    session[counter_key] = current + 1
+    _bump_counter(counter_key)
     return True
 
 
 def _monthly_chars_used() -> int:
-    _reset_monthly_if_needed()
-    return session.get("usage_chars_monthly", 0)
+    return usage_tracking.get_monthly_chars(request)
 
 
 def _would_exceed_monthly_quota(char_count: int, monthly_quota: int) -> bool:
@@ -258,8 +285,7 @@ def _bump_monthly_chars(char_count: int):
     """Only call this AFTER a generation actually succeeds."""
     if is_pro():
         return
-    _reset_monthly_if_needed()
-    session["usage_chars_monthly"] = session.get("usage_chars_monthly", 0) + char_count
+    usage_tracking.bump_monthly_chars(request, char_count)
 
 
 @app.route("/")
@@ -268,28 +294,26 @@ def landing():
 
 
 def usage_summary() -> dict:
-    """Surfaces the SAME counters that _check_and_bump / _check_monthly_chars
-    actually enforce — this is deliberately the session-cookie numbers, not
-    usage_tracking.py's IP-based numbers, so what's displayed always matches
-    what's enforced. Limits themselves come from get_limits() (GitHub-backed,
-    editable in /admin/limits).
-    (Note: usage_tracking.py's IP-based module exists for licensing checks
-    but isn't wired into daily-limit enforcement here — see README.)"""
-    _reset_daily_if_needed()
-    _reset_monthly_if_needed()
+    """Surfaces the SAME counters that _under_limit / _monthly_chars_used
+    actually enforce — now backed by usage_tracking.py's combined
+    IP+fingerprint store, so what's displayed always matches what's
+    enforced (this used to read session values while enforcement quietly
+    ran on something else entirely — see usage_tracking.py's docstring for
+    the full history). Limits themselves come from get_limits() (editable
+    in /admin/limits)."""
     lim = get_limits()
     return {
-        "singles": {"used": session.get("usage_singles", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "chars_monthly": {"used": session.get("usage_chars_monthly", 0), "limit": lim["FREE_MONTHLY_CHAR_QUOTA"]},
-        "batches": {"used": session.get("usage_batches", 0), "limit": lim["FREE_BATCH_LIMIT"]},
-        "previews": {"used": session.get("usage_previews", 0), "limit": lim["FREE_PREVIEW_LIMIT"]},
-        "transcribe": {"used": session.get("usage_transcribe", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "convert": {"used": session.get("usage_convert", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "merge": {"used": session.get("usage_merge", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "cutter": {"used": session.get("usage_cutter", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "denoise": {"used": session.get("usage_denoise", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "voicechange": {"used": session.get("usage_voicechange", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
-        "videoxtract": {"used": session.get("usage_videoxtract", 0), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "singles": {"used": usage_tracking.get_daily_counter(request, "usage_singles"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "chars_monthly": {"used": _monthly_chars_used(), "limit": lim["FREE_MONTHLY_CHAR_QUOTA"]},
+        "batches": {"used": usage_tracking.get_daily_counter(request, "usage_batches"), "limit": lim["FREE_BATCH_LIMIT"]},
+        "previews": {"used": usage_tracking.get_daily_counter(request, "usage_previews"), "limit": lim["FREE_PREVIEW_LIMIT"]},
+        "transcribe": {"used": usage_tracking.get_daily_counter(request, "usage_transcribe"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "convert": {"used": usage_tracking.get_daily_counter(request, "usage_convert"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "merge": {"used": usage_tracking.get_daily_counter(request, "usage_merge"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "cutter": {"used": usage_tracking.get_daily_counter(request, "usage_cutter"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "denoise": {"used": usage_tracking.get_daily_counter(request, "usage_denoise"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "voicechange": {"used": usage_tracking.get_daily_counter(request, "usage_voicechange"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "videoxtract": {"used": usage_tracking.get_daily_counter(request, "usage_videoxtract"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
@@ -350,7 +374,12 @@ def activate():
 def upgrade():
     checkout_url = persistence.load_limits().get("CHECKOUT_URL") or None
     if request.method == "GET":
-        return render_template("upgrade.html", checkout_url=checkout_url)
+        # BUG FIX: this previously never read MANUAL_GRACE_HOURS at all on
+        # the initial page load — only after submitting the form — so the
+        # "access stops working after X hours" text was disconnected from
+        # whatever was actually set in /admin/limits.
+        grace_hours = persistence.load_limits().get("MANUAL_GRACE_HOURS", 72)
+        return render_template("upgrade.html", checkout_url=checkout_url, grace_hours=grace_hours)
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
@@ -364,13 +393,24 @@ def upgrade():
     if file and file.filename:
         screenshot_b64 = base64.b64encode(file.read()).decode("ascii")
 
+    # BUG FIX: check Pro status BEFORE processing the submission. Without
+    # this, submitting a second payment request while already Pro (e.g. an
+    # early renewal attempt, or just clicking submit twice) would
+    # unconditionally overwrite the session's license_key with a brand-new
+    # TEMPORARY grace key — silently swapping a permanent, already-valid key
+    # for one on a 24-hour countdown. Combined with sweep_expired_keys(),
+    # that meant a genuinely paying customer could lose Pro access after the
+    # grace window, even though their real key was never actually invalid.
+    already_pro = is_pro()
+
     result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64)
     if result.get("success"):
-        if result.get("auto_approved") and result.get("license_key"):
+        if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
         return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url,
                                 auto_approved=result.get("auto_approved", False),
-                                grace_hours=result.get("grace_hours"))
+                                grace_hours=result.get("grace_hours"),
+                                already_pro=already_pro)
     return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."), checkout_url=checkout_url)
 
 
@@ -474,20 +514,74 @@ def contact():
 # ---------------------------------------------------------------------------
 # Admin
 # ---------------------------------------------------------------------------
+ADMIN_LOGIN_MAX_ATTEMPTS = 5
+ADMIN_LOGIN_WINDOW_MINUTES = 15
+ADMIN_LOGIN_LOCKOUT_MINUTES = 15
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "GET":
         return render_template("admin/login.html")
+
+    ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
+    now = dt.datetime.now()
+    record = persistence.get_login_attempts(ip_hash)
+
+    # Currently locked out? Reject before even checking the password —
+    # otherwise a correct guess during lockout would still let an attacker
+    # in, defeating the point of the lockout.
+    locked_until_str = record.get("locked_until")
+    if locked_until_str:
+        locked_until = dt.datetime.strptime(locked_until_str, "%Y-%m-%d %H:%M:%S")
+        if now < locked_until:
+            remaining_min = max(1, int((locked_until - now).total_seconds() // 60) + 1)
+            return render_template("admin/login.html",
+                                    error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
+
+    email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     # HARDENING: constant-time comparison instead of == — plain string
     # comparison short-circuits on the first mismatched character, which
-    # theoretically leaks timing info about the correct password. hmac.compare_digest
+    # theoretically leaks timing info about the correct value. hmac.compare_digest
     # runs in constant time regardless of where the strings first differ.
-    if ADMIN_PASSWORD and hmac.compare_digest(password, ADMIN_PASSWORD):
+    # Both email AND password must match — reusing ADMIN_EMAIL (already set
+    # for pro-request notifications) means logging in now takes two secrets
+    # instead of one, not just a cosmetic field.
+    email_ok = bool(ADMIN_EMAIL) and hmac.compare_digest(email, ADMIN_EMAIL)
+    password_ok = bool(ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
+    if email_ok and password_ok:
+        persistence.clear_login_attempts(ip_hash)  # legitimate login wipes any prior failed attempts
         session["admin_authed"] = True
         next_url = request.args.get("next") or url_for("admin_dashboard")
         return redirect(next_url)
-    return render_template("admin/login.html", error="Incorrect password.")
+
+    # Wrong email or password (deliberately not saying which, so a wrong
+    # guess can't be used to enumerate the correct email separately from
+    # the correct password) — record the attempt. Stored in the DB (not an
+    # in-memory dict) because gunicorn runs multiple worker processes; an
+    # in-memory counter would only apply per-worker, silently doubling the
+    # effective attempt budget an attacker gets depending on which worker
+    # handles each request.
+    first_attempt_str = record.get("first_attempt")
+    if first_attempt_str:
+        first_attempt = dt.datetime.strptime(first_attempt_str, "%Y-%m-%d %H:%M:%S")
+        if (now - first_attempt).total_seconds() > ADMIN_LOGIN_WINDOW_MINUTES * 60:
+            record = {}  # window expired — start counting fresh
+
+    count = record.get("count", 0) + 1
+    new_record = {
+        "count": count,
+        "first_attempt": record.get("first_attempt", now.strftime("%Y-%m-%d %H:%M:%S")),
+    }
+    if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
+        new_record["locked_until"] = (now + dt.timedelta(minutes=ADMIN_LOGIN_LOCKOUT_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+    persistence.set_login_attempts(ip_hash, new_record)
+
+    if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
+        return render_template("admin/login.html",
+                                error=f"Too many failed attempts. Try again in {ADMIN_LOGIN_LOCKOUT_MINUTES} minutes.")
+    return render_template("admin/login.html", error="Incorrect email or password.")
 
 
 @app.route("/admin/logout")
@@ -499,6 +593,7 @@ def admin_logout():
 @app.route("/admin")
 @admin_required
 def admin_dashboard():
+    licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before counting
     keys = persistence.load_license_keys()
     reqs = persistence.load_requests()
     posts = persistence.load_blogs()
@@ -507,7 +602,7 @@ def admin_dashboard():
     return render_template("admin/dashboard.html",
                             total_keys=len(keys), active_keys=active_keys,
                             pending_reqs=pending_reqs, total_posts=len(posts),
-                            github_configured=bool(os.environ.get("GITHUB_TOKEN")))
+                            db_path=persistence.DB_PATH)
 
 
 @app.route("/admin/limits", methods=["GET", "POST"])
@@ -554,6 +649,7 @@ def admin_keys():
         elif action == "delete":
             licensing.delete_key(key)
         return redirect(url_for("admin_keys"))
+    licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before displaying
     keys = persistence.load_license_keys()
     rows = [{"key": k, **v} for k, v in keys.items()]
     rows.sort(key=lambda r: r.get("created", ""), reverse=True)
@@ -597,6 +693,19 @@ def admin_blog():
             }
             posts.insert(0, new_post)
             persistence.save_blogs(posts)
+        elif action == "update":
+            post_id = request.form.get("post_id")
+            for p in posts:
+                if str(p["id"]) == post_id:
+                    p["title"] = request.form.get("title", "").strip()
+                    p["category"] = request.form.get("category", "").strip()
+                    p["excerpt"] = request.form.get("excerpt", "").strip()
+                    p["body"] = request.form.get("body", "").strip()
+                    p["published"] = request.form.get("published") == "on"
+                    # date intentionally left as the original publish date —
+                    # editing content shouldn't bump a post back to the top
+                    # of a date-sorted list as if it were brand new.
+            persistence.save_blogs(posts)
         elif action == "toggle_publish":
             post_id = request.form.get("post_id")
             for p in posts:
@@ -608,7 +717,12 @@ def admin_blog():
             posts = [p for p in posts if str(p["id"]) != post_id]
             persistence.save_blogs(posts)
         return redirect(url_for("admin_blog"))
-    return render_template("admin/blog.html", posts=posts)
+
+    edit_id = request.args.get("edit")
+    edit_post = None
+    if edit_id:
+        edit_post = next((p for p in posts if str(p["id"]) == edit_id), None)
+    return render_template("admin/blog.html", posts=posts, edit_post=edit_post)
 
 
 @app.route("/ads.txt")
