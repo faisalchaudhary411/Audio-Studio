@@ -3,12 +3,29 @@
 
 {% block content %}
 <section class="section" style="max-width:420px;">
-  <div class="panel">
-    <span class="panel__label">Admin login</span>
-    {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
+  <div class="panel" style="padding:32px 28px;">
+    <div style="text-align:center;margin-bottom:22px;">
+      <div style="width:48px;height:48px;border-radius:50%;background:rgba(232,169,60,0.12);border:1px solid rgba(232,169,60,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--brass)" stroke-width="1.8"><path d="M12 15a3 3 0 003-3V7a3 3 0 00-6 0v5a3 3 0 003 3z"/><path d="M19 11v1a7 7 0 01-14 0v-1M12 19v3"/></svg>
+      </div>
+      <span class="panel__label" style="display:block;">Admin access</span>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-top:4px;">Sign in to manage VoxCraft</p>
+    </div>
+
+    {% if error %}
+    <div style="background:rgba(232,136,136,0.08);border:1px solid rgba(232,136,136,0.25);border-radius:10px;padding:10px 14px;margin-bottom:16px;">
+      <p style="color:#e88;font-size:0.85rem;margin:0;">{{ error }}</p>
+    </div>
+    {% endif %}
+
     <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="password" name="password" placeholder="Admin password" class="script-input" style="min-height:auto;padding:12px;" required autofocus>
-      <button type="submit" class="btn btn--brass btn--block" style="margin-top:14px;">Log in</button>
+      <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Admin email</label>
+      <input type="email" name="email" placeholder="you@example.com" class="script-input" style="min-height:auto;padding:12px;margin-bottom:16px;" required autofocus>
+
+      <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Password</label>
+      <input type="password" name="password" placeholder="••••••••" class="script-input" style="min-height:auto;padding:12px;" required>
+
+      <button type="submit" class="btn btn--brass btn--block" style="margin-top:22px;">Log in</button>
     </form>
   </div>
 </section>
