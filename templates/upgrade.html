@@ -48,7 +48,7 @@
         <div><strong style="color:var(--text-hi);">🏦 UBL Bank:</strong> 0430292120673 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Any bank app/digital wallet → Send Money → Bank Account</span></div>
       </div>
 
-      <form method="post" enctype="multipart/form-data">
+      <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="name" placeholder="Full name" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
         <input type="email" name="email" placeholder="Email" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
         <input type="tel" name="phone" placeholder="Phone (optional)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
