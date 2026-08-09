@@ -27,6 +27,7 @@ import time
 import threading
 import zipfile
 import base64
+import secrets
 import datetime as dt
 import markdown as md_lib
 
@@ -101,6 +102,42 @@ app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
 @app.before_request
 def _make_session_permanent():
     session.permanent = True
+
+
+@app.before_request
+def _ensure_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(32)
+
+
+@app.before_request
+def _csrf_protect():
+    """Rejects any POST that doesn't carry a matching csrf_token — closes
+    the classic CSRF hole where a malicious page tricks a logged-in admin's
+    browser into submitting a hidden form to voxcraft.site. SameSite=Lax on
+    the session cookie already blocks most of this on modern browsers, but
+    that's a browser behavior we're relying on rather than something the
+    app itself enforces — this makes it explicit and doesn't depend on
+    every visitor's browser getting SameSite right.
+
+    Scoped to real HTML forms (admin pages, /activate, /upgrade,
+    /fs-callback/activate) — NOT /api/* or /webhook/*. The /api/ tool
+    endpoints are called via JS fetch(), not a <form>, and adding tokens
+    there would mean also updating every JS file that calls them for
+    comparatively low value (worst case is someone tricking a visitor into
+    submitting an unwanted TTS generation, not an account/data compromise).
+    /webhook/* uses its own HMAC signature verification instead, which is
+    the correct mechanism for a server-to-server call with no session/
+    cookie involved at all."""
+    if request.method != "POST":
+        return
+    exempt_prefixes = ("/webhook/", "/api/")
+    if request.path.startswith(exempt_prefixes):
+        return
+    token = session.get("csrf_token", "")
+    submitted = request.form.get("csrf_token", "")
+    if not token or not submitted or not hmac.compare_digest(token, submitted):
+        return jsonify({"error": "Your session expired or the page was open too long. Please refresh and try again."}), 403
 
 
 @app.before_request
@@ -190,6 +227,7 @@ def inject_globals():
         # ENABLE_POPUNDER=1 in Render's env vars to switch it back on after
         # approval — no code change or redeploy needed beyond the env var.
         "enable_popunder_ctx": os.environ.get("ENABLE_POPUNDER", "") == "1",
+        "csrf_token": session.get("csrf_token", ""),
     }
 
 
