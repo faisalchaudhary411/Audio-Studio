@@ -175,6 +175,7 @@ def _warm_up_librosa():
 threading.Thread(target=_warm_up_librosa, daemon=True).start()
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 
 # Limits now come from persistence.load_limits() (GitHub-backed, editable in
 # /admin/limits) instead of hardcoded constants. Cached briefly so we're not
@@ -538,18 +539,26 @@ def admin_login():
             return render_template("admin/login.html",
                                     error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
 
+    email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
     # HARDENING: constant-time comparison instead of == — plain string
     # comparison short-circuits on the first mismatched character, which
-    # theoretically leaks timing info about the correct password. hmac.compare_digest
+    # theoretically leaks timing info about the correct value. hmac.compare_digest
     # runs in constant time regardless of where the strings first differ.
-    if ADMIN_PASSWORD and hmac.compare_digest(password, ADMIN_PASSWORD):
+    # Both email AND password must match — reusing ADMIN_EMAIL (already set
+    # for pro-request notifications) means logging in now takes two secrets
+    # instead of one, not just a cosmetic field.
+    email_ok = bool(ADMIN_EMAIL) and hmac.compare_digest(email, ADMIN_EMAIL)
+    password_ok = bool(ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
+    if email_ok and password_ok:
         persistence.clear_login_attempts(ip_hash)  # legitimate login wipes any prior failed attempts
         session["admin_authed"] = True
         next_url = request.args.get("next") or url_for("admin_dashboard")
         return redirect(next_url)
 
-    # Wrong password — record the attempt. Stored in the DB (not an
+    # Wrong email or password (deliberately not saying which, so a wrong
+    # guess can't be used to enumerate the correct email separately from
+    # the correct password) — record the attempt. Stored in the DB (not an
     # in-memory dict) because gunicorn runs multiple worker processes; an
     # in-memory counter would only apply per-worker, silently doubling the
     # effective attempt budget an attacker gets depending on which worker
@@ -572,7 +581,7 @@ def admin_login():
     if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
         return render_template("admin/login.html",
                                 error=f"Too many failed attempts. Try again in {ADMIN_LOGIN_LOCKOUT_MINUTES} minutes.")
-    return render_template("admin/login.html", error="Incorrect password.")
+    return render_template("admin/login.html", error="Incorrect email or password.")
 
 
 @app.route("/admin/logout")
