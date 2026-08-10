@@ -75,11 +75,10 @@ def deploy_webhook():
     log.info("Valid push to %s — starting deploy.", BRANCH)
     try:
         _run_deploy()
-    except (subprocess.CalledProcessError, OSError) as e:
-        # OSError also catches FileNotFoundError etc. (e.g. APP_DIR missing,
-        # git/pip binary not found) — any deploy-step failure should return
-        # a clean 500 with a log entry, never an unhandled traceback back
-        # to the caller.
+    except subprocess.CalledProcessError as e:
+        log.error("Deploy step failed: %s\nSTDOUT: %s\nSTDERR: %s", e, e.stdout, e.stderr)
+        return {"status": "error", "detail": str(e)}, 500
+    except OSError as e:
         log.error("Deploy step failed: %s", e)
         return {"status": "error", "detail": str(e)}, 500
 
