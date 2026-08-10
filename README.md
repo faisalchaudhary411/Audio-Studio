@@ -1,4 +1,4 @@
-Faisal # VoxCraft — InterServer VPS Deploy Guide
+# VoxCraft — InterServer VPS Deploy Guide
 
 Target: InterServer slice 1 (1 vCPU, 2GB RAM, 30GB SSD, Ubuntu 22.04/24.04).
 Written for a mobile-only workflow (Termux + GitHub web editor, no local dev machine).
