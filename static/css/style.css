@@ -239,6 +239,37 @@ img{max-width:100%;display:block;}
   background:var(--brass);color:#1A1204;border:none;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
 }
+.voice-card__play.is-playing{background:var(--jade);}
+
+/* ===== Homepage: sample chips, FAQ, blog teaser, final CTA ===== */
+.sample-chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px;}
+.sample-chip{
+  display:flex;align-items:center;gap:8px;background:var(--ink-panel);
+  border:1px solid var(--line);border-radius:999px;padding:6px 8px 6px 14px;
+  font-size:0.85rem;color:var(--text-mid);
+}
+.sample-chip .voice-card__play{margin-top:0;width:28px;height:28px;font-size:0.75rem;}
+.shot-frame{
+  margin-top:14px;border-radius:var(--radius);border:1px solid var(--line);
+  background:var(--ink-panel);min-height:120px;overflow:hidden;
+}
+.shot-frame img{display:block;width:100%;height:auto;}
+.faq details{
+  border-bottom:1px solid var(--line);padding:16px 0;
+}
+.faq summary{
+  cursor:pointer;color:var(--text-hi);font-family:var(--display);font-size:1.05rem;
+  list-style:none;display:flex;justify-content:space-between;align-items:center;
+}
+.faq summary::-webkit-details-marker{display:none;}
+.faq summary::after{content:'+';color:var(--brass);font-size:1.3rem;}
+.faq details[open] summary::after{content:'–';}
+.faq p{color:var(--text-mid);margin-top:10px;font-size:0.92rem;}
+.final-cta{
+  text-align:center;padding:64px 28px;background:var(--ink-panel);
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+}
+.final-cta p{color:var(--text-dim);margin-top:14px;font-size:0.88rem;}
 
 /* ===== Pricing ===== */
 .plans{
