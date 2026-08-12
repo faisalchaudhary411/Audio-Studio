@@ -115,8 +115,57 @@ function initNavToggle(){
   });
 }
 
+// ---- Voice preview play/pause (landing page voice library) ----
+// Gracefully handles missing audio files (real preview clips get added by
+// Faisal after generating them in Studio) — a missing file just disables
+// that one button instead of erroring visibly.
+function initVoicePreviews(){
+  const buttons = document.querySelectorAll('.voice-card__play[data-audio]');
+  if(!buttons.length) return;
+  let currentAudio = null;
+  let currentBtn = null;
+
+  buttons.forEach(btn => {
+    const src = btn.getAttribute('data-audio');
+    let audio = null;
+
+    btn.addEventListener('click', () => {
+      if(btn.disabled) return;
+
+      // Same button clicked while playing -> pause it
+      if(currentAudio && currentBtn === btn && !currentAudio.paused){
+        currentAudio.pause();
+        btn.classList.remove('is-playing');
+        return;
+      }
+      // A different preview was playing -> stop it first
+      if(currentAudio && currentBtn !== btn){
+        currentAudio.pause();
+        currentBtn.classList.remove('is-playing');
+      }
+
+      if(!audio){
+        audio = new Audio(src);
+        audio.addEventListener('ended', () => btn.classList.remove('is-playing'));
+        audio.addEventListener('error', () => {
+          btn.disabled = true;
+          btn.title = 'Preview coming soon';
+          btn.style.opacity = '0.35';
+          btn.style.cursor = 'not-allowed';
+        });
+      }
+      currentAudio = audio;
+      currentBtn = btn;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+      btn.classList.add('is-playing');
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initWave();
   initStudio();
   initNavToggle();
+  initVoicePreviews();
 });
