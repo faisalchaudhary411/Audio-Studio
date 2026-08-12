@@ -290,7 +290,32 @@ def _bump_monthly_chars(char_count: int):
 
 @app.route("/")
 def landing():
-    return render_template("landing.html")
+    # Curated, real subset for the homepage voice library — South Asian
+    # languages featured prominently per the differentiation strategy.
+    # audio_slug matches the predictable /static/audio/previews/<slug>.mp3
+    # naming convention the preview player (main.js initVoicePreviews)
+    # expects — missing files degrade gracefully rather than erroring.
+    featured_voices = [
+        {"name": "Uzma", "gender": "Female", "language": "Urdu", "voice_id": "ur-PK-UzmaNeural"},
+        {"name": "Asad", "gender": "Male", "language": "Urdu", "voice_id": "ur-PK-AsadNeural"},
+        {"name": "Swara", "gender": "Female", "language": "Hindi", "voice_id": "hi-IN-SwaraNeural"},
+        {"name": "Tanishaa", "gender": "Female", "language": "Bengali", "voice_id": "bn-IN-TanishaaNeural"},
+        {"name": "Vaani", "gender": "Female", "language": "Punjabi", "voice_id": "pa-IN-VaaniNeural"},
+        {"name": "Pallavi", "gender": "Female", "language": "Tamil", "voice_id": "ta-IN-PallaviNeural"},
+        {"name": "Shruti", "gender": "Female", "language": "Telugu", "voice_id": "te-IN-ShrutiNeural"},
+        {"name": "Jenny", "gender": "Female", "language": "US English", "voice_id": "en-US-JennyNeural"},
+        {"name": "Ryan", "gender": "Male", "language": "UK English", "voice_id": "en-GB-RyanNeural"},
+        {"name": "Zariyah", "gender": "Female", "language": "Arabic", "voice_id": "ar-SA-ZariyahNeural"},
+        {"name": "Henri", "gender": "Male", "language": "French", "voice_id": "fr-FR-HenriNeural"},
+        {"name": "Xiaoxiao", "gender": "Female", "language": "Chinese (Mandarin)", "voice_id": "zh-CN-XiaoxiaoNeural"},
+    ]
+    for v in featured_voices:
+        v["audio_slug"] = v["voice_id"].lower()
+
+    all_posts = persistence.load_blogs()
+    recent_posts = [p for p in all_posts if p.get("published")][:3]
+
+    return render_template("landing.html", featured_voices=featured_voices, recent_posts=recent_posts)
 
 
 def usage_summary() -> dict:

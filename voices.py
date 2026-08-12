@@ -43,6 +43,9 @@ VOICES = {
     "Swedish": {"Sofie — Female": "sv-SE-SofieNeural", "Mattias — Male": "sv-SE-MattiasNeural"},
     "Urdu": {"Uzma — Female": "ur-PK-UzmaNeural", "Asad — Male": "ur-PK-AsadNeural", "Gul (India) — Female": "ur-IN-GulNeural", "Salman (India) — Male": "ur-IN-SalmanNeural"},
     "Punjabi": {"Vaani — Female": "pa-IN-VaaniNeural", "Ojas — Male": "pa-IN-OjasNeural"},
+    "Bengali": {"Tanishaa — Female": "bn-IN-TanishaaNeural", "Bashkar — Male": "bn-IN-BashkarNeural", "Pradeep (Bangladesh) — Male": "bn-BD-PradeepNeural"},
+    "Tamil": {"Pallavi — Female": "ta-IN-PallaviNeural", "Valluvar — Male": "ta-IN-ValluvarNeural"},
+    "Telugu": {"Shruti — Female": "te-IN-ShrutiNeural", "Mohan — Male": "te-IN-MohanNeural"},
     # Note: "More Languages (Google, 1 voice each)" (GT:: prefixed) intentionally
     # left out of this pass — those route through gTTS directly rather than
     # edge-tts and need a small extra branch in tts_dispatch. Flag if you want
@@ -59,6 +62,9 @@ FREE_VOICES = {
     "Arabic": {"Zariyah — Female": "ar-SA-ZariyahNeural", "Hamed — Male": "ar-SA-HamedNeural"},
     "Hindi": {"Swara — Female": "hi-IN-SwaraNeural", "Madhur — Male": "hi-IN-MadhurNeural"},
     "Urdu": {"Uzma — Female": "ur-PK-UzmaNeural", "Asad — Male": "ur-PK-AsadNeural"},
+    "Bengali": {"Tanishaa — Female": "bn-IN-TanishaaNeural", "Bashkar — Male": "bn-IN-BashkarNeural"},
+    "Tamil": {"Pallavi — Female": "ta-IN-PallaviNeural", "Valluvar — Male": "ta-IN-ValluvarNeural"},
+    "Telugu": {"Shruti — Female": "te-IN-ShrutiNeural", "Mohan — Male": "te-IN-MohanNeural"},
 }
 
 PREVIEW_TEXT = {
@@ -74,6 +80,9 @@ PREVIEW_TEXT = {
     "Hindi": "नमस्ते! यह एक आवाज़ का पूर्वावलोकन है।",
     "Arabic": "مرحبا! هذه معاينة صوتية.",
     "Japanese": "こんにちは！これは音声プレビューです。",
+    "Bengali": "হ্যালো! এটি একটি ভয়েস প্রিভিউ।",
+    "Tamil": "வணக்கம்! இது ஒரு குரல் மாதிரி.",
+    "Telugu": "నమస్కారం! ఇది వాయిస్ ప్రివ్యూ.",
 }
 
 
