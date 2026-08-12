@@ -8,12 +8,34 @@
   <h1 class="hero__title">Every script deserves a <em>voice</em> that fits.</h1>
   <svg class="wave" role="img" aria-label="Animated audio waveform"></svg>
   <p class="hero__sub">
-    VoxCraft turns scripts into natural narration across Urdu, Bengali, Tamil, Telugu,
-    English and more — built for YouTube creators, dubbers, and studios who ship daily.
+    VoxCraft turns scripts into natural narration across Urdu, Hindi, Bengali, Punjabi,
+    Tamil, Telugu, English, and 20 more languages — built for YouTube creators, dubbers,
+    and studios who ship daily.
   </p>
   <div class="hero__actions">
     <a href="{{ url_for('studio') }}" class="btn btn--brass">Start creating — free</a>
     <a href="{{ url_for('pricing') }}" class="btn btn--ghost">See pricing</a>
+  </div>
+  <p style="color:var(--text-dim);font-size:0.85rem;margin-top:10px;">No signup — generate your first voiceover in 10 seconds.</p>
+
+  {# Quick audio samples right in the hero — reuses the same play-button
+     pattern/JS as the full voice library below (initVoicePreviews in
+     main.js), so no separate wiring needed. Real audio files go at
+     /static/audio/previews/<voice-id-lowercase>.mp3 — missing files just
+     disable that one chip instead of breaking anything. #}
+  <div class="sample-chips">
+    <div class="sample-chip">
+      <button class="voice-card__play" data-audio="/static/audio/previews/ur-pk-uzmaneural.mp3" aria-label="Preview Uzma, Urdu">▶</button>
+      Uzma · Urdu
+    </div>
+    <div class="sample-chip">
+      <button class="voice-card__play" data-audio="/static/audio/previews/hi-in-swaraneural.mp3" aria-label="Preview Swara, Hindi">▶</button>
+      Swara · Hindi
+    </div>
+    <div class="sample-chip">
+      <button class="voice-card__play" data-audio="/static/audio/previews/en-us-jennyneural.mp3" aria-label="Preview Jenny, US English">▶</button>
+      Jenny · US English
+    </div>
   </div>
 </section>
 
@@ -22,62 +44,129 @@
     <span class="chain__label">01 — Input</span>
     <h3>Drop in your script</h3>
     <p>Paste text in any supported language. VoxCraft handles numerals, loanwords, and punctuation cues automatically.</p>
+    {# Replace src with a real screenshot: /static/img/screenshots/step-input.png — hidden automatically if missing. #}
+    <div class="shot-frame"><img src="/static/img/screenshots/step-input.png" alt="Pasting a script into VoxCraft Studio" loading="lazy" onerror="this.parentElement.style.display='none'"></div>
   </div>
   <span class="chain__arrow">→</span>
   <div class="chain__node">
     <span class="chain__label">02 — Voice</span>
     <h3>Pick a voice model</h3>
     <p>Neural voices tuned per-language, with adjustable rate and pitch — no SSML wrangling required.</p>
+    <div class="shot-frame"><img src="/static/img/screenshots/step-voice.png" alt="Choosing a voice in VoxCraft Studio" loading="lazy" onerror="this.parentElement.style.display='none'"></div>
   </div>
   <span class="chain__arrow">→</span>
   <div class="chain__node">
     <span class="chain__label">03 — Render</span>
     <h3>Export clean audio</h3>
     <p>Download MP3 or WAV, ready to drop into your edit — captions-friendly timing included.</p>
+    <div class="shot-frame"><img src="/static/img/screenshots/step-render.png" alt="Downloading rendered audio from VoxCraft Studio" loading="lazy" onerror="this.parentElement.style.display='none'"></div>
   </div>
 </div>
 
-<section class="section" id="voices">
-  <div class="section__head">
-    <span class="section__eyebrow">Voice library</span>
-    <h2 class="section__title">A voice for every region, not an afterthought.</h2>
-    <p class="section__sub">South Asian languages are first-class here — not a bolt-on translation layer.</p>
-  </div>
-  <div class="voice-grid">
-    {% for v in voices %}
-    <div class="voice-card">
-      <div class="voice-card__top">
-        <span class="voice-card__name">{{ v.name }}</span>
-        <span class="voice-card__tag">{{ v.tag }}</span>
-      </div>
-      <div class="voice-card__meta">{{ v.lang }} · {{ v.gender }}</div>
-      <button class="voice-card__play" aria-label="Preview {{ v.name }}">▶</button>
-    </div>
-    {% endfor %}
-  </div>
-</section>
-
 <section class="section">
   <div class="section__head">
-    <span class="section__eyebrow">Why VoxCraft</span>
+    <span class="section__eyebrow">Why creators switch</span>
     <h2 class="section__title">Built by someone shipping with it daily.</h2>
   </div>
   <div class="chain" style="margin-top:0;">
+    <div class="chain__node">
+      <h3>Handles code-switching natively</h3>
+      <p>Mixed Urdu-English scripts, South Asian names, and local number formats — read the way people actually speak, not mangled by a model trained only on English.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
     <div class="chain__node">
       <h3>No SSML headaches</h3>
       <p>Rate and pitch controls that actually work — nothing read aloud verbatim.</p>
     </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
     <div class="chain__node">
-      <h3>Real language handling</h3>
-      <p>Numbers, percentages, and loanwords pronounced the way people actually say them.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>Built for volume</h3>
-      <p>Priority render queues so daily-upload creators aren't stuck waiting.</p>
+      <h3>No signup, ever</h3>
+      <p>The free tier works the moment you land here. No account wall between you and your first voiceover.</p>
     </div>
   </div>
+</section>
+
+<section class="section" id="voices">
+  <div class="section__head">
+    <span class="section__eyebrow">Voice library</span>
+    <h2 class="section__title">A voice for every region, not an afterthought.</h2>
+    <p class="section__sub">88 voices across 27 languages. South Asian languages are first-class here — not a bolt-on translation layer.</p>
+  </div>
+  <div class="voice-grid">
+    {% for v in featured_voices %}
+    <div class="voice-card">
+      <div class="voice-card__top">
+        <span class="voice-card__name">{{ v.name }}</span>
+      </div>
+      <div class="voice-card__meta">{{ v.language }} · {{ v.gender }}</div>
+      <button class="voice-card__play" data-audio="/static/audio/previews/{{ v.audio_slug }}.mp3" aria-label="Preview {{ v.name }}, {{ v.language }}">▶</button>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="margin-top:24px;text-align:center;">
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost">See all 88 voices in Studio</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Pricing</span>
+    <h2 class="section__title">Free to start. One plan when you're ready.</h2>
+    <p class="section__sub">Unlimited characters, all 88 voices, zero ads — no tiers to compare, no feature gate to hunt for.</p>
+  </div>
+  <div style="text-align:center;">
+    <a href="{{ url_for('pricing') }}" class="btn btn--brass">See full pricing</a>
+  </div>
+</section>
+
+<section class="section faq">
+  <div class="section__head">
+    <span class="section__eyebrow">Questions</span>
+    <h2 class="section__title">Before you start</h2>
+  </div>
+  <details>
+    <summary>Does it actually sound natural, or robotic?</summary>
+    <p>VoxCraft uses neural TTS voices, not the older robotic synthesis style — the same underlying voice technology used by major platforms. The best way to judge is to listen: try the samples above, or generate your own script free.</p>
+  </details>
+  <details>
+    <summary>Can I use the audio commercially — YouTube, ads, client work?</summary>
+    <p>Yes. Audio you generate is yours to use, including monetized YouTube videos, client projects, and commercial work.</p>
+  </details>
+  <details>
+    <summary>Do you store or read the scripts I paste in?</summary>
+    <p>Scripts are processed to generate your audio and aren't used for anything beyond that. See the <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">privacy page</a> for the full details.</p>
+  </details>
+  <details>
+    <summary>Do I need to create an account to try it?</summary>
+    <p>No. The free tier works immediately — no signup, no email, no card required to generate your first voiceover.</p>
+  </details>
+</section>
+
+{% if recent_posts %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">From the blog</span>
+    <h2 class="section__title">Guides for creators</h2>
+  </div>
+  <div class="voice-grid">
+    {% for post in recent_posts %}
+    <a href="{{ url_for('blog_detail', post_id=post.id) }}" class="panel" style="display:block;">
+      <span class="voice-card__tag" style="margin-bottom:10px;display:inline-block;">{{ post.category or 'General' }}</span>
+      <h3 style="font-family:var(--display);font-size:1.15rem;margin:6px 0;">{{ post.title }}</h3>
+      <p style="color:var(--text-mid);font-size:0.88rem;">{{ post.excerpt }}</p>
+    </a>
+    {% endfor %}
+  </div>
+  <div style="margin-top:20px;text-align:center;">
+    <a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">Read more on the blog</a>
+  </div>
+</section>
+{% endif %}
+
+<section class="final-cta">
+  <h2 class="section__title">Start creating — free</h2>
+  <a href="{{ url_for('studio') }}" class="btn btn--brass" style="margin-top:20px;display:inline-flex;">Start creating — free</a>
+  <p>No signup. No card. Your first voiceover in about 10 seconds.</p>
 </section>
 
 {% endblock %}
