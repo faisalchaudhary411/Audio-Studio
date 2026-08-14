@@ -30,6 +30,7 @@ import json
 import sqlite3
 import contextlib
 import threading
+import random
 
 DB_PATH = os.environ.get(
     "DB_PATH",
@@ -113,6 +114,12 @@ def init_db():
                     position INTEGER NOT NULL,
                     data     TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS traffic_hits (
+                    date    TEXT NOT NULL,
+                    ip_hash TEXT NOT NULL,
+                    hits    INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY (date, ip_hash)
+                );
             """)
             conn.commit()
         finally:
@@ -191,6 +198,66 @@ def load_active_announcements(limit: int = 20) -> list:
     ]
     live.sort(key=lambda a: a.get("created", ""), reverse=True)
     return live[:limit]
+
+
+# ---- traffic (lightweight daily visitor/pageview counter — NOT the same
+#      table as `usage` above, which tracks free-tier quota consumption and
+#      keeps a full JSON blob per IP/fingerprint. This one is a single-row
+#      upsert per (date, ip_hash) so logging a pageview never requires
+#      loading the whole table, unlike the load-dict/mutate/save-dict
+#      pattern used elsewhere — that would get slower every single day as
+#      history accumulates, which is untenable for something written on
+#      nearly every request.) ----
+def log_visit(ip_hash: str, date: str = None):
+    """Increments today's hit count for this IP hash — one row per
+    (date, ip_hash), so COUNT(DISTINCT ip_hash) for a date is 'unique
+    visitors' and SUM(hits) is 'pageviews'. 1-in-500 calls also prunes rows
+    older than 180 days, keeping the table from growing forever without
+    needing a separate cron job — cheap enough to piggyback on a request
+    that's already writing here."""
+    import datetime as _dt
+    date = date or _dt.date.today().isoformat()
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO traffic_hits(date, ip_hash, hits) VALUES (?, ?, 1) "
+                "ON CONFLICT(date, ip_hash) DO UPDATE SET hits = hits + 1",
+                (date, ip_hash),
+            )
+            if random.random() < 0.002:
+                cutoff = (_dt.date.today() - _dt.timedelta(days=180)).isoformat()
+                conn.execute("DELETE FROM traffic_hits WHERE date < ?", (cutoff,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        finally:
+            conn.close()
+
+
+def get_daily_traffic(days: int = 30) -> list:
+    """Newest-first list of {date, visitors, pageviews} for the last `days`
+    calendar days (including days with zero traffic, so a chart doesn't
+    silently skip gaps)."""
+    import datetime as _dt
+    today = _dt.date.today()
+    start = (today - _dt.timedelta(days=days - 1)).isoformat()
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT date, COUNT(DISTINCT ip_hash) AS visitors, SUM(hits) AS pageviews "
+            "FROM traffic_hits WHERE date >= ? GROUP BY date",
+            (start,),
+        ).fetchall()
+    finally:
+        conn.close()
+    by_date = {r[0]: {"visitors": r[1], "pageviews": r[2]} for r in rows}
+    out = []
+    for i in range(days):
+        d = (today - _dt.timedelta(days=i)).isoformat()
+        stats = by_date.get(d, {"visitors": 0, "pageviews": 0})
+        out.append({"date": d, "visitors": stats["visitors"], "pageviews": stats["pageviews"]})
+    return out
 
 
 # ---- requests ----

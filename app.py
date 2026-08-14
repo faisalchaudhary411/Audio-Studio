@@ -160,6 +160,28 @@ def _auto_restore_pro_session():
     if restored_key:
         session["license_key"] = restored_key
 
+
+# Prefixes deliberately excluded from the visitor counter: static assets
+# (not a "visit"), the admin panel itself (so Faisal checking his own
+# dashboard doesn't inflate his own traffic numbers), API/webhook calls
+# (machine-to-machine, not a page view), and misc crawler/infra paths.
+_TRAFFIC_EXCLUDED_PREFIXES = ("/static/", "/admin", "/api/", "/webhook/", "/ads/", "/ads.txt")
+
+
+@app.before_request
+def _track_traffic():
+    """One row per (day, ip_hash) — see persistence.log_visit(). GET-only
+    so form submissions/API calls from an already-counted page load don't
+    double-count; excluded prefixes above. Best-effort: a logging failure
+    here should never take down the actual page request."""
+    if request.method != "GET" or request.path.startswith(_TRAFFIC_EXCLUDED_PREFIXES):
+        return
+    try:
+        ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
+        persistence.log_visit(ip_hash)
+    except Exception:
+        pass
+
 # librosa's pitch_shift uses numba, which JIT-compiles on first call —
 # ~20s the very first time, milliseconds after. Warming it up here (module
 # level, so this runs under gunicorn too, not just `python app.py` directly)
@@ -627,10 +649,12 @@ def admin_dashboard():
     pending_reqs = sum(1 for r in reqs if r.get("status") in ("pending", "payment_pending"))
     anns = persistence.load_announcements()
     live_anns = sum(1 for a in anns if a.get("active"))
+    today_visitors = persistence.get_daily_traffic(1)[0]["visitors"]
     return render_template("admin/dashboard.html",
                             total_keys=len(keys), active_keys=active_keys,
                             pending_reqs=pending_reqs, total_posts=len(posts),
                             total_anns=len(anns), live_anns=live_anns,
+                            today_visitors=today_visitors,
                             db_path=persistence.DB_PATH)
 
 
@@ -704,6 +728,23 @@ def admin_requests():
         return redirect(url_for("admin_requests"))
     reqs = persistence.load_requests()
     return render_template("admin/requests.html", reqs=reqs)
+
+
+@app.route("/admin/traffic")
+@admin_required
+def admin_traffic():
+    days = int(request.args.get("days", 30))
+    days = max(7, min(days, 90))  # sane bounds — a bad ?days= value shouldn't trigger a huge query
+    daily = persistence.get_daily_traffic(days)
+    chart_data = list(reversed(daily))  # oldest-first for left-to-right chart reading
+    today_stats = daily[0] if daily else {"visitors": 0, "pageviews": 0}
+    month_visitors = sum(d["visitors"] for d in daily[:30])
+    month_pageviews = sum(d["pageviews"] for d in daily[:30])
+    max_visitors = max((d["visitors"] for d in chart_data), default=0) or 1
+    return render_template("admin/traffic.html", daily=daily, chart_data=chart_data,
+                            today_stats=today_stats, month_visitors=month_visitors,
+                            month_pageviews=month_pageviews, max_visitors=max_visitors,
+                            days=days)
 
 
 @app.route("/admin/blog", methods=["GET", "POST"])
