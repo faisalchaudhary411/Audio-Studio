@@ -72,12 +72,13 @@ img{max-width:100%;display:block;}
 .nav__mark{color:var(--brass);display:flex;}
 .nav__links{display:flex;gap:24px;font-size:0.92rem;color:var(--text-mid);align-items:center;}
 .nav__links a:hover{color:var(--text-hi);}
-.nav__cta{margin-left:16px;}
+.nav__actions{display:flex;align-items:center;gap:12px;}
+.nav__cta{margin-left:0;}
 .nav__hamburger{
   display:none;
   flex-direction:column;justify-content:center;gap:5px;
   width:36px;height:36px;background:transparent;border:none;cursor:pointer;
-  padding:0;margin-left:auto;margin-right:10px;
+  padding:0;
 }
 .nav__hamburger span{
   display:block;width:22px;height:2px;background:var(--text-hi);border-radius:2px;
@@ -103,18 +104,21 @@ img{max-width:100%;display:block;}
   }
   .nav__links.is-open{display:flex;}
   .nav__links a{width:100%;padding:10px 4px;}
-  .nav__cta{order:5;}
+  .nav__actions{gap:8px;}
 }
 
 /* ===== Notification bell + dropdown ===== */
-.notif-bell-wrap{position:relative;margin-left:6px;}
+.notif-bell-wrap{position:relative;}
 .notif-bell{
-  position:relative;width:38px;height:38px;border-radius:50%;
-  background:transparent;border:1px solid var(--line);color:var(--text-hi);
+  appearance:none;-webkit-appearance:none;
+  position:relative;width:36px;height:36px;border-radius:50%;
+  background:var(--ink-panel);border:1px solid var(--line);color:var(--text-hi);
   display:flex;align-items:center;justify-content:center;cursor:pointer;
-  transition:border-color .15s ease,color .15s ease;
+  padding:0;line-height:0;box-shadow:none;
+  transition:border-color .15s ease,color .15s ease,background .15s ease;
 }
-.notif-bell:hover{border-color:var(--brass);color:var(--brass-hi);}
+.notif-bell svg{display:block;}
+.notif-bell:hover{border-color:var(--brass);color:var(--brass-hi);background:var(--ink-panel-2);}
 .notif-bell__badge{
   position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;
   background:var(--brass);color:#1A1204;border-radius:999px;
