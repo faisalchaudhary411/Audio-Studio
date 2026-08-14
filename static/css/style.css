@@ -424,3 +424,27 @@ input.admin-input{
   background:var(--ink);border:1px solid var(--line);border-radius:6px;
   color:var(--text-hi);padding:6px 10px;font-family:var(--mono);font-size:0.85rem;width:90px;
 }
+
+/* ===== Admin: traffic chart ===== */
+.traffic-chart{
+  display:flex;align-items:flex-end;gap:3px;height:160px;
+  border-bottom:1px solid var(--line);padding-bottom:2px;
+}
+.traffic-chart__col{
+  flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+  height:100%;min-width:4px;
+}
+.traffic-chart__bar{
+  width:100%;min-height:2px;border-radius:3px 3px 0 0;
+  background:var(--jade);
+  transition:background .15s ease;
+}
+.traffic-chart__col:hover .traffic-chart__bar{background:var(--brass);}
+.traffic-chart__label{
+  font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);
+  margin-top:6px;writing-mode:vertical-rl;transform:rotate(180deg);
+  white-space:nowrap;
+}
+@media (max-width:600px){
+  .traffic-chart__label{display:none;}
+}
