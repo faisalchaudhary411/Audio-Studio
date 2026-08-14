@@ -211,6 +211,26 @@ def delete_key(key: str):
         _save(keys)
 
 
+def reset_device_lock(key: str) -> bool:
+    """Admin escape hatch: clears a key's 'used' flag and device history so
+    the customer can reactivate from their current device immediately,
+    without minting them a brand new key string. Exists for cases like a
+    legitimate reactivation being wrongly rejected (see get_browser_
+    fingerprint's docstring in usage_tracking.py) — subscription status,
+    expiry, and customer info are all left untouched; only the device lock
+    resets."""
+    keys = _keys()
+    if key not in keys:
+        return False
+    keys[key]["used"] = False
+    keys[key]["activated_by"] = ""
+    keys[key]["activated_fp"] = ""
+    keys[key]["activated_ips"] = []
+    keys[key]["activated_fps"] = []
+    _save(keys)
+    return True
+
+
 def renew_subscription(key: str) -> bool:
     keys = _keys()
     if key not in keys:

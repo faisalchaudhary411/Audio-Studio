@@ -677,6 +677,8 @@ def admin_keys():
             licensing.unrevoke_key(key)
         elif action == "delete":
             licensing.delete_key(key)
+        elif action == "reset_device":
+            licensing.reset_device_lock(key)
         return redirect(url_for("admin_keys"))
     licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before displaying
     keys = persistence.load_license_keys()

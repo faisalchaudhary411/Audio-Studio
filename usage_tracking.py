@@ -29,6 +29,7 @@ total, so a single write always carries the complete current state.
 """
 
 import hashlib
+import re
 import datetime as dt
 import threading
 
@@ -52,17 +53,38 @@ def hash_ip(ip: str) -> str:
 
 def get_browser_fingerprint(request) -> str:
     """Stable fingerprint from headers, falling back to IP hash if no
-    identifying headers are present at all."""
+    identifying headers are present at all.
+
+    BUG FIX: version numbers are stripped from every component before
+    hashing. The original version hashed the raw User-Agent (and Sec-CH-UA,
+    which also embeds a version) as-is — but Chrome auto-updates every few
+    weeks, which changes the version number embedded in both headers,
+    which silently changed the fingerprint for every returning visitor.
+    For licensing.py's device-lock (which requires this fingerprint to
+    match stored history to reactivate or silently auto-restore Pro), that
+    meant a routine browser update could lock a paying customer out of
+    their own key with no warning and no obvious cause — confirmed in
+    production (voxcraft.site, Aug 2026): a customer's reactivation was
+    rejected with "already used on another device" despite it being the
+    same phone and same Chrome install, because the Chrome version ticked
+    over between visits. Stripping digits keeps the parts of the
+    fingerprint that actually distinguish devices (OS, device model,
+    language, mobile vs desktop) while dropping the part that changes
+    under the visitor without them doing anything."""
     components = []
     ua = request.headers.get("User-Agent", "")
     if ua:
-        components.append(ua)
+        components.append(re.sub(r"\d[\d.]*", "", ua))
     al = request.headers.get("Accept-Language", "")
     if al:
-        components.append(al)
+        # Only the primary language tag, and only the tag itself — the full
+        # header can include a weighted list (e.g. "en-US,en;q=0.9") whose
+        # order/weights some browsers vary between requests on the same
+        # device, and the ";q=" weight is itself a number that could drift.
+        components.append(al.split(",")[0].split(";")[0].strip())
     ch = request.headers.get("Sec-CH-UA", "")
     if ch:
-        components.append(ch)
+        components.append(re.sub(r"\d[\d.]*", "", ch))
     if components:
         return hashlib.sha256("|".join(components).encode()).hexdigest()[:16]
     return hash_ip(get_client_ip(request))
