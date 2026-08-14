@@ -108,6 +108,11 @@ def init_db():
                     ip_hash TEXT PRIMARY KEY,
                     data    TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS announcements (
+                    id       TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL,
+                    data     TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -161,6 +166,31 @@ def load_blogs() -> list:
 
 def save_blogs(posts: list) -> tuple:
     return _replace_ordered_table("blogs", "id", posts)
+
+
+# ---- announcements (admin-authored notices — discounts / product updates —
+#      shown to visitors via the bell dropdown + optional top banner) ----
+def load_announcements() -> list:
+    return _load_ordered_table("announcements")
+
+
+def save_announcements(items: list) -> tuple:
+    return _replace_ordered_table("announcements", "id", items)
+
+
+def load_active_announcements(limit: int = 20) -> list:
+    """Newest-first, only items that are active and not past their expiry
+    date. Filtering happens here (not client-side) so an expired discount
+    can never leak into the API response even briefly."""
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    items = load_announcements()
+    live = [
+        a for a in items
+        if a.get("active") and (not a.get("expires") or a.get("expires") >= today)
+    ]
+    live.sort(key=lambda a: a.get("created", ""), reverse=True)
+    return live[:limit]
 
 
 # ---- requests ----

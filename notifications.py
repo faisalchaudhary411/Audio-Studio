@@ -131,6 +131,42 @@ Approve here: {admin_link}
     return notified
 
 
+def notify_admin_announcement_published(title, ann_type, message, site_url="") -> bool:
+    """Sends the admin a copy of an announcement they just published — a
+    confirmation/record, not a request for approval (unlike
+    notify_admin_new_request). Opt-in from the admin/notifications form, so
+    routine discount/update posts don't clutter the inbox unless wanted."""
+    resend_key = _secret("RESEND_API_KEY")
+    admin_email = _secret("ADMIN_EMAIL")
+    if not (resend_key and admin_email):
+        return False
+    manage_link = f"{site_url.rstrip('/')}/admin/notifications" if site_url else "/admin/notifications"
+    type_label = {"discount": "Discount", "update": "Update"}.get(ann_type, "Announcement")
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">{type_label} Published</div>
+    <div style="color:#1A1204;font-size:13px">Now live on VoxCraft</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <div style="color:#E8A93C;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">{type_label}</div>
+    <div style="color:#fff;font-size:16px;font-weight:700;margin-bottom:8px">{title}</div>
+    <div style="color:#ccc;font-size:14px;">{message}</div>
+  </div>
+  <div style="text-align:center;">
+    <a href="{manage_link}" style="display:inline-block;background:#E8A93C;color:#1A1204;padding:10px 24px;border-radius:12px;font-weight:700;text-decoration:none;font-size:14px;">Manage announcements →</a>
+  </div>
+</div></body></html>"""
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [admin_email],
+                                 "subject": f"{type_label} published — {title}", "html": html}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
 def send_key_email(user_email: str, user_name: str, license_key: str) -> bool:
     resend_key = _secret("RESEND_API_KEY")
     if not resend_key:

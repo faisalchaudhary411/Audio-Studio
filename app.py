@@ -40,6 +40,7 @@ import persistence
 import licensing
 import usage_tracking
 import pro_requests
+import notifications
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import hmac
@@ -624,9 +625,12 @@ def admin_dashboard():
     posts = persistence.load_blogs()
     active_keys = sum(1 for k, v in keys.items() if licensing.is_subscription_active(v) and not v.get("revoked"))
     pending_reqs = sum(1 for r in reqs if r.get("status") in ("pending", "payment_pending"))
+    anns = persistence.load_announcements()
+    live_anns = sum(1 for a in anns if a.get("active"))
     return render_template("admin/dashboard.html",
                             total_keys=len(keys), active_keys=active_keys,
                             pending_reqs=pending_reqs, total_posts=len(posts),
+                            total_anns=len(anns), live_anns=live_anns,
                             db_path=persistence.DB_PATH)
 
 
@@ -748,6 +752,88 @@ def admin_blog():
     if edit_id:
         edit_post = next((p for p in posts if str(p["id"]) == edit_id), None)
     return render_template("admin/blog.html", posts=posts, edit_post=edit_post)
+
+
+@app.route("/admin/notifications", methods=["GET", "POST"])
+@admin_required
+def admin_notifications():
+    """Admin-authored notices — discounts or product updates — shown to
+    every visitor via the bell dropdown in the nav, and optionally as a
+    dismissible top banner. Same create/edit/toggle/delete shape as
+    admin_blog above, plus an opt-in 'email me a copy on publish' checkbox
+    that reuses the Resend pattern from notifications.py."""
+    anns = persistence.load_announcements()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "create":
+            new_ann = {
+                "id": str(int(time.time() * 1000)),  # ms precision — two posts in the same second would otherwise collide
+                "type": request.form.get("type", "update"),
+                "title": request.form.get("title", "").strip(),
+                "message": request.form.get("message", "").strip(),
+                "link_url": request.form.get("link_url", "").strip(),
+                "link_text": request.form.get("link_text", "").strip() or "Learn more",
+                "banner": request.form.get("banner") == "on",
+                "active": request.form.get("active") == "on",
+                "expires": request.form.get("expires", "").strip(),
+                "created": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            }
+            anns.insert(0, new_ann)
+            persistence.save_announcements(anns)
+            if new_ann["active"] and request.form.get("email_me") == "on":
+                notifications.notify_admin_announcement_published(
+                    new_ann["title"], new_ann["type"], new_ann["message"],
+                    site_url=request.url_root)
+        elif action == "update":
+            ann_id = request.form.get("ann_id")
+            for a in anns:
+                if str(a["id"]) == ann_id:
+                    a["type"] = request.form.get("type", "update")
+                    a["title"] = request.form.get("title", "").strip()
+                    a["message"] = request.form.get("message", "").strip()
+                    a["link_url"] = request.form.get("link_url", "").strip()
+                    a["link_text"] = request.form.get("link_text", "").strip() or "Learn more"
+                    a["banner"] = request.form.get("banner") == "on"
+                    a["active"] = request.form.get("active") == "on"
+                    a["expires"] = request.form.get("expires", "").strip()
+                    # created intentionally untouched — editing shouldn't
+                    # bump it back to the top of the newest-first list.
+            persistence.save_announcements(anns)
+        elif action == "toggle_active":
+            ann_id = request.form.get("ann_id")
+            for a in anns:
+                if str(a["id"]) == ann_id:
+                    a["active"] = not a.get("active", False)
+            persistence.save_announcements(anns)
+        elif action == "delete":
+            ann_id = request.form.get("ann_id")
+            anns = [a for a in anns if str(a["id"]) != ann_id]
+            persistence.save_announcements(anns)
+        return redirect(url_for("admin_notifications"))
+
+    edit_id = request.args.get("edit")
+    edit_ann = None
+    if edit_id:
+        edit_ann = next((a for a in anns if str(a["id"]) == edit_id), None)
+    return render_template("admin/notifications.html", anns=anns, edit_ann=edit_ann)
+
+
+@app.route("/api/announcements")
+def api_announcements():
+    """Public, unauthenticated — the bell dropdown and top banner fetch
+    this on every page load. Deliberately returns only the fields the
+    frontend needs, not the raw DB rows."""
+    live = persistence.load_active_announcements()
+    return jsonify([{
+        "id": a["id"],
+        "type": a.get("type", "update"),
+        "title": a.get("title", ""),
+        "message": a.get("message", ""),
+        "link_url": a.get("link_url", ""),
+        "link_text": a.get("link_text", "Learn more"),
+        "banner": bool(a.get("banner")),
+        "created": a.get("created", ""),
+    } for a in live])
 
 
 @app.route("/ads.txt")
