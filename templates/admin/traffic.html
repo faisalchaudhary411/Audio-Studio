@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Admin — Traffic{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Traffic</h2>
+    <p class="section__sub">Unique visitors and pageviews, counted by IP per calendar day. Static assets, the admin panel, and API/webhook calls aren't counted.</p>
+  </div>
+
+  <div class="admin__grid" style="margin-bottom:20px;">
+    <div class="panel">
+      <span class="panel__label">Today</span>
+      <div style="font-family:var(--display);font-size:2rem;">{{ today_stats.visitors }} <span style="font-size:1rem;color:var(--text-dim);">visitors</span></div>
+      <div style="color:var(--text-dim);font-size:0.85rem;margin-top:4px;">{{ today_stats.pageviews }} pageviews</div>
+    </div>
+    <div class="panel">
+      <span class="panel__label">Last 30 days</span>
+      <div style="font-family:var(--display);font-size:2rem;">{{ month_visitors }} <span style="font-size:1rem;color:var(--text-dim);">visitor-days</span></div>
+      <div style="color:var(--text-dim);font-size:0.85rem;margin-top:4px;">{{ month_pageviews }} pageviews</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <span class="panel__label" style="margin-bottom:0;">Daily visitors — last {{ days }} days</span>
+      <div style="display:flex;gap:6px;">
+        <a href="{{ url_for('admin_traffic', days=7) }}" class="btn btn--ghost btn--sm{% if days == 7 %} btn--brass{% endif %}">7d</a>
+        <a href="{{ url_for('admin_traffic', days=30) }}" class="btn btn--ghost btn--sm{% if days == 30 %} btn--brass{% endif %}">30d</a>
+        <a href="{{ url_for('admin_traffic', days=90) }}" class="btn btn--ghost btn--sm{% if days == 90 %} btn--brass{% endif %}">90d</a>
+      </div>
+    </div>
+    <div class="traffic-chart">
+      {% for d in chart_data %}
+      <div class="traffic-chart__col" title="{{ d.date }} — {{ d.visitors }} visitor{{ 's' if d.visitors != 1 else '' }}, {{ d.pageviews }} pageview{{ 's' if d.pageviews != 1 else '' }}">
+        <div class="traffic-chart__bar" style="height:{{ ((d.visitors / max_visitors) * 100)|round(1) }}%;"></div>
+        {% if days <= 30 %}<span class="traffic-chart__label">{{ d.date[5:] }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel" style="overflow-x:auto;">
+    <table class="admin-table">
+      <thead><tr><th>Date</th><th>Visitors</th><th>Pageviews</th></tr></thead>
+      <tbody>
+        {% for d in daily %}
+        <tr>
+          <td style="font-family:var(--mono);font-size:0.78rem;">{{ d.date }}</td>
+          <td>{{ d.visitors }}</td>
+          <td>{{ d.pageviews }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}

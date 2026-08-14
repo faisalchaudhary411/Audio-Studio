@@ -26,6 +26,11 @@
         <a href="{{ url_for('admin_blog') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage blog</a>
       </div>
       <div class="panel">
+        <span class="panel__label">Traffic</span>
+        <div style="font-family:var(--display);font-size:2rem;">{{ today_visitors }} <span style="font-size:1rem;color:var(--text-dim);">visitors today</span></div>
+        <a href="{{ url_for('admin_traffic') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">View traffic</a>
+      </div>
+      <div class="panel">
         <span class="panel__label">Notifications</span>
         <div style="font-family:var(--display);font-size:2rem;">{{ live_anns }} <span style="font-size:1rem;color:var(--text-dim);">live / {{ total_anns }} total</span></div>
         <a href="{{ url_for('admin_notifications') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage notifications</a>
