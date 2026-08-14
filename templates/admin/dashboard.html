@@ -26,6 +26,11 @@
         <a href="{{ url_for('admin_blog') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage blog</a>
       </div>
       <div class="panel">
+        <span class="panel__label">Notifications</span>
+        <div style="font-family:var(--display);font-size:2rem;">{{ live_anns }} <span style="font-size:1rem;color:var(--text-dim);">live / {{ total_anns }} total</span></div>
+        <a href="{{ url_for('admin_notifications') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage notifications</a>
+      </div>
+      <div class="panel">
         <span class="panel__label">Pricing & limits</span>
         <p style="color:var(--text-mid);font-size:0.88rem;">Free-tier limits, pricing labels, checkout URL.</p>
         <a href="{{ url_for('admin_limits') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Edit limits</a>

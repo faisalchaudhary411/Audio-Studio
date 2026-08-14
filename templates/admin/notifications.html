@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Admin — Notifications{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Notifications</h2>
+    <p class="section__sub">Discount and update announcements shown to visitors via the bell icon, and optionally as a top banner.</p>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">{{ 'Edit announcement' if edit_ann else 'New announcement' }}</span>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if edit_ann %}
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="ann_id" value="{{ edit_ann.id }}">
+      {% else %}
+        <input type="hidden" name="action" value="create">
+      {% endif %}
+
+      <select name="type" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
+        <option value="discount" {% if edit_ann and edit_ann.type == 'discount' %}selected{% endif %}>Discount</option>
+        <option value="update" {% if not edit_ann or edit_ann.type == 'update' %}selected{% endif %}>Update</option>
+        <option value="general" {% if edit_ann and edit_ann.type == 'general' %}selected{% endif %}>General</option>
+      </select>
+
+      <input type="text" name="title" placeholder="Title (e.g. 30% off Pro this week)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_ann.title if edit_ann else '' }}" required>
+      <textarea name="message" placeholder="Message shown to visitors" class="script-input" style="min-height:100px;margin-bottom:10px;" required>{{ edit_ann.message if edit_ann else '' }}</textarea>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <input type="text" name="link_url" placeholder="Link URL (optional, e.g. /pricing)" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:200px;" value="{{ edit_ann.link_url if edit_ann else '' }}">
+        <input type="text" name="link_text" placeholder="Button text (default: Learn more)" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" value="{{ edit_ann.link_text if edit_ann else '' }}">
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+        <label style="font-size:0.9rem;color:var(--text-mid);">Expires <input type="date" name="expires" class="admin-input" style="width:auto;" value="{{ edit_ann.expires if edit_ann else '' }}"></label>
+        <span style="color:var(--text-dim);font-size:0.8rem;">(optional — leave blank for no expiry)</span>
+      </div>
+
+      <label style="font-size:0.9rem;color:var(--text-mid);display:block;margin-bottom:6px;">
+        <input type="checkbox" name="active" {% if (edit_ann and edit_ann.active) or not edit_ann %}checked{% endif %}> Active — visible to visitors
+      </label>
+      <label style="font-size:0.9rem;color:var(--text-mid);display:block;margin-bottom:6px;">
+        <input type="checkbox" name="banner" {% if edit_ann and edit_ann.banner %}checked{% endif %}> Also show as dismissible top banner
+      </label>
+      {% if not edit_ann %}
+      <label style="font-size:0.9rem;color:var(--text-mid);display:block;margin-bottom:6px;">
+        <input type="checkbox" name="email_me"> Email me a copy when published
+      </label>
+      {% endif %}
+
+      <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">{{ 'Update announcement' if edit_ann else 'Publish announcement' }}</button>
+      {% if edit_ann %}<a href="{{ url_for('admin_notifications') }}" class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-block;">Cancel edit</a>{% endif %}
+    </form>
+  </div>
+
+  <div style="display:grid;gap:12px;">
+    {% for a in anns %}
+    <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div>
+        <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;text-transform:uppercase;">{{ a.type }}</span>
+        <strong style="margin-left:8px;">{{ a.title }}</strong>
+        <div style="color:var(--text-dim);font-size:0.8rem;margin-top:4px;">
+          {{ a.created }} · {{ 'Live' if a.active else 'Inactive' }}{% if a.banner %} · Banner{% endif %}{% if a.expires %} · Expires {{ a.expires }}{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="{{ url_for('admin_notifications', edit=a.id) }}" class="btn btn--ghost btn--sm">Edit</a>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="ann_id" value="{{ a.id }}"><button type="submit" name="action" value="toggle_active" class="btn btn--ghost btn--sm">{{ 'Deactivate' if a.active else 'Activate' }}</button></form>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="ann_id" value="{{ a.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this announcement?')">Delete</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--text-dim);">No announcements yet.</p>
+    {% endfor %}
+  </div>
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}
