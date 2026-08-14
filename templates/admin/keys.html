@@ -40,6 +40,9 @@
               {% else %}
               <button type="submit" name="action" value="revoke" class="btn btn--ghost btn--sm">Revoke</button>
               {% endif %}
+              {% if row.used %}
+              <button type="submit" name="action" value="reset_device" class="btn btn--ghost btn--sm" onclick="return confirm('Unlock this key so it can be reactivated on a new device? The customer will need to re-enter their key.')">Reset device lock</button>
+              {% endif %}
               <button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this key permanently?')">Delete</button>
             </form>
           </td>
