@@ -167,14 +167,39 @@ def _auto_restore_pro_session():
 # (machine-to-machine, not a page view), and misc crawler/infra paths.
 _TRAFFIC_EXCLUDED_PREFIXES = ("/static/", "/admin", "/api/", "/webhook/", "/ads/", "/ads.txt")
 
+# Substrings matched case-insensitively against User-Agent. Covers the bulk
+# of non-human traffic: search engine crawlers, SEO/backlink tools, uptime
+# monitors, and bare HTTP clients (curl/requests/scanners with no UA
+# customization at all). Not exhaustive — a bot that spoofs a normal
+# browser UA will still get counted, same as any server-side approach
+# without a JS challenge — but this removes the most common, highest-volume
+# noise sources that were inflating the daily visitor count.
+_BOT_USER_AGENT_MARKERS = (
+    "bot", "spider", "crawl", "slurp", "curl/", "python-requests", "go-http-client",
+    "wget", "scrapy", "headlesschrome", "phantomjs", "facebookexternalhit",
+    "monitor", "pingdom", "uptimerobot", "statuscake", "ahrefsbot", "semrushbot",
+    "mj12bot", "dotbot", "petalbot", "bytespider", "yandex", "baiduspider",
+)
+
+
+def _looks_like_bot(request) -> bool:
+    ua = request.headers.get("User-Agent", "").lower()
+    if not ua:
+        return True  # no UA at all is almost never a real browser
+    return any(marker in ua for marker in _BOT_USER_AGENT_MARKERS)
+
 
 @app.before_request
 def _track_traffic():
     """One row per (day, ip_hash) — see persistence.log_visit(). GET-only
     so form submissions/API calls from an already-counted page load don't
-    double-count; excluded prefixes above. Best-effort: a logging failure
-    here should never take down the actual page request."""
+    double-count; excluded prefixes above; known-bot user agents skipped
+    so the admin traffic count reflects real visitors, not crawler/monitor
+    noise. Best-effort: a logging failure here should never take down the
+    actual page request."""
     if request.method != "GET" or request.path.startswith(_TRAFFIC_EXCLUDED_PREFIXES):
+        return
+    if _looks_like_bot(request):
         return
     try:
         ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
