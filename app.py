@@ -881,16 +881,15 @@ def api_announcements():
 
 @app.route("/ads.txt")
 def ads_txt():
-    """AdSense site-verification / IAB ads.txt. Publisher ID comes from an
-    env var so it can be changed without a code deploy — set
-    ADSENSE_PUBLISHER_ID to the pub-XXXXXXXXXXXXXXXX value AdSense gave you
-    (the part after 'ca-' in your ca-pub-... client ID).
+    """AdSense site-verification / IAB ads.txt. Defaults to Faisal's actual
+    publisher ID so this works even if ADSENSE_PUBLISHER_ID isn't set on
+    the server — that env-var gap is what caused AdSense to report
+    'Not found' on Aug 7, 2026. Still override-able via env var if the
+    publisher ID ever needs to change without a code deploy.
     Must be served at the domain root, exactly at /ads.txt — Google checks
     this exact path, not /static/ads.txt.
     """
-    pub_id = os.environ.get("ADSENSE_PUBLISHER_ID", "")
-    if not pub_id:
-        return "", 404
+    pub_id = os.environ.get("ADSENSE_PUBLISHER_ID", "pub-3088581560119805")
     content = f"google.com, {pub_id}, DIRECT, f08c47fec0942fa0\n"
     return Response(content, mimetype="text/plain")
 
