@@ -413,8 +413,15 @@ def usage_summary() -> dict:
 def studio():
     lim = get_limits()
     active_voices = VOICES if is_pro() else FREE_VOICES
+    # BUG FIX: this always passed the FREE tier's batch line cap to the
+    # template, even for Pro/Pro+ sessions — so the Batch tab displayed
+    # "up to 20 lines" (or whatever FREE_BATCH_MAX_LINES is set to) for
+    # paying customers too, even though actual enforcement at generation
+    # time (line ~1332) already correctly used PRO_BATCH_MAX for them.
+    # Cosmetic-only bug, but confusing: the UI looked capped when it wasn't.
+    batch_max = lim["PRO_BATCH_MAX"] if is_pro() else lim["FREE_BATCH_MAX_LINES"]
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
-                            free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=lim["FREE_BATCH_MAX_LINES"],
+                            free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=batch_max,
                             monthly_char_quota=lim["FREE_MONTHLY_CHAR_QUOTA"],
                             usage=usage_summary())
 
@@ -434,15 +441,27 @@ def pricing():
     ]
     pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or \
         pro_features + ["Voice cloning", "AI music generation"]
+
+    # BUG FIX: "Current plan" was hardcoded onto the Free tier's card
+    # regardless of the visitor's actual plan — so a Pro or Pro+ customer
+    # would see Free marked as their current plan (confusing/wrong), while
+    # their real plan showed the normal "Get Pro"/"Get Pro+" buy button as
+    # if they weren't subscribed at all. Now it's driven by the session's
+    # actual plan.
+    current_plan = get_plan() or "free"
     plans = [
         {"id": "free", "name": "Free", "price": limits.get("FREE_PRICE_LABEL", "$0"), "period": "forever",
-         "limits": free_features, "cta": "Current plan", "cta_url": None},
+         "limits": free_features,
+         "cta": "Current plan" if current_plan == "free" else "Downgrade automatically at renewal",
+         "cta_url": None},
         {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_LABEL", "$3"), "period": "/month",
-         "limits": pro_features, "cta": "Get Pro",
-         "cta_url": url_for("upgrade", plan="pro")},
+         "limits": pro_features,
+         "cta": "Current plan" if current_plan == "pro" else "Get Pro",
+         "cta_url": None if current_plan == "pro" else url_for("upgrade", plan="pro")},
         {"id": "pro_plus", "name": "Pro+", "price": limits.get("PRO_PLUS_PRICE_LABEL", "$6"), "period": "/month",
-         "limits": pro_plus_features, "cta": "Get Pro+", "featured": True,
-         "cta_url": url_for("upgrade", plan="pro_plus")},
+         "limits": pro_plus_features, "featured": True,
+         "cta": "Current plan" if current_plan == "pro_plus" else "Get Pro+",
+         "cta_url": None if current_plan == "pro_plus" else url_for("upgrade", plan="pro_plus")},
     ]
     return render_template("pricing.html", plans=plans)
 
