@@ -46,9 +46,11 @@
 
   <div class="panel">
     <span class="panel__label">Mode</span>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn--sm btn--brass" id="tab-single-btn">Single</button>
       <button class="btn btn--sm btn--ghost" id="tab-batch-btn">Batch</button>
+      <button class="btn btn--sm btn--ghost" id="tab-clone-btn">Clone voice {% if not has_clone_music_ctx %}🔒{% endif %}</button>
+      <button class="btn btn--sm btn--ghost" id="tab-music-btn">Music {% if not has_clone_music_ctx %}🔒{% endif %}</button>
     </div>
   </div>
 </div>
@@ -98,11 +100,44 @@
   </div>
 </div>
 
-<!-- ===== Clone a voice (Pro) ===== -->
-<div class="section" style="padding-top:0;">
+<!-- ===== Clone voice tab ===== -->
+<div class="section" id="tab-clone" style="padding-top:0;display:none;">
   <div class="panel">
+    {% if has_clone_music_ctx %}
     <span class="panel__label">Clone a voice</span>
-    <p style="color:var(--text-mid);font-size:0.9rem;">🚧 Coming soon — upload a reference clip and generate speech in that voice.</p>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:12px;">Upload a clear reference clip (5–15 seconds, one speaker, minimal background noise) and generate new speech in that voice.</p>
+    <input type="file" id="clone-ref-audio" accept="audio/*" style="margin-bottom:12px;">
+    <textarea class="script-input" id="clone-text" placeholder="Text to speak in the cloned voice…" style="min-height:100px;"></textarea>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="generate-clone-btn">Clone &amp; generate</button>
+      <span class="render-status" data-clone-status></span>
+    </div>
+    <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;">Voice cloning runs on a GPU and can take 30–90 seconds — don't close this tab while it's working.</p>
+    <div id="clone-result" style="margin-top:16px;"></div>
+    {% else %}
+    {% include "partials/pro_plus_upsell.html" %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- ===== Music generation tab ===== -->
+<div class="section" id="tab-music" style="padding-top:0;display:none;">
+  <div class="panel">
+    {% if has_clone_music_ctx %}
+    <span class="panel__label">Generate music</span>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:12px;">Describe the music you want — genre, mood, instruments.</p>
+    <textarea class="script-input" id="music-prompt" placeholder="e.g. upbeat lo-fi hip hop with soft piano and vinyl crackle" style="min-height:80px;"></textarea>
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Duration: <span id="music-duration-label">15s</span></label>
+    <input id="music-duration-slider" type="range" min="5" max="30" step="5" value="15" style="width:100%;margin-bottom:12px;">
+    <div class="render-bar">
+      <button class="btn btn--brass" id="generate-music-btn">Generate music</button>
+      <span class="render-status" data-music-status></span>
+    </div>
+    <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;">Music generation runs on a GPU and can take 30–90 seconds — don't close this tab while it's working.</p>
+    <div id="music-result" style="margin-top:16px;"></div>
+    {% else %}
+    {% include "partials/pro_plus_upsell.html" %}
+    {% endif %}
   </div>
 </div>
 
@@ -111,6 +146,10 @@
 {% block scripts %}
 <script>
   window.VOXCRAFT_VOICES = {{ voices|tojson }};
+  window.VOXCRAFT_HAS_CLONE_MUSIC = {{ has_clone_music_ctx|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/studio.js') }}"></script>
+{% if has_clone_music_ctx %}
+<script src="{{ url_for('static', filename='js/clone_music.js') }}"></script>
+{% endif %}
 {% endblock %}

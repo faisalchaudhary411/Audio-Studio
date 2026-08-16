@@ -48,7 +48,18 @@
         <div><strong style="color:var(--text-hi);">🏦 UBL Bank:</strong> 0430292120673 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Any bank app/digital wallet → Send Money → Bank Account</span></div>
       </div>
 
-      <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="panel" style="margin-bottom:16px;display:flex;gap:10px;">
+        <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro' %}border-color:var(--brass);{% endif %}">
+          <input type="radio" name="plan" value="pro" form="upgrade-form" {% if requested_plan == 'pro' %}checked{% endif %} style="margin-right:6px;">
+          <strong>Pro</strong> — {{ '$3/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">TTS only</span>
+        </label>
+        <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro_plus' %}border-color:var(--brass);{% endif %}">
+          <input type="radio" name="plan" value="pro_plus" form="upgrade-form" {% if requested_plan == 'pro_plus' %}checked{% endif %} style="margin-right:6px;">
+          <strong>Pro+</strong> — {{ '$6/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">+ Voice clone, music</span>
+        </label>
+      </div>
+
+      <form id="upgrade-form" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="name" placeholder="Full name" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
         <input type="email" name="email" placeholder="Email" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
         <input type="tel" name="phone" placeholder="Phone (optional)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
