@@ -1,9 +1,8 @@
 """
 modal_workers/chatterbox/app.py — Chatterbox-Turbo voice cloning on Modal.
 
-DIAGNOSTIC VERSION (same app name = same URL).
-Includes checks to identify why the model generates system-memory garbage.
-Run once, check logs, then revert to clean version.
+DIAGNOSTIC VERSION v2 (same app name = same URL).
+Fixed: ChatterboxTurboTTS has no .parameters() method.
 
 DIAGNOSTIC CHECKS:
 1. Model class verification
@@ -26,7 +25,6 @@ image = (
     )
 )
 
-# SAME APP NAME — URL stays the same
 app = modal.App("voxcraft-clone-worker", image=image)
 
 
@@ -51,8 +49,7 @@ class ChatterboxWorker:
         print(f"[DIAG] Model class: {self.model.__class__.__name__}")
         print(f"[DIAG] Model module: {self.model.__class__.__module__}")
         print(f"[DIAG] Sample rate: {self.model.sr}")
-        print(f"[DIAG] Total parameters: {sum(p.numel() for p in self.model.parameters()):,}")
-        print(f"[DIAG] Device: {next(self.model.parameters()).device}")
+        print(f"[DIAG] Model dir attrs: {[a for a in dir(self.model) if not a.startswith('_')]}")
 
         # --- DIAGNOSTIC 2: Test generation WITHOUT reference audio ---
         print(f"[DIAG] Running test generation (no reference)...")
@@ -63,23 +60,30 @@ class ChatterboxWorker:
                 top_p=0.1,
                 top_k=10,
             )
-            print(f"[DIAG] Test output shape: {test_wav.shape}")
-            print(f"[DIAG] Test output dtype: {test_wav.dtype}")
-            print(f"[DIAG] Test output range: [{test_wav.min():.4f}, {test_wav.max():.4f}]")
-            print(f"[DIAG] Test output mean: {test_wav.mean():.4f}")
+            print(f"[DIAG] Test output type: {type(test_wav)}")
+            print(f"[DIAG] Test output shape: {test_wav.shape if hasattr(test_wav, 'shape') else 'N/A'}")
 
-            if test_wav.abs().max() < 0.001:
-                print(f"[DIAG] ⚠️ WARNING: Test output is essentially silent!")
+            if hasattr(test_wav, 'shape'):
+                print(f"[DIAG] Test output dtype: {test_wav.dtype}")
+                print(f"[DIAG] Test output range: [{test_wav.min():.4f}, {test_wav.max():.4f}]")
+                print(f"[DIAG] Test output mean: {test_wav.mean():.4f}")
+
+                if test_wav.abs().max() < 0.001:
+                    print(f"[DIAG] ⚠️ WARNING: Test output is essentially silent!")
+                else:
+                    print(f"[DIAG] ✅ Test output has audible content")
+
+                if torch.isnan(test_wav).any():
+                    print(f"[DIAG] ⚠️ WARNING: Test output contains NaN!")
+                if torch.isinf(test_wav).any():
+                    print(f"[DIAG] ⚠️ WARNING: Test output contains Inf!")
             else:
-                print(f"[DIAG] ✅ Test output has audible content")
-
-            if torch.isnan(test_wav).any():
-                print(f"[DIAG] ⚠️ WARNING: Test output contains NaN!")
-            if torch.isinf(test_wav).any():
-                print(f"[DIAG] ⚠️ WARNING: Test output contains Inf!")
+                print(f"[DIAG] ⚠️ WARNING: Output is not a tensor! Value: {test_wav}")
 
         except Exception as e:
             print(f"[DIAG] ❌ Test generation FAILED: {e}")
+            import traceback
+            traceback.print_exc()
 
         print(f"[DIAG] Model ready.")
 
@@ -140,7 +144,7 @@ class ChatterboxWorker:
                 os.remove(tmp_path)
                 tmp_path = None
 
-            print(f"[REQ] Starting generation...")
+            print(f"[REQ] Starting generation with text: {repr(text[:80])}")
             wav = self.model.generate(
                 text,
                 audio_prompt_path=ref_path,
@@ -149,7 +153,11 @@ class ChatterboxWorker:
                 top_k=10,
                 repetition_penalty=1.0,
             )
-            print(f"[REQ] Raw output: shape={wav.shape}, dtype={wav.dtype}")
+            print(f"[REQ] Raw output type: {type(wav)}")
+            if hasattr(wav, 'shape'):
+                print(f"[REQ] Raw output shape: {wav.shape}")
+            else:
+                print(f"[REQ] Raw output value: {wav}")
 
             if not isinstance(wav, torch.Tensor):
                 wav = torch.tensor(wav)
