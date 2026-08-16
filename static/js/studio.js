@@ -25,21 +25,28 @@
   });
 
   // ---- Tabs ----
-  const tabSingleBtn = document.getElementById('tab-single-btn');
-  const tabBatchBtn = document.getElementById('tab-batch-btn');
-  const tabSingle = document.getElementById('tab-single');
-  const tabBatch = document.getElementById('tab-batch');
-  tabSingleBtn.addEventListener('click', () => {
-    tabSingle.style.display = '';
-    tabBatch.style.display = 'none';
-    tabSingleBtn.className = 'btn btn--sm btn--brass';
-    tabBatchBtn.className = 'btn btn--sm btn--ghost';
-  });
-  tabBatchBtn.addEventListener('click', () => {
-    tabSingle.style.display = 'none';
-    tabBatch.style.display = '';
-    tabBatchBtn.className = 'btn btn--sm btn--brass';
-    tabSingleBtn.className = 'btn btn--sm btn--ghost';
+  const tabButtons = {
+    single: document.getElementById('tab-single-btn'),
+    batch: document.getElementById('tab-batch-btn'),
+    clone: document.getElementById('tab-clone-btn'),
+    music: document.getElementById('tab-music-btn'),
+  };
+  const tabPanels = {
+    single: document.getElementById('tab-single'),
+    batch: document.getElementById('tab-batch'),
+    clone: document.getElementById('tab-clone'),
+    music: document.getElementById('tab-music'),
+  };
+  function showTab(name) {
+    Object.keys(tabPanels).forEach((key) => {
+      if (!tabPanels[key] || !tabButtons[key]) return;
+      const active = key === name;
+      tabPanels[key].style.display = active ? '' : 'none';
+      tabButtons[key].className = active ? 'btn btn--sm btn--brass' : 'btn btn--sm btn--ghost';
+    });
+  }
+  Object.keys(tabButtons).forEach((key) => {
+    if (tabButtons[key]) tabButtons[key].addEventListener('click', () => showTab(key));
   });
 
   // ---- SSML toggle ----
