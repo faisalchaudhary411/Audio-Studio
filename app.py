@@ -47,7 +47,7 @@ import hmac
 
 CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
 os.makedirs(CLONE_UPLOAD_DIR, exist_ok=True)
-CLONE_CHAR_LIMIT = 500  # tighter than normal TTS — keeps CPU generation time bounded
+CLONE_CHAR_LIMIT = 2000  # generous — GPU inference on RunPod is fast, unlike the old CPU path this replaced
 
 app = Flask(__name__)
 
@@ -252,6 +252,23 @@ def is_pro() -> bool:
     return licensing.check_vox_license(key).get("valid", False)
 
 
+def get_plan() -> str:
+    """'', 'pro', or 'pro_plus' — '' means not Pro at all. Use this (not
+    is_pro() alone) anywhere clone/music access is gated, since a valid
+    Pro session doesn't automatically mean Pro+."""
+    key = session.get("license_key")
+    if not key:
+        return ""
+    result = licensing.check_vox_license(key)
+    if not result.get("valid"):
+        return ""
+    return result.get("plan", "pro")
+
+
+def has_clone_and_music() -> bool:
+    return get_plan() == "pro_plus"
+
+
 def admin_required(view_func):
     from functools import wraps
 
@@ -268,6 +285,8 @@ def admin_required(view_func):
 def inject_globals():
     return {
         "is_pro_ctx": is_pro(),
+        "plan_ctx": get_plan(),
+        "has_clone_music_ctx": has_clone_and_music(),
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
         # Popunder is OFF by default — deliberately paused while AdSense
@@ -411,14 +430,19 @@ def pricing():
     ]
     pro_features = [f.strip() for f in (limits.get("PRO_FEATURES") or "").split("|") if f.strip()] or [
         "Unlimited generations", "Unlimited characters", "All voices, all languages",
-        "No ads", f"Batch up to {limits['PRO_BATCH_MAX']} lines", "Voice cloning (where enabled)",
+        "No ads", f"Batch up to {limits['PRO_BATCH_MAX']} lines",
     ]
+    pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or \
+        pro_features + ["Voice cloning", "AI music generation"]
     plans = [
         {"id": "free", "name": "Free", "price": limits.get("FREE_PRICE_LABEL", "$0"), "period": "forever",
          "limits": free_features, "cta": "Current plan", "cta_url": None},
-        {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_LABEL", "840 PKR"), "period": "/month",
-         "limits": pro_features, "cta": "Get Pro", "featured": True,
-         "cta_url": url_for("upgrade")},
+        {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_LABEL", "$3"), "period": "/month",
+         "limits": pro_features, "cta": "Get Pro",
+         "cta_url": url_for("upgrade", plan="pro")},
+        {"id": "pro_plus", "name": "Pro+", "price": limits.get("PRO_PLUS_PRICE_LABEL", "$6"), "period": "/month",
+         "limits": pro_plus_features, "cta": "Get Pro+", "featured": True,
+         "cta_url": url_for("upgrade", plan="pro_plus")},
     ]
     return render_template("pricing.html", plans=plans)
 
@@ -446,20 +470,24 @@ def activate():
 @app.route("/upgrade", methods=["GET", "POST"])
 def upgrade():
     checkout_url = persistence.load_limits().get("CHECKOUT_URL") or None
+    requested_plan = request.args.get("plan") if request.method == "GET" else request.form.get("plan")
+    requested_plan = requested_plan if requested_plan in ("pro", "pro_plus") else "pro"
     if request.method == "GET":
         # BUG FIX: this previously never read MANUAL_GRACE_HOURS at all on
         # the initial page load — only after submitting the form — so the
         # "access stops working after X hours" text was disconnected from
         # whatever was actually set in /admin/limits.
         grace_hours = persistence.load_limits().get("MANUAL_GRACE_HOURS", 72)
-        return render_template("upgrade.html", checkout_url=checkout_url, grace_hours=grace_hours)
+        return render_template("upgrade.html", checkout_url=checkout_url, grace_hours=grace_hours,
+                                requested_plan=requested_plan)
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
     payment_method = (request.form.get("payment_method") or "").strip()
     txn_id = (request.form.get("txn_id") or "").strip()
     if not name or not email:
-        return render_template("upgrade.html", error="Name and email are required.", checkout_url=checkout_url)
+        return render_template("upgrade.html", error="Name and email are required.", checkout_url=checkout_url,
+                                requested_plan=requested_plan)
 
     screenshot_b64 = ""
     file = request.files.get("screenshot")
@@ -476,7 +504,8 @@ def upgrade():
     # grace window, even though their real key was never actually invalid.
     already_pro = is_pro()
 
-    result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64)
+    result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64,
+                                              plan=requested_plan)
     if result.get("success"):
         if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
@@ -719,7 +748,7 @@ def admin_keys():
         action = request.form.get("action")
         key = request.form.get("key", "")
         if action == "create":
-            licensing.create_new_key_manual()
+            licensing.create_new_key_manual(plan=request.form.get("plan", "pro"))
         elif action == "revoke":
             licensing.revoke_key(key)
         elif action == "unrevoke":
@@ -728,6 +757,8 @@ def admin_keys():
             licensing.delete_key(key)
         elif action == "reset_device":
             licensing.reset_device_lock(key)
+        elif action == "toggle_plan":
+            licensing.set_plan(key)
         return redirect(url_for("admin_keys"))
     licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before displaying
     keys = persistence.load_license_keys()
@@ -746,7 +777,9 @@ def admin_requests():
             reqs = persistence.load_requests()
             target = next((r for r in reqs if r["id"] == req_id), None)
             if target:
-                new_key = licensing.create_subscription_key(target.get("name", "Pro User"), target.get("email", ""))
+                plan = target.get("plan_requested", "pro")
+                new_key = licensing.create_subscription_key(target.get("name", "Pro User"), target.get("email", ""),
+                                                              plan=plan)
                 pro_requests.approve_request(req_id, new_key)
         elif action == "reject":
             pro_requests.reject_request(req_id)
@@ -1346,14 +1379,14 @@ def api_batch():
 
 @app.route("/api/clone/upload", methods=["POST"])
 def api_clone_upload():
-    """Pro-only: upload a reference clip (~10s+) to clone a voice from.
-    TODO: this saves to /tmp, which is wiped on every Railway redeploy/restart —
+    """Pro+-only: upload a reference clip (~10s+) to clone a voice from.
+    TODO: this saves to /tmp, which is wiped on every VPS redeploy/restart —
     fine for a same-session clone-then-generate flow, but if you want cloned
     voices to persist across sessions, save the reference clip to your
     GitHub-persisted storage (same pattern as your other config data) instead.
     """
-    if not is_pro():
-        return jsonify({"error": "Voice cloning is a Pro feature."}), 402
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     file = request.files.get("reference_audio")
     if not file or not file.filename:
@@ -1371,8 +1404,8 @@ def api_clone_upload():
 
 @app.route("/api/clone/generate", methods=["POST"])
 def api_clone_generate():
-    if not is_pro():
-        return jsonify({"error": "Voice cloning is a Pro feature."}), 402
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     data = request.get_json(force=True) or {}
     text = (data.get("text") or "").strip()
@@ -1381,7 +1414,7 @@ def api_clone_generate():
     if not text:
         return jsonify({"error": "Please enter some text first."}), 400
     if len(text) > CLONE_CHAR_LIMIT:
-        return jsonify({"error": f"Cloned-voice generations are capped at {CLONE_CHAR_LIMIT} characters (CPU inference is slow — keep clips short)."}), 400
+        return jsonify({"error": f"Cloned-voice generations are capped at {CLONE_CHAR_LIMIT} characters."}), 400
     if not reference_id:
         return jsonify({"error": "Upload a reference clip first."}), 400
 
@@ -1407,15 +1440,15 @@ def api_clone_status(job_id):
 
 
 # ---------------------------------------------------------------------------
-# Music generation (Replicate-hosted ACE-Step) — Pro-only, real $ cost per run
+# Music generation (Replicate-hosted ACE-Step) — Pro+-only, real $ cost per run
 # ---------------------------------------------------------------------------
 MUSIC_MAX_DURATION_SEC = 120  # keep runs (and cost) bounded — tune in admin later if you add a limits field
 
 
 @app.route("/api/music/generate", methods=["POST"])
 def api_music_generate():
-    if not is_pro():
-        return jsonify({"error": "Music generation is a Pro feature."}), 402
+    if not has_clone_and_music():
+        return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
     data = request.get_json(force=True) or {}
     tags = (data.get("tags") or "").strip()

@@ -50,10 +50,11 @@ def _device_already_auto_approved(ip_hash: str) -> bool:
     return False
 
 
-def submit_pro_request(request, name, email, phone="", payment_method="", txn_id="", screenshot_b64=""):
+def submit_pro_request(request, name, email, phone="", payment_method="", txn_id="", screenshot_b64="", plan="pro"):
     reqs = persistence.load_requests()
     req_id = f"REQ-{int(time.time())}-{random.randint(1000, 9999)}"
     ip_hash = hash_ip(get_client_ip(request))
+    plan = plan if plan in ("pro", "pro_plus") else "pro"
 
     limits = persistence.load_limits()
     auto_approve_enabled = limits.get("AUTO_APPROVE_MANUAL", False)
@@ -66,7 +67,7 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
             and not _device_already_auto_approved(ip_hash)):
         internal_key = licensing.create_subscription_key(
             name.strip(), email.strip(), subscription_type="grace",
-            expires_in_hours=grace_hours,
+            expires_in_hours=grace_hours, plan=plan,
         )
         # Immediately bind this key to the CURRENT device/session so the
         # customer gets instant access on the browser they're using right
@@ -89,6 +90,7 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         "has_screenshot": bool(screenshot_b64),
         "auto_approved": auto_approved,
         "grace_expires": (dt.datetime.now() + dt.timedelta(hours=grace_hours)).strftime("%Y-%m-%d %H:%M") if auto_approved else "",
+        "plan_requested": plan,
     }
     reqs.insert(0, new_req)
     notified = notifications.notify_admin_new_request(name, email, phone, req_id,

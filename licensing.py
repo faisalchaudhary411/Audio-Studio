@@ -24,6 +24,12 @@ from usage_tracking import get_client_ip, hash_ip, get_browser_fingerprint
 FREEMIUS_API_TOKEN = os.environ.get("FREEMIUS_API_TOKEN", "").strip()
 FREEMIUS_PRODUCT_ID = os.environ.get("FREEMIUS_PRODUCT_ID", "").strip()
 FREEMIUS_SECRET_KEY = os.environ.get("FREEMIUS_SECRET_KEY", "").strip()
+# Freemius plan_id for the $6 Pro+ tier (Clone + Music). Set this once you've
+# created the second pricing plan in your Freemius dashboard and copied its
+# plan ID. Anything not matching this — including if it's left unset — maps
+# to "pro", never to "pro_plus", so a misconfiguration fails toward the
+# cheaper tier rather than accidentally giving away the expensive one.
+FREEMIUS_PLAN_PRO_PLUS_ID = os.environ.get("FREEMIUS_PLAN_PRO_PLUS_ID", "").strip()
 
 
 def _keys() -> dict:
@@ -52,6 +58,37 @@ def is_subscription_active(key_info: dict) -> bool:
                 return False
         except (ValueError, TypeError):
             pass
+    return True
+
+
+# Two paid tiers: "pro" ($3 — TTS only, same as the original single tier)
+# and "pro_plus" ($6 — adds voice cloning + music generation). Every key
+# created before this field existed has no "plan" key at all, so
+# get_plan() defaults missing/unrecognized values to "pro" rather than
+# locking existing paying customers out of what they already had.
+PLANS = ("pro", "pro_plus")
+
+
+def get_plan(key_info: dict) -> str:
+    plan = (key_info or {}).get("plan", "pro")
+    return plan if plan in PLANS else "pro"
+
+
+def plan_has_clone_and_music(key_info: dict) -> bool:
+    return get_plan(key_info) == "pro_plus"
+
+
+def set_plan(key: str, plan: str = None) -> bool:
+    """Admin action: sets a key's plan explicitly, or toggles it (pro <->
+    pro_plus) if no plan is given — used by the 'Upgrade/Downgrade' button
+    in /admin/keys."""
+    keys = _keys()
+    if key not in keys:
+        return False
+    if plan is None:
+        plan = "pro" if get_plan(keys[key]) == "pro_plus" else "pro_plus"
+    keys[key]["plan"] = plan if plan in PLANS else "pro"
+    _save(keys)
     return True
 
 
@@ -151,7 +188,8 @@ def create_subscription_key(customer_name: str, customer_email: str,
                              subscription_type: str = "monthly",
                              amount_paid: float = 0,
                              freemius_license_id: str = "",
-                             expires_in_hours: float = None) -> str:
+                             expires_in_hours: float = None,
+                             plan: str = "pro") -> str:
     key = generate_license_key()
     if expires_in_hours is not None:
         expires_at = (dt.datetime.now() + dt.timedelta(hours=expires_in_hours)).strftime("%Y-%m-%d %H:%M")
@@ -168,12 +206,13 @@ def create_subscription_key(customer_name: str, customer_email: str,
         "subscription_type": subscription_type, "expires_at": expires_at,
         "freemius_license_id": freemius_license_id, "amount_paid": amount_paid,
         "renewal_count": 0, "activated_fp": "",
+        "plan": plan if plan in PLANS else "pro",
     }
     _save(keys)
     return key
 
 
-def create_new_key_manual() -> str:
+def create_new_key_manual(plan: str = "pro") -> str:
     """Admin-panel 'create a key by hand' button (e.g. for manual bank-transfer approvals)."""
     key = generate_license_key()
     keys = _keys()
@@ -185,6 +224,7 @@ def create_new_key_manual() -> str:
         "subscription_type": "monthly",
         "expires_at": (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M"),
         "amount_paid": 0, "renewal_count": 0, "activated_fp": "",
+        "plan": plan if plan in PLANS else "pro",
     }
     _save(keys)
     return key
@@ -376,6 +416,7 @@ def activate_via_freemius(freemius_key: str, request) -> dict:
             result.get("customer_email", ""),
             subscription_type="recurring",
             freemius_license_id=fs_id,
+            plan=result.get("plan", "pro"),
         )
 
     activation = activate_vox_license(internal_key, request)
@@ -406,7 +447,7 @@ def check_vox_license(key: str) -> dict:
         return {"valid": False, "error": "Subscription expired"}
     if info.get("revoked"):
         return {"valid": False}
-    return {"valid": True, "name": info.get("customer_name", "Pro User")}
+    return {"valid": True, "name": info.get("customer_name", "Pro User"), "plan": get_plan(info)}
 
 
 def verify_freemius_license(license_key: str) -> dict:
@@ -434,12 +475,15 @@ def verify_freemius_license(license_key: str) -> dict:
             except Exception:
                 is_expired = False
         is_valid = (not is_cancelled) and (not is_expired)
+        plan_id = str(data.get("plan_id", ""))
+        plan = "pro_plus" if (FREEMIUS_PLAN_PRO_PLUS_ID and plan_id == FREEMIUS_PLAN_PRO_PLUS_ID) else "pro"
         return {
             "success": True, "valid": is_valid,
             "freemius_license_id": data.get("id", ""),
             "customer_email": data.get("user_email", "") or data.get("email", ""),
             "customer_name": data.get("user_name", "") or "Pro User",
             "expires_at": expiration or "",
+            "plan": plan,
             "error": None if is_valid else ("License cancelled" if is_cancelled else "License expired"),
         }
     except Exception as e:
