@@ -52,3 +52,13 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/voxcraft-clone-worker:latest
             ghcr.io/${{ github.repository_owner }}/voxcraft-clone-worker:${{ github.sha }}
+          # Caches Docker layers in GitHub's own cache storage (free, no
+          # extra setup). Because the Dockerfile installs torch/chatterbox
+          # BEFORE copying handler.py, a handler-only change reuses every
+          # cached layer up to that point and only re-runs the final COPY
+          # + push — a ~15-20 min build drops to well under a minute.
+          # Changing requirements.txt or the Dockerfile itself still
+          # invalidates the relevant layers and rebuilds from there, same
+          # as normal Docker caching.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
