@@ -1,0 +1,53 @@
+"""
+modal_client.py — thin client for the Chatterbox voice-clone worker running
+on Modal (see modal_workers/chatterbox/app.py).
+
+Simpler than the RunPod client this replaced: Modal's endpoint is a normal
+synchronous HTTP POST, not an async job queue. clone_engine.py already
+calls this from a background thread (decoupled from the actual Flask
+request/response cycle — see that file's docstring), so one blocking call
+here for up to a few minutes is fine.
+
+Requires MODAL_CLONE_ENDPOINT_URL set on the VPS — the URL Modal prints
+after `modal deploy` (also visible in the GitHub Actions deploy log), e.g.
+https://<workspace>--voxcraft-clone-worker-chatterboxworker-generate.modal.run
+"""
+
+import os
+import requests
+
+MODAL_CLONE_ENDPOINT_URL = os.environ.get("MODAL_CLONE_ENDPOINT_URL", "").strip()
+
+# Generous — covers a cold start (container spin-up + model load, can be
+# 20-60s on top of generation time) plus actual generation.
+_TIMEOUT_SEC = 240
+
+
+def is_configured() -> bool:
+    return bool(MODAL_CLONE_ENDPOINT_URL)
+
+
+def generate(text: str, reference_audio_b64: str) -> dict:
+    """Blocking call. Returns {"success": True, "audio_b64": ...} or
+    {"success": False, "error": ...}."""
+    if not MODAL_CLONE_ENDPOINT_URL:
+        return {"success": False, "error": "Voice cloning isn't configured on this deployment yet "
+                                             "— set MODAL_CLONE_ENDPOINT_URL."}
+    try:
+        r = requests.post(
+            MODAL_CLONE_ENDPOINT_URL,
+            json={"text": text, "reference_audio_b64": reference_audio_b64},
+            timeout=_TIMEOUT_SEC,
+        )
+        if r.status_code != 200:
+            return {"success": False, "error": f"Worker returned HTTP {r.status_code}."}
+        data = r.json()
+        if data.get("error"):
+            return {"success": False, "error": data["error"]}
+        if not data.get("audio_b64"):
+            return {"success": False, "error": "Worker returned no audio."}
+        return {"success": True, "audio_b64": data["audio_b64"]}
+    except requests.exceptions.Timeout:
+        return {"success": False, "error": f"Timed out after {_TIMEOUT_SEC}s waiting for the GPU worker."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
