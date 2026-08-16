@@ -1,0 +1,4 @@
+runpod==1.7.7
+torch==2.4.0
+torchaudio==2.4.0
+chatterbox-tts==0.1.2
