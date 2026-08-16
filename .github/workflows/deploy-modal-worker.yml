@@ -1,0 +1,50 @@
+# Deploys the Chatterbox voice-clone worker to Modal — runs entirely on
+# GitHub's servers, so this works from your phone: edit modal_workers/
+# chatterbox/app.py via the GitHub web editor, push, and this deploys
+# automatically. No local terminal or `modal` CLI needed on your end.
+#
+# One-time setup before this will work:
+#   1. Go to modal.com dashboard -> Settings -> API Tokens -> create a new
+#      token. You'll get a Token ID and Token Secret.
+#   2. In this GitHub repo: Settings -> Secrets and variables -> Actions ->
+#      New repository secret. Add two secrets:
+#        MODAL_TOKEN_ID     = <the token id>
+#        MODAL_TOKEN_SECRET = <the token secret>
+#   3. Push a change to modal_workers/chatterbox/** (or re-run manually
+#      from the Actions tab) to trigger a deploy.
+#
+# After the first successful deploy, check the workflow's log for a line
+# like:
+#   https://<your-workspace>--voxcraft-clone-worker-chatterboxworker-generate.modal.run
+# That URL is what you'll set as MODAL_CLONE_ENDPOINT_URL on your VPS.
+
+name: Deploy Modal clone worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modal_workers/chatterbox/**"
+      - ".github/workflows/deploy-modal-worker.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Modal
+        run: pip install modal
+
+      - name: Deploy to Modal
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy modal_workers/chatterbox/app.py
