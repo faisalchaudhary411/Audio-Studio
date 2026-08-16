@@ -1,22 +1,15 @@
 """
 modal_workers/chatterbox/app.py — Chatterbox-Turbo voice cloning on Modal.
 
-DIAGNOSTIC VERSION — includes checks to identify why the model generates
-system-memory garbage instead of the input text. Run this once, check logs,
-then switch back to the clean version once the issue is found.
+DIAGNOSTIC VERSION (same app name = same URL).
+Includes checks to identify why the model generates system-memory garbage.
+Run once, check logs, then revert to clean version.
 
 DIAGNOSTIC CHECKS:
-1. Model class verification (ensures ChatterboxTurboTTS loaded, not something else)
-2. Test generation WITHOUT reference audio (isolates model vs. reference issue)
-3. Reference audio validation (sample rate, duration, amplitude check)
-4. Per-request debug logging (text received, output shape, sample stats)
-
-FIXES APPLIED:
-- "success" key in all responses
-- Near-deterministic generation params (temp=0.1, top_p=0.1, top_k=10)
-- Audio format normalization (any format → model.sr mono WAV)
-- Tensor shape fix + amplitude clamping
-- Text length guard
+1. Model class verification
+2. Test generation WITHOUT reference audio
+3. Reference audio validation
+4. Per-request debug logging
 """
 
 import modal
@@ -27,14 +20,14 @@ image = (
     .apt_install("git", "ffmpeg")
     .pip_install("torch==2.4.0", "torchaudio==2.4.0", "numpy", "fastapi[standard]")
     .run_commands(
-        # Clean any stale model cache before install
         "rm -rf ~/.cache/huggingface/hub/models--ResembleAI--chatterbox* || true",
         "git clone --depth 1 https://github.com/resemble-ai/chatterbox.git /opt/chatterbox",
         "cd /opt/chatterbox && sed -i '/pkuseg/d' pyproject.toml && pip install --no-cache-dir -e .",
     )
 )
 
-app = modal.App("voxcraft-clone-worker-diag", image=image)
+# SAME APP NAME — URL stays the same
+app = modal.App("voxcraft-clone-worker", image=image)
 
 
 class CloneRequest(BaseModel):
@@ -75,13 +68,11 @@ class ChatterboxWorker:
             print(f"[DIAG] Test output range: [{test_wav.min():.4f}, {test_wav.max():.4f}]")
             print(f"[DIAG] Test output mean: {test_wav.mean():.4f}")
 
-            # Check if output is all zeros or near-zeros (dead model)
             if test_wav.abs().max() < 0.001:
                 print(f"[DIAG] ⚠️ WARNING: Test output is essentially silent!")
             else:
                 print(f"[DIAG] ✅ Test output has audible content")
 
-            # Check for NaN/Inf
             if torch.isnan(test_wav).any():
                 print(f"[DIAG] ⚠️ WARNING: Test output contains NaN!")
             if torch.isinf(test_wav).any():
@@ -121,30 +112,25 @@ class ChatterboxWorker:
             ref_bytes = base64.b64decode(ref_b64)
             print(f"[REQ] Decoded ref audio: {len(ref_bytes)} bytes")
 
-            # Save raw bytes
             with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as f:
                 f.write(ref_bytes)
                 tmp_path = f.name
 
-            # Load and inspect reference audio
             waveform, sr = ta.load(tmp_path)
             print(f"[REQ] Ref audio loaded: shape={waveform.shape}, sr={sr}, "
                   f"duration={waveform.shape[1]/sr:.2f}s, "
                   f"channels={waveform.shape[0]}, "
                   f"range=[{waveform.min():.4f}, {waveform.max():.4f}]")
 
-            # Convert to mono
             if waveform.shape[0] > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
                 print(f"[REQ] Converted to mono")
 
-            # Resample to model rate
             if sr != self.model.sr:
                 print(f"[REQ] Resampling {sr} → {self.model.sr}")
                 resampler = ta.transforms.Resample(sr, self.model.sr)
                 waveform = resampler(waveform)
 
-            # Save clean WAV
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 ref_path = f.name
             ta.save(ref_path, waveform, self.model.sr, format="wav")
@@ -154,7 +140,6 @@ class ChatterboxWorker:
                 os.remove(tmp_path)
                 tmp_path = None
 
-            # Generate with locked-down params
             print(f"[REQ] Starting generation...")
             wav = self.model.generate(
                 text,
@@ -166,7 +151,6 @@ class ChatterboxWorker:
             )
             print(f"[REQ] Raw output: shape={wav.shape}, dtype={wav.dtype}")
 
-            # Normalize shape
             if not isinstance(wav, torch.Tensor):
                 wav = torch.tensor(wav)
             while wav.dim() > 2:
@@ -180,7 +164,6 @@ class ChatterboxWorker:
             print(f"[REQ] Final output: shape={wav.shape}, "
                   f"range=[{wav.min():.4f}, {wav.max():.4f}]")
 
-            # Encode
             buf = io.BytesIO()
             ta.save(buf, wav, self.model.sr, format="wav")
             buf.seek(0)
