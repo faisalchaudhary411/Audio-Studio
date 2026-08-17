@@ -162,8 +162,8 @@
   window.VOXCRAFT_VOICES = {{ voices|tojson }};
   window.VOXCRAFT_HAS_CLONE_MUSIC = {{ has_clone_music_ctx|tojson }};
 </script>
-<script src="{{ url_for('static', filename='js/studio.js') }}?v=2"></script>
+<script src="{{ static_url('js/studio.js') }}"></script>
 {% if has_clone_music_ctx %}
-<script src="{{ url_for('static', filename='js/clone_music.js') }}?v=2"></script>
+<script src="{{ static_url('js/clone_music.js') }}"></script>
 {% endif %}
 {% endblock %}

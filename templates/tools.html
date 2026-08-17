@@ -255,8 +255,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/tools.js') }}"></script>
+<script src="{{ static_url('js/tools.js') }}"></script>
 {% if is_pro_ctx %}
-<script src="{{ url_for('static', filename='js/music.js') }}"></script>
+<script src="{{ static_url('js/music.js') }}"></script>
 {% endif %}
 {% endblock %}
