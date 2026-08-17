@@ -38,6 +38,7 @@ chunking makes long text safe to generate.
 """
 
 import re
+import traceback
 
 import modal
 from pydantic import BaseModel
@@ -68,6 +69,14 @@ class CloneRequest(BaseModel):
     text: str
     reference_audio_b64: str
     language_id: str = "en"  # "en" or "hi" — see module docstring for how Urdu maps to "hi"
+
+
+class CloneResponse(BaseModel):
+    success: bool
+    audio_b64: str = ""
+    error: str = ""
+    chunks_generated: int = 0
+    duration_seconds: float = 0.0
 
 
 def _split_into_chunks(text: str, max_chars: int) -> list:
@@ -106,7 +115,8 @@ def _split_into_chunks(text: str, max_chars: int) -> list:
                 current = piece
     if current:
         chunks.append(current)
-    return chunks
+    # Filter out any empty chunks
+    return [c for c in chunks if c.strip()]
 
 
 @app.cls(gpu="A10G", timeout=300, scaledown_window=300)
@@ -136,6 +146,8 @@ class ChatterboxWorker:
         — two independently-generated waveforms rarely end/start at the
         same phase or amplitude, so the discontinuity reads as a click."""
         import torch
+        if not waveforms:
+            return None
         fade_samples = int(sr * CROSSFADE_MS / 1000)
         result = waveforms[0]
         for next_wav in waveforms[1:]:
@@ -188,30 +200,53 @@ class ChatterboxWorker:
         ref_b64 = req.reference_audio_b64
         language_id = req.language_id if req.language_id in ("en", "hi") else "en"
 
+        # ── Validation ──────────────────────────────────────────────────
         if not text:
-            return {"success": False, "error": "No text provided."}
+            return CloneResponse(success=False, error="No text provided.").model_dump()
         if not ref_b64:
-            return {"success": False, "error": "No reference_audio_b64 provided."}
+            return CloneResponse(success=False, error="No reference_audio_b64 provided.").model_dump()
         if len(text) > MAX_TOTAL_CHARS:
-            return {"success": False, "error": f"Text too long (max {MAX_TOTAL_CHARS} chars)."}
+            return CloneResponse(
+                success=False,
+                error=f"Text too long ({len(text)} chars, max {MAX_TOTAL_CHARS})."
+            ).model_dump()
 
         tmp_path = None
         ref_path = None
         try:
-            ref_bytes = base64.b64decode(ref_b64)
+            # ── Decode reference audio ─────────────────────────────────
+            try:
+                ref_bytes = base64.b64decode(ref_b64)
+            except Exception:
+                return CloneResponse(success=False, error="Invalid base64 in reference_audio_b64.").model_dump()
+
+            if len(ref_bytes) == 0:
+                return CloneResponse(success=False, error="Reference audio is empty.").model_dump()
 
             with tempfile.NamedTemporaryFile(suffix=".upload", delete=False) as f:
                 f.write(ref_bytes)
                 tmp_path = f.name
 
-            waveform, sr = ta.load(tmp_path)
+            # ── Load and validate reference ────────────────────────────
+            try:
+                waveform, sr = ta.load(tmp_path)
+            except Exception as e:
+                return CloneResponse(success=False, error=f"Cannot load reference audio: {e}").model_dump()
+
             duration = waveform.shape[1] / sr
 
             if duration < 3:
-                return {"success": False, "error": f"Reference too short ({duration:.1f}s). Use 5-15s."}
+                return CloneResponse(
+                    success=False,
+                    error=f"Reference too short ({duration:.1f}s). Use 5-15s."
+                ).model_dump()
             if duration > 30:
-                return {"success": False, "error": f"Reference too long ({duration:.1f}s). Use 5-15s."}
+                return CloneResponse(
+                    success=False,
+                    error=f"Reference too long ({duration:.1f}s). Use 5-15s."
+                ).model_dump()
 
+            # ── Preprocess reference ───────────────────────────────────
             if waveform.shape[0] > 1:
                 waveform = waveform.mean(dim=0, keepdim=True)
 
@@ -227,10 +262,21 @@ class ChatterboxWorker:
                 os.remove(tmp_path)
                 tmp_path = None
 
+            # ── Chunk and generate ─────────────────────────────────────
             chunks = _split_into_chunks(text, MAX_CHUNK_CHARS)
+            if not chunks:
+                return CloneResponse(success=False, error="Text produced no valid chunks after splitting.").model_dump()
+
             waveforms = []
-            for chunk_text in chunks:
-                wav = self._generate_chunk(chunk_text, ref_path, language_id)
+            for i, chunk_text in enumerate(chunks):
+                try:
+                    wav = self._generate_chunk(chunk_text, ref_path, language_id)
+                except Exception as e:
+                    return CloneResponse(
+                        success=False,
+                        error=f"Chunk {i+1}/{len(chunks)} failed: {e}"
+                    ).model_dump()
+
                 if not isinstance(wav, torch.Tensor):
                     wav = torch.tensor(wav)
                 while wav.dim() > 2:
@@ -241,19 +287,39 @@ class ChatterboxWorker:
                     wav = wav[0:1, :]
                 waveforms.append(wav)
 
-            wav = waveforms[0] if len(waveforms) == 1 else self._concat_with_crossfade(waveforms, self.model.sr)
+            # ── Concatenate and post-process ───────────────────────────
+            if len(waveforms) == 1:
+                wav = waveforms[0]
+            else:
+                wav = self._concat_with_crossfade(waveforms, self.model.sr)
+
+            if wav is None:
+                return CloneResponse(success=False, error="Audio generation produced no output.").model_dump()
+
             wav = self._trim_trailing_silence(wav, self.model.sr)
             wav = torch.clamp(wav, -1.0, 1.0)
 
+            # ── Encode response ────────────────────────────────────────
             buf = io.BytesIO()
             ta.save(buf, wav, self.model.sr, format="wav")
             buf.seek(0)
             audio_b64 = base64.b64encode(buf.read()).decode("ascii")
 
-            return {"success": True, "audio_b64": audio_b64}
+            duration_sec = wav.shape[-1] / self.model.sr
+
+            return CloneResponse(
+                success=True,
+                audio_b64=audio_b64,
+                chunks_generated=len(chunks),
+                duration_seconds=round(duration_sec, 2)
+            ).model_dump()
 
         except Exception as exc:
-            return {"success": False, "error": str(exc)}
+            tb = traceback.format_exc()
+            return CloneResponse(
+                success=False,
+                error=f"{exc}\n\n{tb}"
+            ).model_dump()
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 os.remove(tmp_path)
