@@ -21,10 +21,43 @@
     return { status: 'error', error: 'Timed out waiting for generation.' };
   }
 
+  // Display-only script detection — mirrors the logic in
+  // urdu_transliteration.py's prepare_text_for_tts(), but this copy exists
+  // purely to show the user what will happen before they hit generate.
+  // The backend re-detects independently and is the actual source of
+  // truth; a mismatch here would only affect the preview label, never the
+  // real generation, since the server never trusts this client-side guess.
+  const URDU_SCRIPT_RE = /[\u0600-\u06FF\u0750-\u077F]/;
+  const DEVANAGARI_RE = /[\u0900-\u097F]/;
+  function detectScriptLabel(text) {
+    if (URDU_SCRIPT_RE.test(text)) return 'Urdu detected — will generate with Hindi pronunciation';
+    if (DEVANAGARI_RE.test(text)) return 'Hindi detected';
+    if (text.trim()) return 'English detected';
+    return '';
+  }
+  function detectScriptShort(text) {
+    if (URDU_SCRIPT_RE.test(text)) return 'Hindi pronunciation';
+    if (DEVANAGARI_RE.test(text)) return 'Hindi';
+    return 'English';
+  }
+
   // ---- Clone voice ----
   const cloneRefInput = document.getElementById('clone-ref-audio');
   const cloneText = document.getElementById('clone-text');
   const cloneBtn = document.getElementById('generate-clone-btn');
+  const cloneCharCount = document.getElementById('clone-char-count');
+  const cloneLangDetect = document.getElementById('clone-lang-detect');
+
+  if (cloneText && cloneCharCount) {
+    const limit = parseInt(cloneText.getAttribute('maxlength'), 10) || 2000;
+    const updateCount = () => {
+      cloneCharCount.textContent = `${cloneText.value.length} / ${limit} characters`;
+      cloneCharCount.style.color = cloneText.value.length >= limit ? 'var(--brass-hi)' : 'var(--text-dim)';
+      if (cloneLangDetect) cloneLangDetect.textContent = detectScriptLabel(cloneText.value);
+    };
+    cloneText.addEventListener('input', updateCount);
+    updateCount();
+  }
   const cloneStatus = document.querySelector('[data-clone-status]');
   const cloneResult = document.getElementById('clone-result');
 
@@ -64,7 +97,9 @@
         }
 
         const result = await pollJob(`/api/clone/status/${genData.job_id}`, (status) => {
-          cloneStatus.textContent = status === 'generating' ? 'Generating on GPU… this can take up to a minute.' : 'Working…';
+          cloneStatus.textContent = status === 'generating'
+            ? `Generating on GPU (${detectScriptShort(cloneText.value)})… this can take up to a minute.`
+            : 'Working…';
         });
         if (result.status === 'done') {
           cloneStatus.textContent = 'Done.';
