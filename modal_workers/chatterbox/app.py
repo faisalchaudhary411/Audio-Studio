@@ -129,14 +129,23 @@ class ChatterboxWorker:
         self.model = ChatterboxMultilingualTTS.from_pretrained(device=device)
 
     def _generate_chunk(self, text: str, ref_path: str, language_id: str):
+        """Generate a single chunk using ChatterboxMultilingualTTS.
+
+        NOTE: Multilingual model does NOT support top_k (Turbo-only).
+        Multilingual defaults: repetition_penalty=2.0, min_p=0.05,
+        cfg_weight=0.5, exaggeration=0.5. Temperature kept lower (0.4)
+        for consistency since we're stitching chunks together.
+        """
         return self.model.generate(
             text,
             audio_prompt_path=ref_path,
             language_id=language_id,
             temperature=0.4,
             top_p=0.8,
-            top_k=50,
-            repetition_penalty=1.2,
+            repetition_penalty=2.0,
+            min_p=0.05,
+            cfg_weight=0.5,
+            exaggeration=0.5,
         )
 
     def _concat_with_crossfade(self, waveforms: list, sr: int):
