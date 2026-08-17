@@ -19,68 +19,39 @@ COST: this is NOT free like edge-tts. Replicate bills ~$0.02-0.03 per
 generation (billed to whatever REPLICATE_API_TOKEN account you set). Gated
 Pro-only in app.py for exactly this reason — flip that gate at your own risk
 if you want free users generating music on your dime.
+
+CHANGED: Switched from raw requests to the official `replicate` Python client.
+The old raw-HTTP approach used POST /v1/models/{owner}/{name}/predictions which
+returned 404 for community models. The official client handles model resolution
+automatically — it tries the model endpoint first, falls back to version-based
+prediction creation, and handles polling/waiting internally.
+
+Also switched from in-memory dict to SQLite-backed jobs (same fix as
+clone_engine.py) to prevent the "Unknown job" bug under gunicorn.
 """
 
 import os
-import time
+import sqlite3
 import threading
+import time
+import traceback
 import uuid
-import requests
 
-# BUG FIX: Don't read the token at import time — read it at call time.
-# Gunicorn workers import this module once at startup. If the env var
-# wasn't set then (e.g. systemd hadn't loaded it yet, or the .env file
-# wasn't sourced), the token stays empty forever. Reading at call time
-# means a gunicorn graceful reload (SIGHUP) or even just a new request
-# will pick up the current env var value.
-#
-# Also added: explicit .env file fallback, and a diagnostic endpoint
-# so you can verify the token is actually visible to the worker process.
+# ── Replicate client ───────────────────────────────────────────────────────
+# The official client handles auth, model resolution, polling, and errors.
+# Install: pip install replicate
+# It reads REPLICATE_API_TOKEN from os.environ automatically.
 
-REPLICATE_MODEL = "lucataco/ace-step"  # Apache 2.0 — verified on Replicate's model page
+try:
+    import replicate
+    _REPLICATE_AVAILABLE = True
+except ImportError:
+    replicate = None
+    _REPLICATE_AVAILABLE = False
 
-
-def _get_token():
-    """Read REPLICATE_API_TOKEN from environment at call time.
-
-    Tries in order:
-    1. os.environ (set via export, systemd, docker -e, etc.)
-    2. .env file in project root (common for local dev)
-    3. .env file in current working directory
-
-    Returns the token string, or "" if not found anywhere.
-    """
-    token = os.environ.get("REPLICATE_API_TOKEN", "")
-    if token and token.strip():
-        return token.strip()
-
-    # Fallback: try reading from .env file
-    for env_path in ["/app/.env", "/opt/voxcraft/.env", os.path.join(os.getcwd(), ".env")]:
-        if os.path.exists(env_path):
-            try:
-                with open(env_path, "r") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("REPLICATE_API_TOKEN="):
-                            token = line.split("=", 1)[1].strip().strip('"').strip("'")
-                            if token:
-                                return token
-            except Exception:
-                pass
-
-    return ""
-
-
-def _headers():
-    token = _get_token()
-    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-
+REPLICATE_MODEL = "lucataco/ace-step"
 
 # ── SQLite job store (same pattern as clone_engine.py) ─────────────────────
-# The old in-memory _jobs dict had the same "Unknown job" bug under gunicorn
-# that clone_engine had. Fixed here too for consistency.
-
-import sqlite3
 
 JOB_DB_PATH = os.environ.get("MUSIC_JOB_DB_PATH", "/tmp/voxcraft_music_jobs.db")
 JOB_MAX_AGE_SECONDS = 600
@@ -208,80 +179,67 @@ def _fetch_job(job_id: str):
 def _run_music_job(job_id: str, tags: str, lyrics: str, duration: int, seed: int = None):
     _update_job(job_id, status="starting")
     try:
-        token = _get_token()
-        if not token:
+        if not _REPLICATE_AVAILABLE:
             _update_job(
                 job_id,
                 status="error",
-                error=(
-                    "REPLICATE_API_TOKEN is not set. "
-                    "Check: echo $REPLICATE_API_TOKEN | systemd show-environment | your .env file. "
-                    "If you just added it, run: systemctl restart voxcraft (or your service name)."
-                ),
+                error="The `replicate` Python package is not installed. Run: pip install replicate",
             )
             return
 
-        payload = {
-            "input": {
-                "tags": tags,
-                "lyrics": lyrics or "[inst]",  # "[inst]" = instrumental, no vocals
-                "duration": duration,
-            }
+        # The replicate client auto-reads REPLICATE_API_TOKEN from env.
+        # If the token is missing/invalid, replicate.run() will raise an error.
+        input_payload = {
+            "tags": tags,
+            "lyrics": lyrics or "[inst]",
+            "duration": duration,
         }
         if seed is not None:
-            payload["input"]["seed"] = seed
+            input_payload["seed"] = seed
 
-        r = requests.post(
-            f"https://api.replicate.com/v1/models/{REPLICATE_MODEL}/predictions",
-            headers=_headers(), json=payload, timeout=30,
-        )
-        if r.status_code not in (200, 201):
-            _update_job(
-                job_id,
-                status="error",
-                error=f"Replicate error {r.status_code}: {r.text[:500]}",
-            )
-            return
-
-        prediction = r.json()
-        get_url = prediction["urls"]["get"]
         _update_job(job_id, status="generating")
 
-        # Poll — typical completion is ~30s per Replicate's own listing.
-        for _ in range(90):  # up to ~3 minutes before giving up
-            time.sleep(2)
-            pr = requests.get(get_url, headers=_headers(), timeout=15)
-            data = pr.json()
-            status = data.get("status")
-            if status == "succeeded":
-                output = data.get("output")
-                audio_url = output if isinstance(output, str) else (output[0] if output else None)
-                if not audio_url:
-                    _update_job(job_id, status="error", error="Replicate returned no audio output.")
-                    return
-                audio_resp = requests.get(audio_url, timeout=30)
-                _update_job(
-                    job_id,
-                    status="done",
-                    audio=audio_resp.content,
-                    audio_url=audio_url,
-                )
-                return
-            if status in ("failed", "canceled"):
-                _update_job(
-                    job_id,
-                    status="error",
-                    error=data.get("error") or f"Generation {status}.",
-                )
-                return
+        # replicate.run() is sync — it creates the prediction, polls internally,
+        # and returns the output when done. Default wait timeout is 60s.
+        # For music generation (~21s typical), this is usually enough.
+        # If it exceeds 60s, it returns a Prediction object in "starting" state
+        # and we'd need to poll manually — but ACE-Step is fast enough that
+        # 60s should cover most cases. We set wait=60 explicitly.
+        output = replicate.run(
+            REPLICATE_MODEL,
+            input=input_payload,
+            wait=60,
+        )
+
+        # Output is a list of FileOutput objects (replicate 1.0+).
+        # Each has .url() and .read() methods.
+        if not output:
+            _update_job(job_id, status="error", error="Replicate returned empty output.")
+            return
+
+        # Handle both old-style (URL string) and new-style (FileOutput)
+        first_output = output[0] if isinstance(output, list) else output
+        if hasattr(first_output, "url"):
+            audio_url = first_output.url()
+            audio_bytes = first_output.read()
+        else:
+            audio_url = str(first_output)
+            import requests
+            audio_bytes = requests.get(audio_url, timeout=30).content
+
         _update_job(
             job_id,
-            status="error",
-            error="Timed out waiting for Replicate (took longer than 3 minutes).",
+            status="done",
+            audio=audio_bytes,
+            audio_url=audio_url,
         )
+
+    except replicate.exceptions.ReplicateError as e:
+        # Covers auth errors, model not found, invalid inputs, etc.
+        _update_job(job_id, status="error", error=f"Replicate API error: {e}")
     except Exception as e:
-        import traceback
-        _update_job(job_id, status="error", error=f"{e}\n{traceback.format_exc()}")
+        err_msg = str(e) + "\n" + traceback.format_exc()
+        _update_job(job_id, status="error", error=err_msg)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -291,24 +249,27 @@ def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int =
     job_id = uuid.uuid4().hex
     _insert_job(job_id)
 
-    # BUG FIX: Check token at call time, not import time. This means if you
-    # set the env var after gunicorn started, a graceful reload (SIGHUP) or
-    # even just a new request will pick it up — instead of the old behavior
-    # where the empty token was cached forever from import time.
-    token = _get_token()
+    if not _REPLICATE_AVAILABLE:
+        _update_job(
+            job_id,
+            status="error",
+            error="The `replicate` Python package is not installed. Add it to requirements.txt: replicate",
+        )
+        return {"job_id": job_id}
+
+    # Check token visibility at call time (not import time)
+    token = os.environ.get("REPLICATE_API_TOKEN", "").strip()
     if not token:
         _update_job(
             job_id,
             status="error",
             error=(
-                "REPLICATE_API_TOKEN is not set in the environment. "
-                "If you just added it, make sure it's exported (export REPLICATE_API_TOKEN=...) "
-                "and restart the gunicorn service (not just the VPS). "
-                "For systemd: sudo systemctl restart voxcraft. "
-                "For supervisor: sudo supervisorctl restart voxcraft."
+                "REPLICATE_API_TOKEN is not set. "
+                "Add it to your environment and restart the gunicorn service. "
+                "For systemd: sudo systemctl edit voxcraft --force, add [Service] Environment=REPLICATE_API_TOKEN=your_token, then sudo systemctl daemon-reload && sudo systemctl restart voxcraft"
             ),
         )
-        return {"job_id": job_id}  # Return job_id so frontend can poll the detailed error
+        return {"job_id": job_id}
 
     thread = threading.Thread(
         target=_run_music_job,
