@@ -47,11 +47,20 @@ set generously to cover this.
 Requires two Modal secrets/tokens set as GitHub Actions repo secrets
 (MODAL_TOKEN_ID / MODAL_TOKEN_SECRET) — see
 .github/workflows/deploy-modal-music-worker.yml for the one-time setup.
+
+BUG FIX: `seed` was originally typed `int = None`, which Pydantic v2
+validates as a plain `int` field that merely defaults to None — it does NOT
+accept an incoming `null` in the request body. music_client.py always sends
+`"seed": null` when no seed is chosen, so every request failed Pydantic
+validation before generation even started, returned as HTTP 422 with no
+useful body. Fixed by typing it `Optional[int] = None`, which explicitly
+allows None as a valid value, not just as a default.
 """
 
 import base64
 import traceback
 from pathlib import Path
+from typing import Optional
 
 import modal
 from pydantic import BaseModel
@@ -102,7 +111,7 @@ class MusicRequest(BaseModel):
     prompt: str
     lyrics: str = ""
     duration: float = 60.0
-    seed: int = None
+    seed: Optional[int] = None  # was `int = None` — Pydantic v2 rejected an incoming null; see module docstring
     audio_format: str = "wav"  # "wav" or "mp3" — kept "wav" by default to match the frontend's <audio> mime type
 
 
