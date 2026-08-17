@@ -208,40 +208,62 @@ def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int, seed: i
 
         _update_job(job_id, status="generating")
 
-        # wait=120: ACE-Step typically completes in ~21s on Replicate,
-        # but longer durations or queue delays can push it past 60s.
-        # If this expires, replicate.run() returns a Prediction object
-        # in "starting" state — we would need async polling (not implemented).
-        # replicate.run() is sync — it creates the prediction, polls internally,
-        # and returns the output when done. Default wait timeout is 60s.
-        output = replicate.run(
-            REPLICATE_MODEL,
+        # Replicate API caps wait at 60 seconds (HTTP 422 if higher).
+        # ACE-Step typically completes in ~21s, but queue delays can push
+        # it past 60s. Strategy: create prediction, then poll manually.
+        prediction = replicate.predictions.create(
+            model=REPLICATE_MODEL,
             input=input_payload,
-            wait=120,
         )
 
-        # Output is a list of FileOutput objects (replicate 1.0+).
-        if not output:
-            _update_job(job_id, status="error", error="Replicate returned empty output.")
-            return
+        # Poll until done, failed, or timeout (~3 minutes total)
+        for _ in range(90):  # 90 * 2s = 180s = 3 minutes
+            prediction.reload()
+            status = prediction.status
 
-        # Handle both old-style (URL string) and new-style (FileOutput)
-        first_output = output[0] if isinstance(output, list) else output
-        if hasattr(first_output, "url"):
-            audio_url = first_output.url()
-            audio_bytes = first_output.read()
-        else:
-            audio_url = str(first_output)
-            import requests
-            audio_bytes = requests.get(audio_url, timeout=30).content
+            if status == "succeeded":
+                output = prediction.output
+                if not output:
+                    _update_job(job_id, status="error", error="Replicate returned no audio output.")
+                    return
 
+                # Handle both list and single output
+                first_output = output[0] if isinstance(output, list) else output
+                if hasattr(first_output, "url"):
+                    audio_url = first_output.url()
+                    audio_bytes = first_output.read()
+                elif hasattr(first_output, "read"):
+                    audio_url = None
+                    audio_bytes = first_output.read()
+                else:
+                    audio_url = str(first_output)
+                    import requests
+                    audio_bytes = requests.get(audio_url, timeout=30).content
+
+                _update_job(
+                    job_id,
+                    status="done",
+                    audio=audio_bytes,
+                    audio_url=audio_url,
+                )
+                return
+
+            if status in ("failed", "canceled"):
+                _update_job(
+                    job_id,
+                    status="error",
+                    error=prediction.error or f"Generation {status}.",
+                )
+                return
+
+            time.sleep(2)
+
+        # Timeout after 3 minutes
         _update_job(
             job_id,
-            status="done",
-            audio=audio_bytes,
-            audio_url=audio_url,
+            status="error",
+            error="Timed out waiting for Replicate (took longer than 3 minutes).",
         )
-
     except replicate.exceptions.ReplicateError as e:
         _update_job(job_id, status="error", error=f"Replicate API error: {e}")
     except Exception as e:
