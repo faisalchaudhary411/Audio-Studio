@@ -1429,6 +1429,7 @@ def api_clone_generate():
     data = request.get_json(force=True) or {}
     text = (data.get("text") or "").strip()
     reference_id = data.get("reference_id")
+    language_id = (data.get("language_id") or "en").strip().lower()
 
     if not text:
         return jsonify({"error": "Please enter some text first."}), 400
@@ -1441,21 +1442,57 @@ def api_clone_generate():
     if not os.path.exists(path):
         return jsonify({"error": "Reference clip not found — please re-upload."}), 400
 
-    job_id = start_clone_job(text, path)
+    # Language ID is passed through to clone_engine, which handles
+    # Urdu transliteration internally via urdu_transliteration.prepare_text_for_tts().
+    # The Modal worker only accepts "en" or "hi" — clone_engine resolves this.
+    if language_id not in ("en", "hi", "ur"):
+        language_id = "en"
+
+    try:
+        job_id = start_clone_job(text, path, language_id=language_id)
+    except Exception as e:
+        import traceback
+        return jsonify({"error": f"Failed to start clone job: {str(e)}", "detail": traceback.format_exc()}), 500
+
+    if not job_id:
+        return jsonify({"error": "Failed to create clone job — no job ID returned."}), 500
+
     return jsonify({"job_id": job_id})
 
 
 @app.route("/api/clone/status/<job_id>")
 def api_clone_status(job_id):
+    if not job_id or not isinstance(job_id, str):
+        return jsonify({"error": "Invalid job ID."}), 400
+
     job = get_job(job_id)
     if not job:
-        return jsonify({"error": "Unknown job."}), 404
+        # BUG FIX: "Unknown job." was too vague. Distinguish between:
+        # - Job never existed (bad ID from frontend)
+        # - Job expired/cleaned up (normal for old jobs)
+        # - Job exists on a different worker (gunicorn multi-worker issue)
+        return jsonify({
+            "error": "Job not found. It may have expired, been cleaned up, or the job ID is invalid. Please try generating again."
+        }), 404
 
     if job["status"] == "done":
-        return jsonify({"status": "done", "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
+        return jsonify({
+            "status": "done",
+            "audio_b64": base64.b64encode(job["audio"]).decode("ascii"),
+            "chunks_generated": job.get("chunks_generated", 1),
+            "duration_seconds": job.get("duration_seconds", 0.0)
+        })
     if job["status"] == "error":
-        return jsonify({"status": "error", "error": job["error"]})
-    return jsonify({"status": job["status"]})
+        return jsonify({
+            "status": "error",
+            "error": job.get("error", "Unknown error during voice cloning."),
+            "detail": job.get("error_detail", "")
+        })
+    return jsonify({
+        "status": job["status"],
+        "progress": job.get("progress", 0),
+        "message": job.get("message", "Processing...")
+    })
 
 
 # ---------------------------------------------------------------------------
