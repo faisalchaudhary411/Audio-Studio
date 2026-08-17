@@ -1496,7 +1496,9 @@ def api_clone_status(job_id):
 
 
 # ---------------------------------------------------------------------------
-# Music generation (Replicate-hosted ACE-Step) — Pro+-only, real $ cost per run
+# Music generation (self-hosted ACE-Step 1.5 on Modal GPU) — Pro+-only,
+# real $ cost per run (GPU-seconds, not a flat per-call fee — see
+# MUSIC_MIGRATION.md)
 # ---------------------------------------------------------------------------
 MUSIC_MAX_DURATION_SEC = 120  # keep runs (and cost) bounded — tune in admin later if you add a limits field
 
