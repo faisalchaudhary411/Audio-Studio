@@ -20,14 +20,12 @@ generation (billed to whatever REPLICATE_API_TOKEN account you set). Gated
 Pro-only in app.py for exactly this reason — flip that gate at your own risk
 if you want free users generating music on your dime.
 
-CHANGED: Switched from raw requests to the official `replicate` Python client.
-The old raw-HTTP approach used POST /v1/models/{owner}/{name}/predictions which
-returned 404 for community models. The official client handles model resolution
-automatically — it tries the model endpoint first, falls back to version-based
-prediction creation, and handles polling/waiting internally.
-
-Also switched from in-memory dict to SQLite-backed jobs (same fix as
-clone_engine.py) to prevent the "Unknown job" bug under gunicorn.
+BUG FIX HISTORY:
+- v1: Used raw requests to /v1/models/lucataco/ace-step/predictions with wrong
+  param names ("tags" instead of "prompt"), causing 404.
+- v2: Switched to official replicate client, but still wrong params.
+- v3 (this): Fixed param names to match Replicate schema: "prompt" (not "tags"),
+  "duration" as number, "lyrics" optional. Also switched to SQLite job store.
 """
 
 import os
@@ -176,7 +174,15 @@ def _fetch_job(job_id: str):
 
 # ── Core music logic ───────────────────────────────────────────────────────
 
-def _run_music_job(job_id: str, tags: str, lyrics: str, duration: int, seed: int = None):
+def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int, seed: int = None):
+    """Run music generation via Replicate's ACE-Step model.
+
+    Replicate schema for lucataco/ace-step:
+    - prompt (str, required): Music description
+    - duration (float, default 60): Seconds, max 240
+    - lyrics (str, optional): Lyrics or "[inst]" for instrumental
+    - seed (int, optional): Random seed
+    """
     _update_job(job_id, status="starting")
     try:
         if not _REPLICATE_AVAILABLE:
@@ -187,32 +193,34 @@ def _run_music_job(job_id: str, tags: str, lyrics: str, duration: int, seed: int
             )
             return
 
-        # The replicate client auto-reads REPLICATE_API_TOKEN from env.
-        # If the token is missing/invalid, replicate.run() will raise an error.
+        # Build input matching Replicate's schema exactly
         input_payload = {
-            "tags": tags,
-            "lyrics": lyrics or "[inst]",
-            "duration": duration,
+            "prompt": prompt,
+            "duration": min(duration, 240),  # Replicate caps at 240s
         }
+
+        # Only add lyrics if provided; "[inst]" means instrumental
+        if lyrics and lyrics.strip():
+            input_payload["lyrics"] = lyrics.strip()
+
         if seed is not None:
             input_payload["seed"] = seed
 
         _update_job(job_id, status="generating")
 
+        # wait=120: ACE-Step typically completes in ~21s on Replicate,
+        # but longer durations or queue delays can push it past 60s.
+        # If this expires, replicate.run() returns a Prediction object
+        # in "starting" state — we would need async polling (not implemented).
         # replicate.run() is sync — it creates the prediction, polls internally,
         # and returns the output when done. Default wait timeout is 60s.
-        # For music generation (~21s typical), this is usually enough.
-        # If it exceeds 60s, it returns a Prediction object in "starting" state
-        # and we'd need to poll manually — but ACE-Step is fast enough that
-        # 60s should cover most cases. We set wait=60 explicitly.
         output = replicate.run(
             REPLICATE_MODEL,
             input=input_payload,
-            wait=60,
+            wait=120,
         )
 
         # Output is a list of FileOutput objects (replicate 1.0+).
-        # Each has .url() and .read() methods.
         if not output:
             _update_job(job_id, status="error", error="Replicate returned empty output.")
             return
@@ -235,7 +243,6 @@ def _run_music_job(job_id: str, tags: str, lyrics: str, duration: int, seed: int
         )
 
     except replicate.exceptions.ReplicateError as e:
-        # Covers auth errors, model not found, invalid inputs, etc.
         _update_job(job_id, status="error", error=f"Replicate API error: {e}")
     except Exception as e:
         err_msg = str(e) + "\n" + traceback.format_exc()
@@ -245,7 +252,11 @@ def _run_music_job(job_id: str, tags: str, lyrics: str, duration: int, seed: int
 # ── Public API ─────────────────────────────────────────────────────────────
 
 def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int = None) -> dict:
-    """Queue a music generation job and return its ID immediately."""
+    """Queue a music generation job and return its ID immediately.
+
+    NOTE: Parameter is still called 'tags' for backward compatibility with
+    app.py, but it's mapped to 'prompt' for the Replicate API.
+    """
     job_id = uuid.uuid4().hex
     _insert_job(job_id)
 
@@ -253,7 +264,7 @@ def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int =
         _update_job(
             job_id,
             status="error",
-            error="The `replicate` Python package is not installed. Add it to requirements.txt: replicate",
+            error="The `replicate` Python package is not installed. Add to requirements.txt: replicate",
         )
         return {"job_id": job_id}
 
@@ -271,9 +282,12 @@ def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int =
         )
         return {"job_id": job_id}
 
+    # Map 'tags' (old param name) to 'prompt' (Replicate's param name)
+    prompt = tags if tags else "instrumental music"
+
     thread = threading.Thread(
         target=_run_music_job,
-        args=(job_id, tags, lyrics, duration, seed),
+        args=(job_id, prompt, lyrics, duration, seed),
         daemon=True,
     )
     thread.start()
