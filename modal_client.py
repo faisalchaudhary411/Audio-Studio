@@ -27,16 +27,17 @@ def is_configured() -> bool:
     return bool(MODAL_CLONE_ENDPOINT_URL)
 
 
-def generate(text: str, reference_audio_b64: str) -> dict:
+def generate(text: str, reference_audio_b64: str, language_id: str = "en") -> dict:
     """Blocking call. Returns {"success": True, "audio_b64": ...} or
-    {"success": False, "error": ...}."""
+    {"success": False, "error": ...}. language_id: "en" or "hi" (see
+    urdu_transliteration.py for how Urdu maps to "hi")."""
     if not MODAL_CLONE_ENDPOINT_URL:
         return {"success": False, "error": "Voice cloning isn't configured on this deployment yet "
                                              "— set MODAL_CLONE_ENDPOINT_URL."}
     try:
         r = requests.post(
             MODAL_CLONE_ENDPOINT_URL,
-            json={"text": text, "reference_audio_b64": reference_audio_b64},
+            json={"text": text, "reference_audio_b64": reference_audio_b64, "language_id": language_id},
             timeout=_TIMEOUT_SEC,
         )
         if r.status_code != 200:

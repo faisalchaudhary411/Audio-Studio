@@ -423,7 +423,7 @@ def studio():
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
                             free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=batch_max,
                             monthly_char_quota=lim["FREE_MONTHLY_CHAR_QUOTA"],
-                            usage=usage_summary())
+                            usage=usage_summary(), clone_char_limit=CLONE_CHAR_LIMIT)
 
 
 @app.route("/pricing")

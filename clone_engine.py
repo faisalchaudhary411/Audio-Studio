@@ -7,122 +7,66 @@ Runs on Modal (modal_workers/chatterbox/app.py), not on this VPS — a clone
 request could otherwise pin the CPU for 10-60+ seconds or exhaust RAM on a
 1 vCPU / 2GB VPS shared with the rest of the site.
 
-FIXED: Replaced in-memory _jobs dict with SQLite to survive across
-processes/workers. The old _jobs = {} only lived in one process, so polling
-requests hitting a different worker always returned None → "Unknown job."
+CHANGED (again): originally used RunPod (async /run + /status polling).
+Switched to Modal because RunPod's minimum account deposit turned out to
+be a real barrier, and Modal offers $30/month free compute credit with no
+deposit at all. Modal's endpoint is a plain synchronous HTTP call rather
+than a job queue, so this file is simpler than the RunPod version was —
+no polling loop, just one blocking request from the background thread.
+Same public interface (start_clone_job / get_job) either way, so app.py's
+routes never needed to change across either swap.
 """
 
 import base64
-import os
-import sqlite3
 import threading
 import uuid
 
 import modal_client
+import urdu_transliteration
 
-# ---------------------------------------------------------------------------
-# SQLite persistence — shared across all processes / workers
-# ---------------------------------------------------------------------------
-DB_PATH = os.environ.get("JOBS_DB_PATH", "/tmp/clone_jobs.db")
-_DB_LOCK = threading.Lock()
+_jobs = {}
 
 
-def _init_db():
-    with _DB_LOCK:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS jobs (
-                id          TEXT PRIMARY KEY,
-                status      TEXT NOT NULL,
-                audio       BLOB,
-                error       TEXT
-            )
-        """)
-        conn.commit()
-        conn.close()
-
-
-_init_db()
-
-
-def _save_job(job_id: str, status: str, audio: bytes = None, error: str = None):
-    with _DB_LOCK:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute(
-            """INSERT INTO jobs (id, status, audio, error)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                   status=excluded.status,
-                   audio=excluded.audio,
-                   error=excluded.error""",
-            (job_id, status, audio, error),
-        )
-        conn.commit()
-        conn.close()
-
-
-def _get_job(job_id: str):
-    with _DB_LOCK:
-        conn = sqlite3.connect(DB_PATH)
-        row = conn.execute(
-            "SELECT status, audio, error FROM jobs WHERE id = ?", (job_id,)
-        ).fetchone()
-        conn.close()
-
-    if row is None:
-        return None
-    return {"status": row[0], "audio": row[1], "error": row[2]}
-
-
-# ---------------------------------------------------------------------------
-# Modal clone worker
-# ---------------------------------------------------------------------------
 def _run_clone_job(job_id: str, text: str, reference_audio_path: str):
-    _save_job(job_id, "generating")
+    _jobs[job_id]["status"] = "generating"
     try:
         with open(reference_audio_path, "rb") as f:
             ref_b64 = base64.b64encode(f.read()).decode("ascii")
 
-        result = modal_client.generate(text, ref_b64)
+        # Chatterbox Multilingual has no Urdu mode. Urdu and Hindi are the
+        # same spoken language (Hindustani), differing only in script — so
+        # Urdu text gets transliterated to Devanagari and generated via the
+        # Hindi language_id, which produces correctly-pronounced audio.
+        # See urdu_transliteration.py for the full explanation and the
+        # licensing reason this is hand-built rather than using an
+        # existing library.
+        processed_text, language_id = urdu_transliteration.prepare_text_for_tts(text)
+
+        result = modal_client.generate(processed_text, ref_b64, language_id=language_id)
         if not result.get("success"):
-            _save_job(
-                job_id,
-                "error",
-                error=result.get("error", "Generation failed."),
-            )
+            _jobs[job_id]["status"] = "error"
+            _jobs[job_id]["error"] = result.get("error", "Generation failed.")
             return
 
-        audio_bytes = base64.b64decode(result["audio_b64"])
-        _save_job(job_id, "done", audio=audio_bytes)
-    except Exception as exc:
-        _save_job(job_id, "error", error=str(exc))
+        _jobs[job_id]["status"] = "done"
+        _jobs[job_id]["audio"] = base64.b64decode(result["audio_b64"])
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = str(e)
 
 
 def start_clone_job(text: str, reference_audio_path: str) -> str:
-    """Queue a new voice-clone job and return its tracking ID."""
     job_id = uuid.uuid4().hex
-
+    _jobs[job_id] = {"status": "queued", "audio": None, "error": None}
     if not modal_client.is_configured():
-        _save_job(
-            job_id,
-            "error",
-            error=(
-                "Voice cloning isn't configured on this deployment yet — "
-                "set MODAL_CLONE_ENDPOINT_URL."
-            ),
-        )
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = ("Voice cloning isn't configured on this deployment yet — "
+                                   "set MODAL_CLONE_ENDPOINT_URL.")
         return job_id
-
-    _save_job(job_id, "queued")
-    thread = threading.Thread(
-        target=_run_clone_job,
-        args=(job_id, text, reference_audio_path),
-        daemon=True,
-    )
+    thread = threading.Thread(target=_run_clone_job, args=(job_id, text, reference_audio_path), daemon=True)
     thread.start()
     return job_id
 
 
 def get_job(job_id: str):
-    """Return the current status/audio/error dict for a job, or None."""
-    return _get_job(job_id)
+    return _jobs.get(job_id)
