@@ -1,0 +1,57 @@
+# Deploys the ACE-Step 1.5 music-generation worker to Modal — runs entirely
+# on GitHub's servers, so this works from your phone: edit
+# modal_workers/ace_step/app.py via the GitHub web editor, push, and this
+# deploys automatically. No local terminal or `modal` CLI needed on your end.
+#
+# One-time setup before this will work (skip if you already did this for
+# the Chatterbox clone worker — it's the same Modal account/tokens):
+#   1. Go to modal.com dashboard -> Settings -> API Tokens -> create a new
+#      token (or reuse the existing one). You'll get a Token ID and Token
+#      Secret.
+#   2. In this GitHub repo: Settings -> Secrets and variables -> Actions ->
+#      confirm MODAL_TOKEN_ID and MODAL_TOKEN_SECRET already exist (they
+#      should, from the Chatterbox worker setup). If not, add them.
+#   3. Push a change to modal_workers/ace_step/** (or re-run manually from
+#      the Actions tab) to trigger a deploy.
+#
+# After the first successful deploy, check the workflow's log for a line
+# like:
+#   https://<your-workspace>--voxcraft-music-worker-acestepworker-generate.modal.run
+# That URL is what you'll set as MODAL_MUSIC_ENDPOINT_URL on your VPS.
+#
+# NOTE: the very first deploy will also trigger the very first cold start,
+# which downloads ~15-20GB of model weights into a Modal Volume. That first
+# request can take several minutes — this is normal and only happens once
+# per Volume (subsequent cold starts after scale-to-zero just reload from
+# the cached Volume, which is much faster).
+
+name: Deploy Modal music worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modal_workers/ace_step/**"
+      - ".github/workflows/deploy-modal-music-worker.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Modal
+        run: pip install modal pydantic
+
+      - name: Deploy to Modal
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy modal_workers/ace_step/app.py
