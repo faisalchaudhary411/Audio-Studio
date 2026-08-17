@@ -35,6 +35,7 @@ class CloneRequest(BaseModel):
 class ChatterboxWorker:
     @modal.enter()
     def load_model(self):
+        import torch
         from chatterbox.tts_turbo import ChatterboxTurboTTS
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = ChatterboxTurboTTS.from_pretrained(device=device)
@@ -95,11 +96,11 @@ class ChatterboxWorker:
             wav = self.model.generate(
                 text,
                 audio_prompt_path=ref_path,
-                temperature=0.4,        # Moderate randomness (was 0.1)
-                top_p=0.8,              # Moderate filtering (was 0.1)
-                top_k=50,               # Wider selection (was 10)
-                repetition_penalty=1.2, # Default — prevents loops
-                norm_loudness=False,    # TEST: disable normalization
+                temperature=0.4,
+                top_p=0.8,
+                top_k=50,
+                repetition_penalty=1.2,
+                norm_loudness=False,
             )
 
             if not isinstance(wav, torch.Tensor):
