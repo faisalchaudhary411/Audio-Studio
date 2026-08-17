@@ -51,6 +51,35 @@ CLONE_CHAR_LIMIT = 2000  # generous — GPU inference on RunPod is fast, unlike 
 
 app = Flask(__name__)
 
+
+def static_url(filename: str) -> str:
+    """Cache-busted static asset URL: appends ?v=<file mtime> instead of a
+    hand-typed version number.
+
+    BUG THIS REPLACES: templates hardcoded ?v=2 on style.css/studio.js/
+    clone_music.js (and nothing at all on ads.js/main.js/notifications.js/
+    tools.js/music.js). clone_music.js was edited again later (character
+    counter, language detection) without bumping v=2 -> v=3, so browsers
+    that had already cached v=2 kept serving the stale file forever, since
+    from the browser's point of view the URL never changed.
+
+    Fix: derive the version from the file's actual last-modified time on
+    disk instead of a manually-maintained number. Any edit to the file
+    changes its mtime, which changes the query string, which forces a
+    refetch -- there is no longer a number to forget to bump. Falls back to
+    v=0 if the file can't be stat'd (e.g. missing) so a typo in the
+    filename doesn't crash the page.
+    """
+    static_path = os.path.join(app.static_folder, filename)
+    try:
+        version = int(os.path.getmtime(static_path))
+    except OSError:
+        version = 0
+    return url_for("static", filename=filename) + f"?v={version}"
+
+
+app.jinja_env.globals["static_url"] = static_url
+
 # HARDENING: no insecure fallback secret. A hardcoded SECRET_KEY means anyone
 # can forge a session cookie — including admin_authed=True, which bypasses
 # /admin login entirely. Fail loudly at startup instead of silently running
@@ -1496,9 +1525,7 @@ def api_clone_status(job_id):
 
 
 # ---------------------------------------------------------------------------
-# Music generation (self-hosted ACE-Step 1.5 on Modal GPU) — Pro+-only,
-# real $ cost per run (GPU-seconds, not a flat per-call fee — see
-# MUSIC_MIGRATION.md)
+# Music generation (Replicate-hosted ACE-Step) — Pro+-only, real $ cost per run
 # ---------------------------------------------------------------------------
 MUSIC_MAX_DURATION_SEC = 120  # keep runs (and cost) bounded — tune in admin later if you add a limits field
 
