@@ -49,6 +49,16 @@
     if (tabButtons[key]) tabButtons[key].addEventListener('click', () => showTab(key));
   });
 
+  // Deep-link support: /studio#clone or /studio#music opens that tab
+  // directly instead of always landing on Single. Added so homepage promo
+  // links (and the pricing page) can send people straight into the tab
+  // they clicked on, instead of dropping them on Single and making them
+  // hunt for the right button.
+  const initialTab = (window.location.hash || '').replace('#', '');
+  if (initialTab && tabPanels[initialTab]) {
+    showTab(initialTab);
+  }
+
   // ---- SSML toggle ----
   const ssmlToggle = document.getElementById('ssml-toggle');
   const ssmlCheatsheet = document.getElementById('ssml-cheatsheet');
