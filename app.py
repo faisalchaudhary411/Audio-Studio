@@ -22,6 +22,7 @@ deploy/migrate_to_sqlite.py if migrating existing data over).
 
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response, g
 import os
+import re
 import io
 import time
 import threading
@@ -677,7 +678,7 @@ def blog_detail(post_id):
     # Keep metadata presentation consistent even for older posts that predate
     # author/reading-time fields in the blog editor.
     body_text = re.sub(r"<[^>]+>", " ", post_html)
-    word_count = len(re.findall(r"\\b\\w+\\b", body_text))
+    word_count = len(re.findall(r"\b\w+\b", body_text))
     reading_minutes = max(1, round(word_count / 220))
     return render_template(
         "blog_detail.html",
