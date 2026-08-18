@@ -253,32 +253,96 @@
   </div>
 </div>
 
-{% endblock %}
 
 <section class="section" style="padding-top:10px;max-width:900px;">
   <div class="section__head">
     <span class="section__eyebrow">Choosing a tool</span>
     <h2 class="section__title">Which VoxCraft tool should you use?</h2>
+    <p class="section__sub">Pick the smallest tool that matches the job. Keeping the workflow focused can make processing faster and helps preserve the original recording when you only need a simple change.</p>
   </div>
+
   <div class="chain" style="margin-top:0;">
-    <div class="chain__node"><h3>Need text from speech?</h3><p>Use <strong>Transcribe</strong> to turn supported audio recordings into text.</p></div>
+    <div class="chain__node">
+      <h3>Need text from speech?</h3>
+      <p>Use <strong>Transcribe</strong> to turn supported audio recordings into text. Clear speech and limited background noise generally produce better transcripts.</p>
+    </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node"><h3>Need a different file format?</h3><p>Use <strong>Convert</strong> when you need MP3, WAV, OGG, M4A or FLAC output.</p></div>
+    <div class="chain__node">
+      <h3>Need a different file format?</h3>
+      <p>Use <strong>Convert</strong> when you need MP3, WAV, OGG, M4A or FLAC output. Keep the original file if you may need to make a different conversion later.</p>
+    </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node"><h3>Need to edit a recording?</h3><p>Use <strong>Merge</strong>, <strong>Cutter</strong> or <strong>Denoise</strong> for common editing tasks.</p></div>
+    <div class="chain__node">
+      <h3>Need to edit a recording?</h3>
+      <p>Use <strong>Merge</strong>, <strong>Cutter</strong> or <strong>Denoise</strong> for common editing tasks without opening a full desktop editor.</p>
+    </div>
+  </div>
+
+  <div class="chain" style="margin-top:16px;">
+    <div class="chain__node">
+      <h3>Need a voice effect?</h3>
+      <p><strong>Voice Changer</strong> provides pitch, robot, echo, chipmunk and deep-voice effects for clips where a deliberate character or processing effect is wanted.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <h3>Need audio from a video?</h3>
+      <p><strong>Video to Audio</strong> extracts an audio track from supported video formats so you can continue editing or converting it separately.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <h3>Need a quick music bed?</h3>
+      <p><strong>Music Generator</strong> is available to Pro users for generating tracks from a description. Check the current licensing information before using generated music commercially.</p>
+    </div>
   </div>
 
   <div class="panel" style="margin-top:24px;">
-    <span class="panel__label">Good to know</span>
-    <p style="margin:8px 0;color:var(--text-mid);line-height:1.7;">Every tool shows its supported formats and relevant file limits before processing. Results can depend on the source recording: for example, noise reduction works best on steady background noise and cannot reliably remove every sudden sound or heavily distorted recording.</p>
+    <span class="panel__label">Before processing an important recording</span>
+    <p style="margin:8px 0;color:var(--text-mid);line-height:1.7;">
+      Keep an untouched copy of the original. Choose a sensible output format, avoid repeated lossy conversions,
+      and listen to the result before deleting your source. Processing cannot reliably restore information that
+      was never captured or was already lost through heavy compression.
+    </p>
   </div>
 
   <div class="section__head" style="margin-top:38px;">
     <span class="section__eyebrow">Audio workflow tips</span>
     <h2 class="section__title">Start with the cleanest source you can.</h2>
-    <p class="section__sub">Good microphone placement, moderate recording levels and a quiet room usually produce better results than aggressive processing after the fact. Keep an original copy of important recordings before converting or editing them.</p>
+    <p class="section__sub">Good microphone placement, moderate recording levels and a quiet room usually produce better results than aggressive processing after the fact. For speech, keep the speaker reasonably close to the microphone and avoid clipping the input.</p>
+  </div>
+
+  <div style="display:grid;gap:12px;margin-top:16px;">
+    <div class="panel">
+      <h3 style="font-family:var(--display);margin-bottom:7px;">For transcription</h3>
+      <p style="color:var(--text-mid);line-height:1.7;margin:0;">Use a recording with clear speech and as little competing sound as possible. If several people speak at once, review the generated transcript rather than assuming every word will be separated perfectly.</p>
+    </div>
+    <div class="panel">
+      <h3 style="font-family:var(--display);margin-bottom:7px;">For noise removal</h3>
+      <p style="color:var(--text-mid);line-height:1.7;margin:0;">Steady room noise is a better candidate for denoising than sudden sounds. Start with moderate processing: excessive noise reduction can make speech sound metallic or unnatural.</p>
+    </div>
+    <div class="panel">
+      <h3 style="font-family:var(--display);margin-bottom:7px;">For format conversion</h3>
+      <p style="color:var(--text-mid);line-height:1.7;margin:0;">Choose WAV or FLAC when preserving quality matters and MP3 when a smaller, broadly compatible file is more useful. Converting an already compressed MP3 to another lossy format does not restore the lost detail.</p>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:24px;">
+    <span class="panel__label">Frequently asked questions</span>
+    <details style="margin-top:10px;">
+      <summary>Are my files permanently stored?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Check the VoxCraft Privacy page for the current handling and retention information for uploaded files and generated results.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>What happens if a file is too large?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Each tool shows its current file limit before processing. A file above that limit should be reduced or split before uploading.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Should I keep my original file?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Yes. Keeping an untouched original is the safest way to retry with different settings or formats.</p>
+    </details>
   </div>
 </section>
+
+{% endblock %}
 
 {% block scripts %}
 <script src="{{ static_url('js/tools.js') }}"></script>

@@ -1,39 +1,94 @@
 {% extends "base.html" %}
 {% block title %}{{ post.title }} — VoxCraft Blog{% endblock %}
+{% block meta_description %}{{ post.excerpt or "Practical audio, text-to-speech and creator workflow guide from VoxCraft." }}{% endblock %}
+
 {% block content %}
-<article class="section" style="max-width:820px;">
-  <header>
+<article class="section" style="max-width:900px;">
+  <header style="max-width:820px;margin:0 auto;">
     <span class="voice-card__tag" style="margin-bottom:14px;display:inline-block;">{{ post.category or 'General' }}</span>
     <h1 class="hero__title" style="font-size:clamp(1.8rem,4vw,2.8rem);max-width:none;">{{ post.title }}</h1>
-    <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:12px 0 26px;">
-      By {{ author }} · {{ updated_date }} · {{ reading_minutes }} min read
+    <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:12px 0 18px;">
+      By {{ author }} · Published {{ post.date }} · Updated {{ updated_date }} · {{ reading_minutes }} min read
     </div>
+    {% if post.excerpt %}
+    <p style="color:var(--text-mid);font-size:1.02rem;line-height:1.75;margin-bottom:26px;">{{ post.excerpt }}</p>
+    {% endif %}
   </header>
 
-  <div class="panel" style="margin-bottom:28px;">
-    <span class="panel__label">About this guide</span>
+  <div class="panel" style="max-width:820px;margin:0 auto 28px;">
+    <span class="panel__label">What this guide covers</span>
     <p style="margin:8px 0 0;color:var(--text-mid);line-height:1.65;">
-      VoxCraft guides are written to help creators understand audio workflows, voice tools and practical production choices.
-      Where a guide includes testing or comparisons, see our <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">testing methodology</a>.
+      This guide is part of the VoxCraft audio and creator resource library. It focuses on practical
+      workflows, tool choices and explanations that can be applied to real projects.
+      If the guide includes a comparison or hands-on test, the evaluation approach is explained in
+      our <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">testing methodology</a>.
     </p>
   </div>
 
-  <div style="color:var(--text-mid);line-height:1.8;font-size:1.02rem;">
+  <div style="max-width:820px;margin:0 auto;color:var(--text-mid);line-height:1.85;font-size:1.02rem;">
     {{ post_html|safe }}
   </div>
 
-  <div class="panel" style="margin-top:38px;">
-    <span class="panel__label">Explore VoxCraft</span>
-    <p style="margin:8px 0 12px;color:var(--text-mid);">Try the audio workflow discussed in this guide or explore more practical tutorials.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a href="{{ url_for('tools_hub') }}" class="btn btn--ghost btn--sm">Audio Tools</a>
-      <a href="{{ url_for('studio') }}" class="btn btn--ghost btn--sm">Open Studio</a>
-      <a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">More Guides</a>
-    </div>
+  {% if related_tool %}
+  <div class="panel" style="max-width:820px;margin:38px auto 0;">
+    <span class="panel__label">Use the related VoxCraft tool</span>
+    <p style="margin:8px 0 12px;color:var(--text-mid);line-height:1.65;">
+      If you are following this guide, you can try the workflow directly in VoxCraft.
+    </p>
+    <a href="{{ related_tool.url }}" class="btn btn--brass btn--sm">{{ related_tool.label }}</a>
+  </div>
+  {% endif %}
+
+  <div class="panel" style="max-width:820px;margin:24px auto 0;">
+    <span class="panel__label">About the author</span>
+    <p style="margin:8px 0 0;color:var(--text-mid);line-height:1.65;">
+      {{ author }} publishes practical guides about text-to-speech, audio editing and creator workflows on VoxCraft.
+      Where a guide makes a comparison or product recommendation, readers should use the stated criteria
+      and limitations rather than treating a ranking as universal.
+    </p>
   </div>
 
-  <footer style="margin-top:30px;">
+  {% if related_posts %}
+  <section style="max-width:820px;margin:42px auto 0;">
+    <div class="section__head" style="margin-bottom:16px;">
+      <span class="section__eyebrow">Keep reading</span>
+      <h2 class="section__title" style="font-size:1.7rem;">Related guides</h2>
+    </div>
+    <div style="display:grid;gap:12px;">
+      {% for related in related_posts %}
+      <a href="{{ url_for('blog_detail', post_id=related.id) }}" class="panel" style="display:block;">
+        <span class="voice-card__tag" style="margin-bottom:8px;display:inline-block;">{{ related.category or 'General' }}</span>
+        <h3 style="font-family:var(--display);font-size:1.15rem;margin:4px 0 7px;">{{ related.title }}</h3>
+        {% if related.excerpt %}<p style="color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:0;">{{ related.excerpt }}</p>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <footer style="max-width:820px;margin:30px auto 0;display:flex;gap:8px;flex-wrap:wrap;">
     <a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">← Back to blog</a>
+    <a href="{{ url_for('tools_hub') }}" class="btn btn--ghost btn--sm">Audio Tools</a>
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost btn--sm">Open Studio</a>
   </footer>
 </article>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.title|tojson }},
+  "description": {{ (post.excerpt or "")|tojson }},
+  "datePublished": {{ (post.date or "")|tojson }},
+  "dateModified": {{ (updated_date or post.date or "")|tojson }},
+  "author": {
+    "@type": "Organization",
+    "name": {{ author|tojson }}
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "VoxCraft"
+  }
+}
+</script>
 {% endblock %}
