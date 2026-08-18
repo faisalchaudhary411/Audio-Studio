@@ -39,7 +39,7 @@
     <audio id="preview-player" style="display:none;width:100%;margin-top:8px;" controls></audio>
 
     {% if not pro %}
-    <p class="limit-note">Free plan: {{ free_char_limit }} chars/generation · {{ monthly_char_quota }} chars/month total · 10 generations/day · 5 batch/day · {{ batch_max }} lines max.
+    <p class="limit-note">Free plan: {{ free_char_limit }} chars/generation · {{ monthly_char_quota }} chars/month total · {{ daily_actions }} generations/day · {{ batch_limit }} batch/day · {{ batch_max }} lines max.
       <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to remove all limits.</p>
     {% endif %}
   </div>
