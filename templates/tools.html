@@ -6,7 +6,8 @@
 <div class="section" style="padding-bottom:0;">
   <div class="section__head">
     <span class="section__eyebrow">Audio toolkit</span>
-    <h2 class="section__title">Transcribe, convert, merge, cut, denoise, and more.</h2>
+    <h1 class="section__title">Free online audio tools for everyday creator workflows.</h1>
+    <p class="section__sub">Transcribe recordings, convert formats, combine clips, trim audio, reduce steady background noise, change voice effects and extract audio from video. Each tool is designed to handle a specific job without requiring a full desktop editor.</p>
   </div>
   {% if not is_pro_ctx %}
   <div class="panel" style="margin-bottom:16px;">
@@ -253,6 +254,31 @@
 </div>
 
 {% endblock %}
+
+<section class="section" style="padding-top:10px;max-width:900px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Choosing a tool</span>
+    <h2 class="section__title">Which VoxCraft tool should you use?</h2>
+  </div>
+  <div class="chain" style="margin-top:0;">
+    <div class="chain__node"><h3>Need text from speech?</h3><p>Use <strong>Transcribe</strong> to turn supported audio recordings into text.</p></div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node"><h3>Need a different file format?</h3><p>Use <strong>Convert</strong> when you need MP3, WAV, OGG, M4A or FLAC output.</p></div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node"><h3>Need to edit a recording?</h3><p>Use <strong>Merge</strong>, <strong>Cutter</strong> or <strong>Denoise</strong> for common editing tasks.</p></div>
+  </div>
+
+  <div class="panel" style="margin-top:24px;">
+    <span class="panel__label">Good to know</span>
+    <p style="margin:8px 0;color:var(--text-mid);line-height:1.7;">Every tool shows its supported formats and relevant file limits before processing. Results can depend on the source recording: for example, noise reduction works best on steady background noise and cannot reliably remove every sudden sound or heavily distorted recording.</p>
+  </div>
+
+  <div class="section__head" style="margin-top:38px;">
+    <span class="section__eyebrow">Audio workflow tips</span>
+    <h2 class="section__title">Start with the cleanest source you can.</h2>
+    <p class="section__sub">Good microphone placement, moderate recording levels and a quiet room usually produce better results than aggressive processing after the fact. Keep an original copy of important recordings before converting or editing them.</p>
+  </div>
+</section>
 
 {% block scripts %}
 <script src="{{ static_url('js/tools.js') }}"></script>

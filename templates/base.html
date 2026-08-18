@@ -92,6 +92,10 @@
     <span class="footer__links">
       <a href="{{ url_for('privacy') }}">Privacy</a>
       <a href="{{ url_for('terms') }}">Terms</a>
+      <a href="{{ url_for('about') }}">About</a>
+      <a href="{{ url_for('how_we_test') }}">How We Test</a>
+      <a href="{{ url_for('privacy') }}">Privacy</a>
+      <a href="{{ url_for('terms') }}">Terms</a>
       <a href="{{ url_for('contact') }}">Contact</a>
       <a href="{{ url_for('activate') }}">Activate</a>
     </span>
@@ -102,9 +106,8 @@
 <script src="{{ static_url('js/ads.js') }}"></script>
 <script>window.VOXCRAFT_IS_PRO = {{ 'true' if is_pro_ctx else 'false' }};</script>
 <script>window.VOXCRAFT_ENABLE_POPUNDER = {{ 'true' if enable_popunder_ctx else 'false' }};</script>
-{% if not is_pro_ctx %}
-{% include "partials/ads_global.html" %}
-{% endif %}
+<script>window.VOXCRAFT_ENABLE_INTERSTITIAL = {{ 'true' if enable_interstitial_ctx else 'false' }};</script>
+
 <script src="{{ static_url('js/main.js') }}"></script>
 <script src="{{ static_url('js/notifications.js') }}"></script>
 {% block scripts %}{% endblock %}

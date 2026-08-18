@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}How VoxCraft Tests Voices and Audio Tools{% endblock %}
+{% block content %}
+<section class="section" style="max-width:820px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Methodology</span>
+    <h1 class="section__title">How we test voices and audio tools.</h1>
+    <p class="section__sub">When VoxCraft publishes a comparison or recommendation, we want the process to be understandable rather than a list of unexplained rankings.</p>
+  </div>
+
+  <div style="color:var(--text-mid);line-height:1.8;font-size:1rem;">
+    <h2 style="font-family:var(--display);color:var(--text-hi);">For voice comparisons</h2>
+    <p>We try to keep comparisons fair by using the same or closely matched sample text for the voices being compared. The sample should contain the kinds of words that matter for the language and use case being tested, including punctuation, numbers or mixed-language phrases when relevant.</p>
+
+    <h3 style="margin-top:28px;color:var(--text-hi);">What we listen for</h3>
+    <ul>
+      <li><strong>Naturalness:</strong> whether the delivery sounds conversational rather than mechanically synthesized.</li>
+      <li><strong>Pronunciation:</strong> how clearly the voice handles words, names, numbers and language-specific pronunciation.</li>
+      <li><strong>Pacing:</strong> pauses, sentence rhythm and consistency at normal speaking rates.</li>
+      <li><strong>Language handling:</strong> performance on the language and mixed-language phrases relevant to the test.</li>
+      <li><strong>Use case:</strong> whether a voice fits narration, education, short-form content, podcasts or another stated purpose.</li>
+    </ul>
+
+    <h2 style="font-family:var(--display);margin-top:36px;color:var(--text-hi);">For audio tools</h2>
+    <p>We evaluate a tool against the job it claims to perform. For example, a noise-removal tool is not judged only by whether the background becomes quieter; we also consider whether speech remains intelligible and whether aggressive processing introduces obvious artifacts.</p>
+
+    <p>File limits, supported formats, processing behavior and known limitations are included in guides when they materially affect the result. We do not treat a tool as perfect simply because it produces an output file.</p>
+
+    <h2 style="font-family:var(--display);margin-top:36px;color:var(--text-hi);">How recommendations should be read</h2>
+    <p>A recommendation is tied to the stated test and use case. A voice that works well for a documentary may not be the best choice for a children's lesson, and a file-conversion setting that is appropriate for speech may not be ideal for music.</p>
+
+    <p>When a result depends on a third-party service, model or licensing term, we aim to distinguish what VoxCraft observed from what the provider officially states. Readers should always check the current provider terms for their particular use.</p>
+
+    <div class="panel" style="margin-top:34px;">
+      <span class="panel__label">Our principle</span>
+      <p style="margin:8px 0 0;color:var(--text-mid);">Show the test, explain the criteria, disclose limitations, and let readers decide whether the result fits their own workflow.</p>
+    </div>
+
+    <p style="margin-top:28px;">See the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">VoxCraft guides</a> for individual comparisons and tutorials.</p>
+  </div>
+</section>
+{% endblock %}

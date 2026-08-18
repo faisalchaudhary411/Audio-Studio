@@ -1,14 +1,39 @@
 {% extends "base.html" %}
 {% block title %}{{ post.title }} — VoxCraft Blog{% endblock %}
-
 {% block content %}
-<section class="section" style="max-width:720px;">
-  <span class="voice-card__tag" style="margin-bottom:14px;display:inline-block;">{{ post.category or 'General' }}</span>
-  <h1 class="hero__title" style="font-size:clamp(1.8rem,4vw,2.6rem);max-width:none;">{{ post.title }}</h1>
-  <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:10px 0 24px;">{{ post.date }}</div>
-  <div style="color:var(--text-mid);line-height:1.75;font-size:1.02rem;">
+<article class="section" style="max-width:820px;">
+  <header>
+    <span class="voice-card__tag" style="margin-bottom:14px;display:inline-block;">{{ post.category or 'General' }}</span>
+    <h1 class="hero__title" style="font-size:clamp(1.8rem,4vw,2.8rem);max-width:none;">{{ post.title }}</h1>
+    <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:12px 0 26px;">
+      By {{ author }} · {{ updated_date }} · {{ reading_minutes }} min read
+    </div>
+  </header>
+
+  <div class="panel" style="margin-bottom:28px;">
+    <span class="panel__label">About this guide</span>
+    <p style="margin:8px 0 0;color:var(--text-mid);line-height:1.65;">
+      VoxCraft guides are written to help creators understand audio workflows, voice tools and practical production choices.
+      Where a guide includes testing or comparisons, see our <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">testing methodology</a>.
+    </p>
+  </div>
+
+  <div style="color:var(--text-mid);line-height:1.8;font-size:1.02rem;">
     {{ post_html|safe }}
   </div>
-  <div style="margin-top:32px;"><a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">← Back to blog</a></div>
-</section>
+
+  <div class="panel" style="margin-top:38px;">
+    <span class="panel__label">Explore VoxCraft</span>
+    <p style="margin:8px 0 12px;color:var(--text-mid);">Try the audio workflow discussed in this guide or explore more practical tutorials.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <a href="{{ url_for('tools_hub') }}" class="btn btn--ghost btn--sm">Audio Tools</a>
+      <a href="{{ url_for('studio') }}" class="btn btn--ghost btn--sm">Open Studio</a>
+      <a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">More Guides</a>
+    </div>
+  </div>
+
+  <footer style="margin-top:30px;">
+    <a href="{{ url_for('blog_list') }}" class="btn btn--ghost btn--sm">← Back to blog</a>
+  </footer>
+</article>
 {% endblock %}
