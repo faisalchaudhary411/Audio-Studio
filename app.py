@@ -665,7 +665,57 @@ def how_we_test():
 def blog_list():
     posts = [p for p in persistence.load_blogs() if p.get("published")]
     posts.sort(key=lambda p: p.get("date", ""), reverse=True)
-    return render_template("blog_list.html", posts=posts)
+
+    # Add lightweight presentation metadata without changing the stored
+    # records. Older posts continue to work without a migration.
+    for p in posts:
+        body_text = re.sub(r"<[^>]+>", " ", md_lib.markdown(p.get("body", "")))
+        word_count = len(re.findall(r"\b\w+\b", body_text))
+        p["_reading_minutes"] = max(1, round(word_count / 220))
+
+    categories = []
+    for p in posts:
+        category = (p.get("category") or "General").strip()
+        if category and category not in categories:
+            categories.append(category)
+
+    return render_template("blog_list.html", posts=posts, categories=categories)
+
+
+# A small, explicit mapping keeps article-to-product links predictable.
+# The values are Flask endpoint names rather than hard-coded URLs.
+BLOG_TOOL_LINKS = {
+    "tts": ("studio", "Open TTS Studio"),
+    "text-to-speech": ("studio", "Open TTS Studio"),
+    "voice": ("studio", "Explore Voices"),
+    "urdu-tts": ("studio", "Try Urdu TTS"),
+    "hindi-tts": ("studio", "Try Hindi TTS"),
+    "arabic-tts": ("studio", "Try Arabic TTS"),
+    "transcription": ("tools_hub", "Open Transcription"),
+    "audio transcription": ("tools_hub", "Open Transcription"),
+    "convert": ("tools_hub", "Open Audio Converter"),
+    "audio converter": ("tools_hub", "Open Audio Converter"),
+    "merge": ("tools_hub", "Open Audio Tools"),
+    "audio merger": ("tools_hub", "Open Audio Tools"),
+    "cutter": ("tools_hub", "Open Audio Tools"),
+    "audio cutter": ("tools_hub", "Open Audio Tools"),
+    "denoise": ("tools_hub", "Open Noise Remover"),
+    "noise removal": ("tools_hub", "Open Noise Remover"),
+    "voice changer": ("tools_hub", "Open Voice Changer"),
+    "video to audio": ("tools_hub", "Open Video-to-Audio"),
+    "video extract": ("tools_hub", "Open Video-to-Audio"),
+    "music": ("tools_hub", "Open Music Generator"),
+}
+
+
+def _blog_tool_link(post):
+    """Return a safe product link for a post's optional related_tool field."""
+    key = (post.get("related_tool") or "").strip().lower()
+    endpoint_label = BLOG_TOOL_LINKS.get(key)
+    if not endpoint_label:
+        return None
+    endpoint, label = endpoint_label
+    return {"url": url_for(endpoint), "label": label}
 
 
 @app.route("/blog/<post_id>")
@@ -674,12 +724,31 @@ def blog_detail(post_id):
     post = next((p for p in posts if str(p.get("id")) == str(post_id) and p.get("published")), None)
     if not post:
         return render_template("blog_list.html", posts=[], not_found=True), 404
+
     post_html = md_lib.markdown(post.get("body", ""))
-    # Keep metadata presentation consistent even for older posts that predate
-    # author/reading-time fields in the blog editor.
     body_text = re.sub(r"<[^>]+>", " ", post_html)
     word_count = len(re.findall(r"\b\w+\b", body_text))
     reading_minutes = max(1, round(word_count / 220))
+
+    # Prefer explicitly related posts, then fall back to recent posts in the
+    # same category. Never expose drafts.
+    category = (post.get("category") or "").strip().lower()
+    related_posts = [
+        p for p in posts
+        if str(p.get("id")) != str(post_id)
+        and p.get("published")
+        and category
+        and (p.get("category") or "").strip().lower() == category
+    ][:3]
+    if len(related_posts) < 3:
+        for candidate in posts:
+            if str(candidate.get("id")) == str(post_id) or candidate in related_posts:
+                continue
+            if candidate.get("published"):
+                related_posts.append(candidate)
+            if len(related_posts) >= 3:
+                break
+
     return render_template(
         "blog_detail.html",
         post=post,
@@ -687,6 +756,8 @@ def blog_detail(post_id):
         reading_minutes=reading_minutes,
         author=post.get("author") or "VoxCraft Team",
         updated_date=post.get("updated_date") or post.get("date", ""),
+        related_tool=_blog_tool_link(post),
+        related_posts=related_posts,
     )
 
 
@@ -966,13 +1037,17 @@ def admin_blog():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "create":
+            today = dt.datetime.now().strftime("%Y-%m-%d")
             new_post = {
-                "id": str(int(time.time())),
+                "id": str(int(time.time() * 1000)),
                 "title": request.form.get("title", "").strip(),
                 "category": request.form.get("category", "").strip(),
                 "excerpt": request.form.get("excerpt", "").strip(),
                 "body": request.form.get("body", "").strip(),
-                "date": dt.datetime.now().strftime("%Y-%m-%d"),
+                "author": request.form.get("author", "").strip() or "VoxCraft Team",
+                "updated_date": request.form.get("updated_date", "").strip() or today,
+                "related_tool": request.form.get("related_tool", "").strip().lower(),
+                "date": today,
                 "published": request.form.get("published") == "on",
             }
             posts.insert(0, new_post)
@@ -985,6 +1060,9 @@ def admin_blog():
                     p["category"] = request.form.get("category", "").strip()
                     p["excerpt"] = request.form.get("excerpt", "").strip()
                     p["body"] = request.form.get("body", "").strip()
+                    p["author"] = request.form.get("author", "").strip() or p.get("author") or "VoxCraft Team"
+                    p["updated_date"] = request.form.get("updated_date", "").strip() or dt.datetime.now().strftime("%Y-%m-%d")
+                    p["related_tool"] = request.form.get("related_tool", "").strip().lower()
                     p["published"] = request.form.get("published") == "on"
                     # date intentionally left as the original publish date —
                     # editing content shouldn't bump a post back to the top
