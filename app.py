@@ -400,6 +400,9 @@ def inject_globals():
         # ENABLE_POPUNDER=1 in Render's env vars to switch it back on after
         # approval — no code change or redeploy needed beyond the env var.
         "enable_popunder_ctx": os.environ.get("ENABLE_POPUNDER", "") == "1",
+        # Interstitials are disabled by default while preparing/reviewing the site for AdSense.
+        # Re-enable only after approval with ENABLE_INTERSTITIAL=1.
+        "enable_interstitial_ctx": os.environ.get("ENABLE_INTERSTITIAL", "") == "1",
         "csrf_token": session.get("csrf_token", ""),
     }
 
@@ -642,6 +645,19 @@ def upgrade():
 
 
 # ---------------------------------------------------------------------------
+# About / trust pages
+# ---------------------------------------------------------------------------
+@app.route("/about")
+def about():
+    return render_template("about.html")
+
+
+@app.route("/how-we-test")
+def how_we_test():
+    return render_template("how_we_test.html")
+
+
+# ---------------------------------------------------------------------------
 # Blog (public)
 # ---------------------------------------------------------------------------
 @app.route("/blog")
@@ -658,7 +674,19 @@ def blog_detail(post_id):
     if not post:
         return render_template("blog_list.html", posts=[], not_found=True), 404
     post_html = md_lib.markdown(post.get("body", ""))
-    return render_template("blog_detail.html", post=post, post_html=post_html)
+    # Keep metadata presentation consistent even for older posts that predate
+    # author/reading-time fields in the blog editor.
+    body_text = re.sub(r"<[^>]+>", " ", post_html)
+    word_count = len(re.findall(r"\\b\\w+\\b", body_text))
+    reading_minutes = max(1, round(word_count / 220))
+    return render_template(
+        "blog_detail.html",
+        post=post,
+        post_html=post_html,
+        reading_minutes=reading_minutes,
+        author=post.get("author") or "VoxCraft Team",
+        updated_date=post.get("updated_date") or post.get("date", ""),
+    )
 
 
 # ---------------------------------------------------------------------------
