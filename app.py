@@ -20,7 +20,7 @@ a local SQLite database (see persistence.py's docstring and
 deploy/migrate_to_sqlite.py if migrating existing data over).
 """
 
-from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response
+from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response, g
 import os
 import io
 import time
@@ -270,28 +270,63 @@ def get_limits() -> dict:
     return _limits_cache["data"]
 
 
+def _license_context() -> dict:
+    """Single source of truth for the current session's license status.
+
+    CHANGED: is_pro(), get_plan(), and has_clone_and_music() used to each
+    independently call licensing.check_vox_license() — so any request/
+    template that touched all three (the nav bar context processor did
+    exactly that) hit the license lookup 3 separate times for the same
+    session key. Cached on flask.g so it's computed at most once per
+    request no matter how many of those get called.
+
+    Also now carries 'name' — the customer name captured at signup (see
+    the manual /upgrade payment flow, which collects a real name) or
+    "Pro User" as the fallback for auto-generated/Freemius keys that never
+    had a name attached — so the nav bar can show who's actually logged in
+    instead of just a generic checkmark.
+    """
+    cached = getattr(g, "license_ctx", None)
+    if cached is not None:
+        return cached
+
+    key = session.get("license_key")
+    if not key:
+        ctx = {"valid": False, "plan": "", "name": ""}
+    else:
+        result = licensing.check_vox_license(key)
+        if not result.get("valid"):
+            ctx = {"valid": False, "plan": "", "name": ""}
+        else:
+            ctx = {
+                "valid": True,
+                "plan": result.get("plan", "pro"),
+                "name": result.get("name") or "Pro User",
+            }
+    g.license_ctx = ctx
+    return ctx
+
+
 def is_pro() -> bool:
     """Real check now: validates the license key stored in this session
     against licensing.check_vox_license() (backed by license_keys.json on
     GitHub). Falls back to False if no key is activated or GITHUB_TOKEN
     isn't configured yet."""
-    key = session.get("license_key")
-    if not key:
-        return False
-    return licensing.check_vox_license(key).get("valid", False)
+    return _license_context()["valid"]
 
 
 def get_plan() -> str:
     """'', 'pro', or 'pro_plus' — '' means not Pro at all. Use this (not
     is_pro() alone) anywhere clone/music access is gated, since a valid
     Pro session doesn't automatically mean Pro+."""
-    key = session.get("license_key")
-    if not key:
-        return ""
-    result = licensing.check_vox_license(key)
-    if not result.get("valid"):
-        return ""
-    return result.get("plan", "pro")
+    return _license_context()["plan"]
+
+
+def get_license_name() -> str:
+    """Customer name for the active session's license, or '' if not Pro.
+    'Pro User' fallback for keys with no name attached (see
+    _license_context() docstring)."""
+    return _license_context()["name"]
 
 
 def has_clone_and_music() -> bool:
@@ -315,6 +350,7 @@ def inject_globals():
     return {
         "is_pro_ctx": is_pro(),
         "plan_ctx": get_plan(),
+        "license_name_ctx": get_license_name(),
         "has_clone_music_ctx": has_clone_and_music(),
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
