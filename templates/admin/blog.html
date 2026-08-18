@@ -20,6 +20,26 @@
       <input type="text" name="title" placeholder="Title" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.title if edit_post else '' }}" required>
       <input type="text" name="category" placeholder="Category (e.g. Updates, Tips)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.category if edit_post else '' }}">
       <input type="text" name="excerpt" placeholder="Short excerpt (shown in list)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.excerpt if edit_post else '' }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" name="author" placeholder="Author (default: VoxCraft Team)" class="script-input" style="min-height:auto;padding:12px;" value="{{ edit_post.author if edit_post else 'VoxCraft Team' }}">
+        <input type="date" name="updated_date" class="script-input" style="min-height:auto;padding:12px;" value="{{ edit_post.updated_date if edit_post and edit_post.updated_date else (edit_post.date if edit_post else '') }}">
+      </div>
+      <select name="related_tool" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
+        <option value="">Related tool (optional)</option>
+        {% set selected_tool = edit_post.related_tool if edit_post else '' %}
+        <option value="tts" {% if selected_tool == 'tts' %}selected{% endif %}>Text-to-Speech / Studio</option>
+        <option value="urdu-tts" {% if selected_tool == 'urdu-tts' %}selected{% endif %}>Urdu TTS</option>
+        <option value="hindi-tts" {% if selected_tool == 'hindi-tts' %}selected{% endif %}>Hindi TTS</option>
+        <option value="arabic-tts" {% if selected_tool == 'arabic-tts' %}selected{% endif %}>Arabic TTS</option>
+        <option value="transcription" {% if selected_tool == 'transcription' %}selected{% endif %}>Transcription</option>
+        <option value="convert" {% if selected_tool == 'convert' %}selected{% endif %}>Audio Converter</option>
+        <option value="merge" {% if selected_tool == 'merge' %}selected{% endif %}>Audio Merger</option>
+        <option value="cutter" {% if selected_tool == 'cutter' %}selected{% endif %}>Audio Cutter</option>
+        <option value="denoise" {% if selected_tool == 'denoise' %}selected{% endif %}>Noise Remover</option>
+        <option value="voice changer" {% if selected_tool == 'voice changer' %}selected{% endif %}>Voice Changer</option>
+        <option value="video to audio" {% if selected_tool == 'video to audio' %}selected{% endif %}>Video to Audio</option>
+        <option value="music" {% if selected_tool == 'music' %}selected{% endif %}>Music Generator</option>
+      </select>
       <textarea name="body" placeholder="Full post body (Markdown supported)" class="script-input" style="min-height:200px;margin-bottom:10px;" required>{{ edit_post.body if edit_post else '' }}</textarea>
       <label style="font-size:0.9rem;color:var(--text-mid);"><input type="checkbox" name="published" {% if (edit_post and edit_post.published) or not edit_post %}checked{% endif %}> Publish{{ ' (visible on site)' if edit_post else ' immediately' }}</label>
       <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">{{ 'Update post' if edit_post else 'Save post' }}</button>
@@ -32,7 +52,7 @@
     <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
       <div>
         <strong>{{ p.title }}</strong>
-        <div style="color:var(--text-dim);font-size:0.8rem;">{{ p.date }} · {{ 'Published' if p.published else 'Draft' }}</div>
+        <div style="color:var(--text-dim);font-size:0.8rem;">{{ p.date }} · {{ 'Published' if p.published else 'Draft' }} · {{ p.author or 'VoxCraft Team' }}</div>
       </div>
       <div style="display:flex;gap:8px;">
         <a href="{{ url_for('admin_blog', edit=p.id) }}" class="btn btn--ghost btn--sm">Edit</a>
