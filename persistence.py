@@ -380,6 +380,9 @@ def license_key_transaction(key: str):
 
 # ---- usage tracking (dict keyed by ip_hash) ----
 def load_usage() -> dict:
+    """Whole-table read. Only used by migrate_to_sqlite.py's one-time
+    import — NOT used for live enforcement anymore, see
+    usage_pair_transaction() below for why."""
     conn = _connect()
     try:
         rows = conn.execute("SELECT ip_hash, data FROM usage").fetchall()
@@ -389,6 +392,12 @@ def load_usage() -> dict:
 
 
 def save_usage(data: dict) -> tuple:
+    """Whole-table replace. Only used by migrate_to_sqlite.py's one-time
+    import — NEVER call this from live request handling. Wiping and
+    reinserting the entire table from one process's snapshot is exactly
+    the pattern that caused the cross-worker data-loss bug described in
+    usage_pair_transaction()'s docstring; that function replaced every
+    live call site of this one."""
     try:
         with _write_lock:
             conn = _connect()
@@ -409,6 +418,86 @@ def save_usage(data: dict) -> tuple:
                 conn.close()
     except Exception as e:
         return False, str(e)
+
+
+@contextlib.contextmanager
+def usage_pair_transaction(key_a: str, key_b: str):
+    """Atomic read-modify-write across the two per-visitor usage rows
+    (IP-hash-keyed and browser-fingerprint-keyed) that usage_tracking.py
+    maintains for every free-tier counter.
+
+    BUG THIS REPLACES: usage_tracking.py used to keep ONE big dict in
+    process memory as its real source of truth — loaded once per gunicorn
+    worker via load_usage(), mutated in memory on every check/bump, and
+    periodically flushed back with save_usage() (a full DELETE + reinsert
+    of the ENTIRE table from that worker's in-memory copy).
+
+    With `--workers 2` (see deploy/voxcraft.service), that's two separate
+    OS processes, each with its own independent copy of that dict — Python
+    globals aren't shared across a fork after --preload hands off to the
+    workers. Two concrete failures followed from that:
+
+    1. Under-enforcement: a free user's requests land on worker A and
+       worker B roughly alternately under normal load. Each worker only
+       ever saw (and enforced against) the increments IT had personally
+       processed, since it never re-read the other worker's writes from
+       disk after its own first load. A visitor with 10 requests split
+       ~5/5 across both workers could pass a "10 generations/day" check on
+       BOTH workers, using up to ~2x the configured limit before either
+       worker's own counter reached it.
+    2. Data loss: save_usage()'s DELETE-then-reinsert-everything pattern
+       means whichever worker's background flush thread runs LAST wins —
+       it overwrites the whole table with only what's in ITS memory,
+       silently erasing increments a different worker wrote for a
+       DIFFERENT visitor in the meantime (that visitor's counts could
+       appear to reset with no user action, or a batch run that should
+       have been blocked wasn't, because the block that had just been
+       recorded got wiped by the other worker's stale snapshot).
+
+    Fixed the same way license_key_transaction() (above) already fixes
+    the equivalent race for license key activation: BEGIN IMMEDIATE grabs
+    SQLite's write lock up front, so the read, the caller's mutation, and
+    the write all happen inside ONE transaction, on ONE row at a time —
+    correctness now comes from SQLite's own cross-process file locking,
+    not from an in-process cache that can't see what a sibling process is
+    doing.
+
+    Usage:
+        with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+            # holder["a"] / holder["b"]: current record for each key, or
+            # None if that key has no row yet.
+            merged = ...compute effective record from holder["a"]/["b"]...
+            merged = ...apply the read or the increment...
+            holder["record"] = merged   # written back to BOTH keys on exit
+            # leave holder["record"] as None for a read-only check — nothing
+            # gets written if you don't set it.
+    """
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row_a = conn.execute("SELECT data FROM usage WHERE ip_hash = ?", (key_a,)).fetchone()
+            row_b = conn.execute("SELECT data FROM usage WHERE ip_hash = ?", (key_b,)).fetchone()
+            holder = {
+                "a": json.loads(row_a[0]) if row_a else None,
+                "b": json.loads(row_b[0]) if row_b else None,
+                "record": None,
+            }
+            yield holder
+            if holder["record"] is not None:
+                payload = json.dumps(holder["record"], ensure_ascii=False)
+                for k in (key_a, key_b):
+                    conn.execute(
+                        "INSERT INTO usage(ip_hash, data) VALUES (?, ?) "
+                        "ON CONFLICT(ip_hash) DO UPDATE SET data = excluded.data",
+                        (k, payload),
+                    )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
 # ---- admin login attempt tracking (brute-force lockout) ----

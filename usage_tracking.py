@@ -1,19 +1,49 @@
 """
 usage_tracking.py — the REAL enforcement backend for free-tier limits.
 
-HISTORY: this module originally tracked IP-based usage but was never
-actually wired into limit enforcement — app.py enforced everything purely
-through the Flask session cookie, meaning any free user could reset every
-limit by opening a private/incognito window, clearing cookies, or just
-using a different browser, no network change even required. This version
-replaces that: it's now the actual source of truth app.py's helper
-functions (_under_limit, _bump_counter, etc.) delegate to.
+HISTORY, PART 1: this module originally tracked IP-based usage but was
+never actually wired into limit enforcement — app.py enforced everything
+purely through the Flask session cookie, meaning any free user could reset
+every limit by opening a private/incognito window, clearing cookies, or
+just using a different browser, no network change even required. An
+earlier version of this module replaced that with dual-keyed tracking (see
+the IP+fingerprint explanation below) — but backed by ONE in-process dict,
+loaded once per gunicorn worker and periodically flushed to SQLite with a
+full-table DELETE+reinsert.
 
-APPROACH: each counter is tracked under TWO independent keys — one derived
-from the connecting IP, one from a browser fingerprint (User-Agent +
-Accept-Language + Sec-CH-UA). On every check, we resolve the EFFECTIVE
-value as the MAX seen across both keys, then on every write we sync the
-new value back to both. Concretely:
+HISTORY, PART 2 — the cross-worker bug: deploy/voxcraft.service runs
+`--workers 2`, which is two separate OS processes, not threads. Python
+globals (including that in-process dict) aren't shared across a fork after
+--preload hands off to the workers. In practice that meant:
+  - Under-enforcement: a free visitor's requests land on worker A and
+    worker B roughly alternately under normal load. Each worker only
+    enforced against the increments IT had personally processed, since it
+    never re-read the other worker's writes from disk after its own first
+    load — so a visitor could get up to ~2x the configured daily limit
+    just from ordinary request routing, no cookie-clearing required.
+  - Data loss: the periodic full-table flush from one worker's stale
+    in-memory snapshot could silently overwrite counts a DIFFERENT worker
+    had just written for a DIFFERENT visitor, since "save everything I
+    currently have in memory" has no way to know what the sibling process
+    wrote in the meantime.
+
+FIXED by removing the in-process cache entirely. Every check and every
+bump now goes through persistence.usage_pair_transaction(), which does the
+read-modify-write inside one real SQLite transaction (BEGIN IMMEDIATE) —
+the same pattern already used for license key activation
+(persistence.license_key_transaction()). Correctness now comes from
+SQLite's own cross-process file locking, not from anything held in this
+process's memory, so it's correct regardless of which worker handles which
+request, and there's no more periodic whole-table rewrite to clobber
+anything. This does mean one small SQLite transaction per check/bump
+instead of an in-memory lookup — on a local WAL-mode SQLite file this is
+sub-millisecond and not a meaningful cost at this project's traffic level.
+
+APPROACH (unchanged from before): each counter is tracked under TWO
+independent keys — one derived from the connecting IP, one from a browser
+fingerprint (User-Agent + Accept-Language + Sec-CH-UA). On every check, we
+resolve the EFFECTIVE value as the MAX seen across both keys, then on
+every write we sync the new value back to both. Concretely:
   - Switch browser, same network -> IP-keyed record still shows full
     history -> still enforced.
   - Switch network, same browser -> fingerprint-keyed record still shows
@@ -23,15 +53,14 @@ new value back to both. Concretely:
     (which would be the only way to close this completely).
 
 Every counter — daily action counts per tool, monthly character quota, and
-anything else previously kept in the session — now lives in one merged
-record per signal, containing both the day's counters and the month's char
-total, so a single write always carries the complete current state.
+anything else previously kept in the session — lives in one merged record
+per signal, containing both the day's counters and the month's char total,
+so a single write always carries the complete current state for that key.
 """
 
 import hashlib
 import re
 import datetime as dt
-import threading
 
 import persistence
 
@@ -98,23 +127,6 @@ def _this_month() -> str:
     return dt.datetime.now().strftime("%Y-%m")
 
 
-# In-process cache so we don't hit the DB on every single request; writes
-# flush to SQLite in a background thread. Fine for a single-VPS deployment;
-# if this ever runs as multiple separate instances, this cache won't be
-# shared between them.
-_usage_cache = None
-_usage_cache_lock = threading.Lock()
-
-
-def _load_cache() -> dict:
-    global _usage_cache
-    if _usage_cache is None:
-        with _usage_cache_lock:
-            if _usage_cache is None:
-                _usage_cache = persistence.load_usage()
-    return _usage_cache
-
-
 def _keys_for(request) -> tuple:
     ip_key = "ip:" + hash_ip(get_client_ip(request))
     fp_key = "fp:" + get_browser_fingerprint(request)
@@ -125,18 +137,16 @@ def _fresh_record() -> dict:
     return {"day": _today(), "daily": {}, "month": _this_month(), "chars_monthly": 0}
 
 
-def _effective_record(request) -> dict:
-    """Resolves the MAX across the IP-keyed and fingerprint-keyed records,
-    for the CURRENT day/month only — a record from a previous day/month
-    doesn't count toward today's totals, same as the old reset-if-needed
-    behavior, just computed on read instead of via a separate reset step."""
+def _merge(rec_a, rec_b) -> dict:
+    """Resolves the MAX across the two records, for the CURRENT day/month
+    only — a record from a previous day/month doesn't count toward today's
+    totals."""
     today = _today()
     month = _this_month()
-    ip_key, fp_key = _keys_for(request)
-    data = _load_cache()
     result = _fresh_record()
-    for key in (ip_key, fp_key):
-        rec = data.get(key, {})
+    for rec in (rec_a, rec_b):
+        if not rec:
+            continue
         if rec.get("day") == today:
             for k, v in rec.get("daily", {}).items():
                 if v > result["daily"].get(k, 0):
@@ -147,44 +157,34 @@ def _effective_record(request) -> dict:
     return result
 
 
-def _write_record(request, rec: dict):
-    ip_key, fp_key = _keys_for(request)
-    data = _load_cache()
-    data[ip_key] = rec
-    data[fp_key] = rec
-
-    # Prune anything older than last month to keep the table small — a
-    # record only needs to survive long enough for its own day/month
-    # comparison to still matter.
-    last_month = (dt.datetime.now().replace(day=1) - dt.timedelta(days=1)).strftime("%Y-%m")
-    data = {k: v for k, v in data.items() if v.get("month", "") >= last_month}
-
-    global _usage_cache
-    with _usage_cache_lock:
-        _usage_cache = data
-
-    def _bg_save(d):
-        persistence.save_usage(d)
-    threading.Thread(target=_bg_save, args=(data,), daemon=True).start()
-
-
 # ---- public API used by app.py's _under_limit / _bump_counter / etc. ----
 
 def get_daily_counter(request, counter_key: str) -> int:
-    return _effective_record(request)["daily"].get(counter_key, 0)
+    ip_key, fp_key = _keys_for(request)
+    with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+        merged = _merge(holder["a"], holder["b"])
+        # read-only: leave holder["record"] as None so nothing gets written
+    return merged["daily"].get(counter_key, 0)
 
 
 def bump_daily_counter(request, counter_key: str):
-    rec = _effective_record(request)
-    rec["daily"][counter_key] = rec["daily"].get(counter_key, 0) + 1
-    _write_record(request, rec)
+    ip_key, fp_key = _keys_for(request)
+    with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+        merged = _merge(holder["a"], holder["b"])
+        merged["daily"][counter_key] = merged["daily"].get(counter_key, 0) + 1
+        holder["record"] = merged
 
 
 def get_monthly_chars(request) -> int:
-    return _effective_record(request)["chars_monthly"]
+    ip_key, fp_key = _keys_for(request)
+    with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+        merged = _merge(holder["a"], holder["b"])
+    return merged["chars_monthly"]
 
 
 def bump_monthly_chars(request, chars_added: int):
-    rec = _effective_record(request)
-    rec["chars_monthly"] = rec.get("chars_monthly", 0) + chars_added
-    _write_record(request, rec)
+    ip_key, fp_key = _keys_for(request)
+    with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+        merged = _merge(holder["a"], holder["b"])
+        merged["chars_monthly"] = merged.get("chars_monthly", 0) + chars_added
+        holder["record"] = merged
