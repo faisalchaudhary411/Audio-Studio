@@ -4,6 +4,12 @@
   window.VoxCraftAds = window.VoxCraftAds || {};
 
   window.VoxCraftAds.showInterstitial = function (onDone) {
+    // Keep disruptive interstitials off by default while the site is being
+    // reviewed for AdSense. The tool action continues immediately.
+    if (!window.VOXCRAFT_ENABLE_INTERSTITIAL) {
+      onDone();
+      return;
+    }
     if (window.VOXCRAFT_IS_PRO) {
       onDone();
       return;
