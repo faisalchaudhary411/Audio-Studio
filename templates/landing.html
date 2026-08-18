@@ -110,6 +110,36 @@
 
 <section class="section">
   <div class="section__head">
+    <span class="section__eyebrow">Pro+</span>
+    <h2 class="section__title">Beyond narration — clone your voice, generate original music.</h2>
+    <p class="section__sub">Two more tools live in Studio, included with Pro+: clone any voice from a short reference clip, and generate instrumental tracks from a text description. Both run on dedicated GPUs — no separate app, no separate login.</p>
+  </div>
+  <div class="chain" style="margin-top:0;">
+    <div class="chain__node">
+      <span class="chain__label">Pro+ — Voice cloning</span>
+      <h3>Clone a voice from 5–15 seconds of audio</h3>
+      <p>Upload a clean reference clip and generate new speech in that voice — English, Hindi, and Urdu supported, with automatic language detection. Longer scripts are split and stitched back together seamlessly.</p>
+      <div style="margin-top:14px;">
+        <a href="{{ url_for('studio') }}#clone" class="btn btn--ghost btn--sm">Try voice cloning</a>
+      </div>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <span class="chain__label">Pro+ — Music generation</span>
+      <h3>Generate instrumental tracks from a text prompt</h3>
+      <p>Describe a genre, mood, and instruments — get back a royalty-free instrumental track in seconds. Perfect for background music on YouTube videos and shorts, no licensing headaches.</p>
+      <div style="margin-top:14px;">
+        <a href="{{ url_for('studio') }}#music" class="btn btn--ghost btn--sm">Try music generation</a>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:24px;text-align:center;">
+    <a href="{{ url_for('upgrade', plan='pro_plus') }}" class="btn btn--brass">Get Pro+</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
     <span class="section__eyebrow">Pricing</span>
     <h2 class="section__title">Free to start. One plan when you're ready.</h2>
     <p class="section__sub">Unlimited characters, all 88 voices, zero ads — no tiers to compare, no feature gate to hunt for.</p>

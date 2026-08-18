@@ -48,8 +48,10 @@
     <a href="{{ url_for('pricing') }}">Pricing</a>
     <a href="{{ url_for('blog_list') }}">Blog</a>
     <a href="{{ url_for('landing') }}#voices">Voices</a>
-    {% if is_pro_ctx %}
-    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);">Pro ✓</a>
+    {% if plan_ctx == 'pro_plus' %}
+    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro+">{{ license_name_ctx|truncate(14, True, '') }} · Pro+ ✓</a>
+    {% elif plan_ctx == 'pro' %}
+    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro">{{ license_name_ctx|truncate(14, True, '') }} · Pro ✓</a>
     {% else %}
     <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">Get Pro</a>
     <a href="{{ url_for('activate') }}">Activate</a>
