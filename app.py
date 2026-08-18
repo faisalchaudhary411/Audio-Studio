@@ -49,6 +49,46 @@ CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
 os.makedirs(CLONE_UPLOAD_DIR, exist_ok=True)
 CLONE_CHAR_LIMIT = 2000  # generous — GPU inference on RunPod is fast, unlike the old CPU path this replaced
 
+# Reference clips uploaded to CLONE_UPLOAD_DIR (via /api/clone/upload) had no
+# expiry at all — every clip ever uploaded sat on disk permanently, only
+# cleared by a full service restart (PrivateTmp=true in voxcraft.service
+# gives the service its own private /tmp, wiped on restart — so this was
+# bounded, but only by however long the service happened to stay up between
+# restarts, which with Restart=always could be weeks). A clip is only ever
+# needed for the few minutes between upload and the matching /api/clone/
+# generate call, so anything older than CLONE_REF_MAX_AGE_SECONDS is safe to
+# delete — same sweep-thread pattern already used for the clone/music job
+# databases in clone_engine.py / music_engine.py.
+CLONE_REF_MAX_AGE_SECONDS = 3600  # 1 hour — generous vs. the actual few-minute usage window
+_clone_ref_sweep_thread = None
+
+
+def _start_clone_ref_sweep_thread():
+    global _clone_ref_sweep_thread
+    if _clone_ref_sweep_thread is not None and _clone_ref_sweep_thread.is_alive():
+        return
+
+    def _sweep_loop():
+        while True:
+            time.sleep(600)  # every 10 minutes — matches the job-DB sweep cadence
+            try:
+                cutoff = time.time() - CLONE_REF_MAX_AGE_SECONDS
+                for fname in os.listdir(CLONE_UPLOAD_DIR):
+                    fpath = os.path.join(CLONE_UPLOAD_DIR, fname)
+                    try:
+                        if os.path.isfile(fpath) and os.path.getmtime(fpath) < cutoff:
+                            os.remove(fpath)
+                    except OSError:
+                        pass  # file could've been removed/replaced between listdir and stat — not fatal
+            except Exception:
+                pass  # never let the sweeper thread itself crash
+
+    _clone_ref_sweep_thread = threading.Thread(target=_sweep_loop, daemon=True)
+    _clone_ref_sweep_thread.start()
+
+
+_start_clone_ref_sweep_thread()
+
 app = Flask(__name__)
 
 
