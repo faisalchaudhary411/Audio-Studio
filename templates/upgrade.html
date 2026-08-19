@@ -8,13 +8,47 @@
     <h2 class="section__title">Choose how to pay</h2>
   </div>
 
-  {% if checkout_url %}
+  <div class="panel" style="margin-bottom:16px;display:flex;gap:10px;">
+    <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro' %}border-color:var(--brass);{% endif %}">
+      <input type="radio" name="plan" value="pro" form="upgrade-form" data-checkout-url="{{ checkout_url or '' }}" {% if requested_plan == 'pro' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
+      <strong>Pro</strong> — {{ '$3/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">TTS only</span>
+    </label>
+    <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro_plus' %}border-color:var(--brass);{% endif %}">
+      <input type="radio" name="plan" value="pro_plus" form="upgrade-form" data-checkout-url="{{ checkout_url_pro_plus or '' }}" {% if requested_plan == 'pro_plus' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
+      <strong>Pro+</strong> — {{ '$6/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">+ Voice clone, music</span>
+    </label>
+  </div>
+
+  {% if checkout_url or checkout_url_pro_plus %}
   <div class="panel" style="margin-bottom:16px;">
     <span class="panel__label">Pay by card (international)</span>
-    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:12px;">Instant activation via Freemius — card or PayPal.</p>
-    <a href="{{ checkout_url }}" class="btn btn--brass btn--block">Pay with card →</a>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:12px;">Instant activation via Freemius — card or PayPal. Uses whichever plan is selected above.</p>
+    <a id="voxcraft-checkout-link" href="{{ (checkout_url_pro_plus if requested_plan == 'pro_plus' else checkout_url) or '#' }}" class="btn btn--brass btn--block">Pay with card →</a>
+    <p id="voxcraft-checkout-missing" style="display:none;color:var(--text-dim);font-size:0.78rem;margin-top:8px;">Card checkout for this plan isn't set up yet — please use manual payment below.</p>
   </div>
   <div style="text-align:center;color:var(--text-dim);font-size:0.82rem;margin:16px 0;">— or pay manually (Pakistan) —</div>
+  <script>
+    // Keeps the card-checkout button pointed at the SAME plan the person
+    // has selected below it, instead of always linking to one fixed URL
+    // regardless of which plan they picked (the original bug: Pro+ buyers
+    // landed on the Pro checkout page no matter what).
+    function voxcraftUpdateCheckoutLink() {
+      var selected = document.querySelector('input[name="plan"]:checked');
+      var link = document.getElementById('voxcraft-checkout-link');
+      var missing = document.getElementById('voxcraft-checkout-missing');
+      if (!selected || !link) return;
+      var url = selected.getAttribute('data-checkout-url');
+      if (url) {
+        link.href = url;
+        link.style.display = '';
+        if (missing) missing.style.display = 'none';
+      } else {
+        link.style.display = 'none';
+        if (missing) missing.style.display = '';
+      }
+    }
+    voxcraftUpdateCheckoutLink();
+  </script>
   {% endif %}
 
   <div class="panel">
@@ -48,15 +82,8 @@
         <div><strong style="color:var(--text-hi);">🏦 UBL Bank:</strong> 0430292120673 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Any bank app/digital wallet → Send Money → Bank Account</span></div>
       </div>
 
-      <div class="panel" style="margin-bottom:16px;display:flex;gap:10px;">
-        <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro' %}border-color:var(--brass);{% endif %}">
-          <input type="radio" name="plan" value="pro" form="upgrade-form" {% if requested_plan == 'pro' %}checked{% endif %} style="margin-right:6px;">
-          <strong>Pro</strong> — {{ '$3/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">TTS only</span>
-        </label>
-        <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro_plus' %}border-color:var(--brass);{% endif %}">
-          <input type="radio" name="plan" value="pro_plus" form="upgrade-form" {% if requested_plan == 'pro_plus' %}checked{% endif %} style="margin-right:6px;">
-          <strong>Pro+</strong> — {{ '$6/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">+ Voice clone, music</span>
-        </label>
+      <div class="panel" style="margin-bottom:16px;">
+        <p style="color:var(--text-dim);font-size:0.82rem;">Plan selected above: <strong style="color:var(--text-hi);">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong> — submitting below applies to that plan.</p>
       </div>
 
       <form id="upgrade-form" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
