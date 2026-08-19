@@ -22,7 +22,6 @@ deploy/migrate_to_sqlite.py if migrating existing data over).
 
 from flask import Flask, render_template, request, jsonify, session, send_file, redirect, url_for, flash, Response, g
 import os
-import re
 import io
 import time
 import threading
@@ -424,9 +423,6 @@ def inject_globals():
         # ENABLE_POPUNDER=1 in Render's env vars to switch it back on after
         # approval — no code change or redeploy needed beyond the env var.
         "enable_popunder_ctx": os.environ.get("ENABLE_POPUNDER", "") == "1",
-        # Interstitials are disabled by default while preparing/reviewing the site for AdSense.
-        # Re-enable only after approval with ENABLE_INTERSTITIAL=1.
-        "enable_interstitial_ctx": os.environ.get("ENABLE_INTERSTITIAL", "") == "1",
         "csrf_token": session.get("csrf_token", ""),
     }
 
@@ -621,7 +617,14 @@ def activate():
 
 @app.route("/upgrade", methods=["GET", "POST"])
 def upgrade():
-    checkout_url = persistence.load_limits().get("CHECKOUT_URL") or None
+    lim = persistence.load_limits()
+    # Two separate Freemius checkout links — one per plan. Previously a
+    # single CHECKOUT_URL served both, so the "Pay with card" button always
+    # sent people to whichever one URL was configured, ignoring which plan
+    # they'd actually picked below it. See templates/upgrade.html for how
+    # these two now get wired to the plan selector.
+    checkout_url = lim.get("CHECKOUT_URL") or None
+    checkout_url_pro_plus = lim.get("CHECKOUT_URL_PRO_PLUS") or None
     requested_plan = request.args.get("plan") if request.method == "GET" else request.form.get("plan")
     requested_plan = requested_plan if requested_plan in ("pro", "pro_plus") else "pro"
     if request.method == "GET":
@@ -629,9 +632,9 @@ def upgrade():
         # the initial page load — only after submitting the form — so the
         # "access stops working after X hours" text was disconnected from
         # whatever was actually set in /admin/limits.
-        grace_hours = persistence.load_limits().get("MANUAL_GRACE_HOURS", 72)
-        return render_template("upgrade.html", checkout_url=checkout_url, grace_hours=grace_hours,
-                                requested_plan=requested_plan)
+        grace_hours = lim.get("MANUAL_GRACE_HOURS", 72)
+        return render_template("upgrade.html", checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus,
+                                grace_hours=grace_hours, requested_plan=requested_plan)
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
@@ -639,7 +642,7 @@ def upgrade():
     txn_id = (request.form.get("txn_id") or "").strip()
     if not name or not email:
         return render_template("upgrade.html", error="Name and email are required.", checkout_url=checkout_url,
-                                requested_plan=requested_plan)
+                                checkout_url_pro_plus=checkout_url_pro_plus, requested_plan=requested_plan)
 
     screenshot_b64 = ""
     file = request.files.get("screenshot")
@@ -662,23 +665,12 @@ def upgrade():
         if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
         return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url,
+                                checkout_url_pro_plus=checkout_url_pro_plus,
                                 auto_approved=result.get("auto_approved", False),
                                 grace_hours=result.get("grace_hours"),
                                 already_pro=already_pro)
-    return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."), checkout_url=checkout_url)
-
-
-# ---------------------------------------------------------------------------
-# About / trust pages
-# ---------------------------------------------------------------------------
-@app.route("/about")
-def about():
-    return render_template("about.html")
-
-
-@app.route("/how-we-test")
-def how_we_test():
-    return render_template("how_we_test.html")
+    return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."),
+                            checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus)
 
 
 # ---------------------------------------------------------------------------
@@ -688,57 +680,7 @@ def how_we_test():
 def blog_list():
     posts = [p for p in persistence.load_blogs() if p.get("published")]
     posts.sort(key=lambda p: p.get("date", ""), reverse=True)
-
-    # Add lightweight presentation metadata without changing the stored
-    # records. Older posts continue to work without a migration.
-    for p in posts:
-        body_text = re.sub(r"<[^>]+>", " ", md_lib.markdown(p.get("body", "")))
-        word_count = len(re.findall(r"\b\w+\b", body_text))
-        p["_reading_minutes"] = max(1, round(word_count / 220))
-
-    categories = []
-    for p in posts:
-        category = (p.get("category") or "General").strip()
-        if category and category not in categories:
-            categories.append(category)
-
-    return render_template("blog_list.html", posts=posts, categories=categories)
-
-
-# A small, explicit mapping keeps article-to-product links predictable.
-# The values are Flask endpoint names rather than hard-coded URLs.
-BLOG_TOOL_LINKS = {
-    "tts": ("studio", "Open TTS Studio"),
-    "text-to-speech": ("studio", "Open TTS Studio"),
-    "voice": ("studio", "Explore Voices"),
-    "urdu-tts": ("studio", "Try Urdu TTS"),
-    "hindi-tts": ("studio", "Try Hindi TTS"),
-    "arabic-tts": ("studio", "Try Arabic TTS"),
-    "transcription": ("tools_hub", "Open Transcription"),
-    "audio transcription": ("tools_hub", "Open Transcription"),
-    "convert": ("tools_hub", "Open Audio Converter"),
-    "audio converter": ("tools_hub", "Open Audio Converter"),
-    "merge": ("tools_hub", "Open Audio Tools"),
-    "audio merger": ("tools_hub", "Open Audio Tools"),
-    "cutter": ("tools_hub", "Open Audio Tools"),
-    "audio cutter": ("tools_hub", "Open Audio Tools"),
-    "denoise": ("tools_hub", "Open Noise Remover"),
-    "noise removal": ("tools_hub", "Open Noise Remover"),
-    "voice changer": ("tools_hub", "Open Voice Changer"),
-    "video to audio": ("tools_hub", "Open Video-to-Audio"),
-    "video extract": ("tools_hub", "Open Video-to-Audio"),
-    "music": ("tools_hub", "Open Music Generator"),
-}
-
-
-def _blog_tool_link(post):
-    """Return a safe product link for a post's optional related_tool field."""
-    key = (post.get("related_tool") or "").strip().lower()
-    endpoint_label = BLOG_TOOL_LINKS.get(key)
-    if not endpoint_label:
-        return None
-    endpoint, label = endpoint_label
-    return {"url": url_for(endpoint), "label": label}
+    return render_template("blog_list.html", posts=posts)
 
 
 @app.route("/blog/<post_id>")
@@ -747,41 +689,8 @@ def blog_detail(post_id):
     post = next((p for p in posts if str(p.get("id")) == str(post_id) and p.get("published")), None)
     if not post:
         return render_template("blog_list.html", posts=[], not_found=True), 404
-
     post_html = md_lib.markdown(post.get("body", ""))
-    body_text = re.sub(r"<[^>]+>", " ", post_html)
-    word_count = len(re.findall(r"\b\w+\b", body_text))
-    reading_minutes = max(1, round(word_count / 220))
-
-    # Prefer explicitly related posts, then fall back to recent posts in the
-    # same category. Never expose drafts.
-    category = (post.get("category") or "").strip().lower()
-    related_posts = [
-        p for p in posts
-        if str(p.get("id")) != str(post_id)
-        and p.get("published")
-        and category
-        and (p.get("category") or "").strip().lower() == category
-    ][:3]
-    if len(related_posts) < 3:
-        for candidate in posts:
-            if str(candidate.get("id")) == str(post_id) or candidate in related_posts:
-                continue
-            if candidate.get("published"):
-                related_posts.append(candidate)
-            if len(related_posts) >= 3:
-                break
-
-    return render_template(
-        "blog_detail.html",
-        post=post,
-        post_html=post_html,
-        reading_minutes=reading_minutes,
-        author=post.get("author") or "VoxCraft Team",
-        updated_date=post.get("updated_date") or post.get("date", ""),
-        related_tool=_blog_tool_link(post),
-        related_posts=related_posts,
-    )
+    return render_template("blog_detail.html", post=post, post_html=post_html)
 
 
 # ---------------------------------------------------------------------------
@@ -977,6 +886,7 @@ def admin_limits():
             "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
             "FREE_PRICE_LABEL": request.form.get("FREE_PRICE_LABEL", "$0"),
             "CHECKOUT_URL": request.form.get("CHECKOUT_URL", ""),
+            "CHECKOUT_URL_PRO_PLUS": request.form.get("CHECKOUT_URL_PRO_PLUS", ""),
             "FREE_FEATURES": request.form.get("FREE_FEATURES", ""),
             "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
             "AUTO_APPROVE_MANUAL": request.form.get("AUTO_APPROVE_MANUAL") == "on",
@@ -1060,17 +970,13 @@ def admin_blog():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "create":
-            today = dt.datetime.now().strftime("%Y-%m-%d")
             new_post = {
-                "id": str(int(time.time() * 1000)),
+                "id": str(int(time.time())),
                 "title": request.form.get("title", "").strip(),
                 "category": request.form.get("category", "").strip(),
                 "excerpt": request.form.get("excerpt", "").strip(),
                 "body": request.form.get("body", "").strip(),
-                "author": request.form.get("author", "").strip() or "VoxCraft Team",
-                "updated_date": request.form.get("updated_date", "").strip() or today,
-                "related_tool": request.form.get("related_tool", "").strip().lower(),
-                "date": today,
+                "date": dt.datetime.now().strftime("%Y-%m-%d"),
                 "published": request.form.get("published") == "on",
             }
             posts.insert(0, new_post)
@@ -1083,9 +989,6 @@ def admin_blog():
                     p["category"] = request.form.get("category", "").strip()
                     p["excerpt"] = request.form.get("excerpt", "").strip()
                     p["body"] = request.form.get("body", "").strip()
-                    p["author"] = request.form.get("author", "").strip() or p.get("author") or "VoxCraft Team"
-                    p["updated_date"] = request.form.get("updated_date", "").strip() or dt.datetime.now().strftime("%Y-%m-%d")
-                    p["related_tool"] = request.form.get("related_tool", "").strip().lower()
                     p["published"] = request.form.get("published") == "on"
                     # date intentionally left as the original publish date —
                     # editing content shouldn't bump a post back to the top

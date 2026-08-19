@@ -58,6 +58,12 @@ DEFAULT_LIMITS = {
     "PRO_PRICE_LABEL": "840 PKR",
     "FREE_PRICE_LABEL": "$0",
     "CHECKOUT_URL": "",
+    # Was one field for both plans, so every checkout — Pro or Pro+ — sent
+    # the person to the same Freemius checkout link, which is why Pro+
+    # buyers landed on the Pro plan page: the button never varied by which
+    # plan they'd picked, because there was only ever one URL to point it
+    # at. See templates/upgrade.html for the plan-aware fix.
+    "CHECKOUT_URL_PRO_PLUS": "",
     "FREE_FEATURES": "",
     "PRO_FEATURES": "",
     "AUTO_APPROVE_MANUAL": True,
