@@ -83,8 +83,23 @@ def _split_into_chunks(text: str, max_chars: int) -> list:
     """Splits on sentence boundaries first; any sentence still over
     max_chars gets hard-split on the nearest space so we never cut a word
     in half. Keeps chunks close to natural speech-breath lengths, which is
-    also just better prosody than an arbitrary character cutoff."""
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    also just better prosody than an arbitrary character cutoff.
+
+    BUG FIX: the sentence-boundary regex only matched ASCII . ! ? — but
+    Urdu doesn't end sentences with the Latin period. Standard Urdu uses
+    ۔ (U+06D4, Arabic/Urdu full stop) and ؟ (U+061F, Arabic question
+    mark). Since neither matched, EVERY Urdu input had zero detected
+    sentence boundaries and fell straight through to the raw word-count
+    hard-split path below — chunks were being cut purely by character
+    count with no regard for where sentences (or thoughts) actually
+    ended. That's a very plausible root cause for chunks landing at
+    awkward, unnatural stopping points, which then gives the model a bad
+    prompt to resume from — contributing to the pacing and pause issues
+    seen in testing. Now matches Urdu/Arabic terminators too, in addition
+    to the original ASCII ones (kept for mixed-language or Latin-script
+    input).
+    """
+    sentences = re.split(r"(?<=[.!?۔؟])\s+", text.strip())
     chunks = []
     current = ""
     for sentence in sentences:
@@ -143,20 +158,65 @@ class ChatterboxWorker:
 
         NOTE: Multilingual model does NOT support top_k (Turbo-only).
         Multilingual defaults: repetition_penalty=2.0, min_p=0.05,
-        cfg_weight=0.5, exaggeration=0.5. Temperature kept lower (0.4)
-        for consistency since we're stitching chunks together.
+        cfg_weight=0.5, exaggeration=0.5.
+
+        TUNED (verified against Resemble AI's own docs, not just
+        guessed): temperature lowered 0.4 -> 0.3, within their documented
+        range for reducing end-of-sequence hallucination (the "random
+        nonsense tacked onto the end" failure mode) — combines with the
+        hard per-chunk duration cap in _cap_runaway_generation as a second
+        layer of defense, not a replacement for it. cfg_weight lowered
+        0.5 -> 0.0, which Resemble AI's docs specifically call out for
+        reducing accent bleed in cross-language/cross-accent transfer;
+        worth testing here since language_id="hi" carries a standard-Hindi
+        accent prior that may not perfectly match an Urdu-accented
+        reference speaker, even though Urdu and Hindi are the same spoken
+        language. exaggeration left at 0.5 — already the documented
+        neutral default, no evidence it needed changing.
         """
         return self.model.generate(
             text,
             audio_prompt_path=ref_path,
             language_id=language_id,
-            temperature=0.4,
+            temperature=0.3,
             top_p=0.8,
             repetition_penalty=2.0,
             min_p=0.05,
-            cfg_weight=0.5,
+            cfg_weight=0.0,
             exaggeration=0.5,
         )
+
+    def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
+        """Hard duration cap per chunk, to kill hallucinated tails.
+
+        BUG THIS FIXES: autoregressive TTS models occasionally fail to
+        predict the end-of-sequence token and keep generating — producing
+        audible garbage (random, unrelated words/sounds) tacked onto the
+        end of an otherwise-correct chunk. Reported in production: the
+        LAST chunk of a long clone job generated several extra seconds of
+        nonsensical speech after the real text ended. Lowering temperature
+        and raising repetition_penalty (already fairly conservative here —
+        see _generate_chunk's docstring) reduces how OFTEN this happens
+        but can't guarantee it never does; a hard cap makes a runaway
+        chunk harmless even on the rare occasion it happens.
+
+        Approach: estimate a generous maximum plausible duration for this
+        chunk from its character count (~10 chars/sec is a slow speaking
+        pace — most speech is faster — so this is a ceiling, not a
+        realistic estimate), multiply by a large safety factor, and trim
+        anything beyond that. A chunk that's still within normal speaking
+        range is completely unaffected; only genuine runaway generation
+        (which tends to be many seconds longer than the text could
+        possibly justify) gets cut.
+        """
+        min_duration_sec = 1.5  # floor — very short chunks still need room to speak at all
+        chars = max(len(chunk_text.strip()), 1)
+        expected_sec = chars / 10.0  # ~10 chars/sec, a deliberately slow ceiling
+        max_duration_sec = max(min_duration_sec, expected_sec * 2.5)  # generous 2.5x safety margin
+        max_samples = int(max_duration_sec * sr)
+        if wav.shape[-1] > max_samples:
+            wav = wav[..., :max_samples]
+        return wav
 
     def _concat_with_crossfade(self, waveforms: list, sr: int):
         """Concatenates a list of 1-D torch tensors with a short
@@ -254,15 +314,23 @@ class ChatterboxWorker:
 
             duration = waveform.shape[1] / sr
 
+            # BUG FIX: hard-reject bound used to be >30s, but every
+            # independent source on Chatterbox reference-clip length
+            # (Resemble AI's own docs, multiple third-party guides)
+            # converges on 5-10s as the sweet spot — longer clips were
+            # reported introducing background whistle/static into the
+            # S3Gen decoder's output. Tightened to reject >12s (small
+            # headroom above the 10s sweet spot) instead of silently
+            # accepting clips 2-3x longer than anyone actually recommends.
             if duration < 3:
                 return CloneResponse(
                     success=False,
-                    error=f"Reference too short ({duration:.1f}s). Use 5-15s."
+                    error=f"Reference too short ({duration:.1f}s). Use 5-10s."
                 ).model_dump()
-            if duration > 30:
+            if duration > 12:
                 return CloneResponse(
                     success=False,
-                    error=f"Reference too long ({duration:.1f}s). Use 5-15s."
+                    error=f"Reference too long ({duration:.1f}s). Use 5-10s — longer clips can introduce background artifacts."
                 ).model_dump()
 
             # ── Preprocess reference ───────────────────────────────────
@@ -304,6 +372,7 @@ class ChatterboxWorker:
                     wav = wav.unsqueeze(0)
                 elif wav.dim() == 2 and wav.shape[0] > 2:
                     wav = wav[0:1, :]
+                wav = self._cap_runaway_generation(wav, chunk_text, self.model.sr)
                 waveforms.append(wav)
 
             # ── Concatenate and post-process ───────────────────────────
