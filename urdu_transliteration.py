@@ -45,7 +45,13 @@ import re
 #      Devanagari consonants normally work) ----
 _CONSONANTS = {
     "ب": "ब", "پ": "प", "ت": "त", "ٹ": "ट", "ث": "स",
-    "ج": "ज", "چ": "च", "ح": "ह", "خ": "ख",
+    "ج": "ज", "چ": "च", "ح": "ह",
+    "خ": "ख़",  # BUG FIX: was plain "ख" (aspirated k-sound). خ is the
+               # guttural fricative /x/ (like German "ch" in "Bach"),
+               # which Devanagari marks with a nuqta — ख़, not ख. Every
+               # word using خ (خاص, خوش, خواب, خدمت...) was silently
+               # losing this distinction at the TEXT level, not just at
+               # the audio level.
     "د": "द", "ڈ": "ड", "ذ": "ज़",
     "ر": "र", "ڑ": "ड़", "ز": "ज़", "ژ": "ज़",
     "س": "स", "ش": "श", "ص": "स", "ض": "ज़",
@@ -145,7 +151,7 @@ _WORD_OVERRIDES = {
     "ہمت": "हिम्मत",
     "مشکل": "मुश्किल",
     "مشکلات": "मुश्किलात",
-    "خدمت": "खिदमत",
+    "خدمت": "ख़िदमत",
     "استاد": "उस्ताद",
     "سکون": "सुकून",
     "مستقبل": "मुस्तक़बिल",
@@ -201,6 +207,12 @@ _WORD_OVERRIDES = {
     "کچھ": "कुछ",
     "درست": "दुरुस्त",
     "ایک": "एक",
+    # Round 2 — found via a real listening test against this dictionary's
+    # first version. Same verify-before-adding process as always.
+    "خلوص": "ख़ुलूस",
+    "مثبت": "मुसबत",
+    "معنی": "मानी",
+    "دلوں": "दिलों",
 }
 
 
