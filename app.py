@@ -813,6 +813,8 @@ def sitemap():
         ("/activate", "0.5", "monthly"),
         ("/privacy", "0.3", "yearly"),
         ("/terms", "0.3", "yearly"),
+        ("/about", "0.4", "yearly"),
+        ("/how-we-test", "0.4", "yearly"),
         ("/contact", "0.4", "yearly"),
     ]
     urls = [{"loc": f"{base}{path}", "priority": priority, "changefreq": freq}
