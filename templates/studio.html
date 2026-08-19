@@ -107,7 +107,7 @@
     <span class="panel__label">Clone a voice</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;">English, Hindi &amp; Urdu</span>
-      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference clip: 5–15s, one speaker</span>
+      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference clip: 5–10s, one speaker</span>
     </div>
     <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:4px;">Upload a clear reference clip and generate new speech in that voice.</p>
     <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:12px;">Write in English, Hindi (Devanagari), or Urdu (Nastaliq) — language is detected automatically. Urdu text is converted to spoken Hindi pronunciation behind the scenes (there's no separate Urdu voice model yet, but Urdu and Hindi sound the same when spoken — only the script differs). Clean audio with a single speaker and minimal background noise gives the best voice match.</p>
@@ -154,53 +154,6 @@
     {% endif %}
   </div>
 </div>
-
-
-<section class="section" style="max-width:1000px;padding-top:8px;">
-  <div class="section__head">
-    <span class="section__eyebrow">Using VoxCraft Studio</span>
-    <h2 class="section__title">A practical workflow for better voiceovers.</h2>
-    <p class="section__sub">VoxCraft Studio is designed around a simple sequence: prepare your script, choose a voice and speed, preview it, then generate the final audio. A little preparation usually improves the result more than repeatedly changing settings after generation.</p>
-  </div>
-
-  <div class="chain" style="margin-top:0;">
-    <div class="chain__node">
-      <span class="chain__label">01 — Prepare</span>
-      <h3>Write for speech, not just for reading</h3>
-      <p>Use short, clear sentences and punctuation where you naturally want a pause. Spell out unusual abbreviations or names when pronunciation matters.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <span class="chain__label">02 — Listen</span>
-      <h3>Preview before a long render</h3>
-      <p>Use the voice preview to compare voices and listen for pronunciation, pacing and tone before generating a longer passage.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <span class="chain__label">03 — Refine</span>
-      <h3>Change one thing at a time</h3>
-      <p>If a line sounds wrong, adjust the wording, punctuation, voice or speed separately. This makes it easier to identify what actually improved the result.</p>
-    </div>
-  </div>
-
-  <div class="panel" style="margin-top:24px;">
-    <span class="panel__label">Tips for multilingual scripts</span>
-    <p style="margin:8px 0;color:var(--text-mid);line-height:1.7;">
-      Mixed-language scripts can contain names, numbers and English words inside another language.
-      Listen to a short preview first, especially when the script contains proper names, abbreviations
-      or code-switching. Voice quality and pronunciation can vary by language and by individual voice.
-    </p>
-  </div>
-
-  <div class="panel" style="margin-top:16px;">
-    <span class="panel__label">About generated audio</span>
-    <p style="margin:8px 0;color:var(--text-mid);line-height:1.7;">
-      The best workflow depends on the project. For important narration, review the complete generated
-      file before publishing and keep the source script alongside the exported audio so you can reproduce
-      or revise the result later.
-    </p>
-  </div>
-</section>
 
 {% endblock %}
 
