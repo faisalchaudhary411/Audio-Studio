@@ -20,7 +20,17 @@ MODAL_CLONE_ENDPOINT_URL = os.environ.get("MODAL_CLONE_ENDPOINT_URL", "").strip(
 
 # Generous — covers a cold start (container spin-up + model load, can be
 # 20-60s on top of generation time) plus actual generation.
-_TIMEOUT_SEC = 240
+#
+# BUG FIX: was 240s. A max-length request (CLONE_CHAR_LIMIT=2000 chars on
+# the VPS) splits into ~10 chunks server-side (MAX_CHUNK_CHARS=200 in
+# modal_workers/chatterbox/app.py), and real production timing showed
+# ~25s/chunk — ~250s just for generation on a long request, before cold
+# start. Worse, the worker's OWN timeout used to be 300s, meaning this
+# client could give up and report a false timeout while the GPU container
+# kept running (and billing) toward its own later cutoff. Raised to 650s,
+# safely above the worker's now-600s timeout (see that file), so this
+# client never gives up before the worker's own hard limit would.
+_TIMEOUT_SEC = 650
 
 
 def is_configured() -> bool:
