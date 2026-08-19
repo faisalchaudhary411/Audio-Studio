@@ -119,7 +119,17 @@ def _split_into_chunks(text: str, max_chars: int) -> list:
     return [c for c in chunks if c.strip()]
 
 
-@app.cls(gpu="A10G", timeout=300, scaledown_window=300)
+# timeout=600 (was 300): a max-length request (CLONE_CHAR_LIMIT=2000 chars
+# on the VPS side) splits into ~10 chunks at MAX_CHUNK_CHARS=200 each. Real
+# production timing: ~25s/chunk (1000 sampling steps at ~40it/s), so 10
+# chunks alone is ~250s before cold start or stitching — too close to the
+# old 300s ceiling, and this worker's own timeout was actually LOWER than
+# modal_client.py's 240s client-side wait in the wrong direction (a long
+# request could get killed here mid-generation while the client was still
+# patiently waiting). 600s gives real headroom for the full char limit
+# plus a cold start. modal_client.py's timeout was raised to match — see
+# that file's docstring.
+@app.cls(gpu="A10G", timeout=600, scaledown_window=300)
 class ChatterboxWorker:
     @modal.enter()
     def load_model(self):
