@@ -111,6 +111,98 @@ _PUNCTUATION = {
 _URDU_SCRIPT_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F]")
 _DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
 
+# ---- Word-level pronunciation overrides ----
+# Standard written Urdu omits short-vowel diacritics (see HONEST LIMITATION
+# above), so the character-by-character mapper has no way to know whether
+# an unmarked consonant carries an 'a', 'i', or 'u' sound — it defaults to
+# 'a', which is wrong for a large share of everyday vocabulary (Persian/
+# Arabic loanwords especially, since their vowel patterns don't follow
+# native Hindustani rules the char-level mapper assumes). Rather than
+# trying to teach the character-level algorithm Urdu's un-written
+# vowel-harmony/loanword rules — a losing battle, since these words are
+# irregular by nature, which is WHY Urdu writing doesn't bother marking
+# them — this table hardcodes the correct, standard Hindi spelling
+# directly for common words where the character-level default is wrong.
+# Checked BEFORE falling through to character-by-character conversion, so
+# any word in this table renders correctly regardless of what the general
+# rules would otherwise produce.
+#
+# Every entry below was verified against transliterate_urdu_to_devanagari()
+# ACTUAL prior output (not guessed) to confirm it was genuinely wrong
+# before being added — several plausible-looking candidates (یقین, اہم,
+# مقصد, طاقت, قریب, عمل, لوگوں, سمجھ) already came out correct and were
+# deliberately left OUT of this table, to keep it from accumulating
+# redundant entries that do nothing.
+#
+# MAINTENANCE: if a specific word keeps mispronouncing in real use, add it
+# here — same verify-before-adding process: run
+# transliterate_urdu_to_devanagari("word") first, confirm it's actually
+# wrong, only then add the correct spelling below.
+_WORD_OVERRIDES = {
+    "دل": "दिल",
+    "علم": "इल्म",
+    "علموں": "इल्मों",
+    "ہمت": "हिम्मत",
+    "مشکل": "मुश्किल",
+    "مشکلات": "मुश्किलात",
+    "خدمت": "खिदमत",
+    "استاد": "उस्ताद",
+    "سکون": "सुकून",
+    "مستقبل": "मुस्तक़बिल",
+    "مستقل": "मुस्तक़िल",
+    "زندگی": "ज़िंदगी",
+    "وقت": "वक़्त",
+    "دوست": "दोस्त",
+    "دوستی": "दोस्ती",
+    "خواب": "ख़्वाब",
+    "خوابوں": "ख़्वाबों",
+    "فیصلے": "फ़ैसले",
+    "فیصلہ": "फ़ैसला",
+    "محبت": "मोहब्बत",
+    "خیال": "ख़याल",
+    "امید": "उम्मीद",
+    "معلوم": "मालूम",
+    "سچائی": "सच्चाई",
+    "انسان": "इंसान",
+    "انسانوں": "इंसानों",
+    "دنیا": "दुनिया",
+    "خاصیت": "ख़ासियत",
+    "تعلیم": "तालीम",
+    "نعمت": "नेमत",
+    "عادت": "आदत",
+    "خوش": "ख़ुश",
+    "خوشی": "ख़ुशी",
+    "خوشیاں": "ख़ुशियां",
+    "محنت": "मेहनत",
+    "مزاجی": "मिज़ाजी",
+    "طالب": "तालिब",
+    "کتاب": "किताब",
+    "کتابوں": "किताबों",
+    "چاہیے": "चाहिए",
+    "زیادہ": "ज़्यादा",
+    "تحفہ": "तोहफ़ा",
+    "خاص": "ख़ास",
+    "بدلہ": "बदला",
+    "نیکی": "नेकी",
+    "نیکیاں": "नेकियां",
+    # Ultra-high-frequency function/grammar words — these appear in nearly
+    # every sentence, so getting them right matters more than almost any
+    # content word. Same verified-mismatch process as above.
+    "ہے": "है",
+    "ہیں": "हैं",
+    "میں": "में",
+    "کیا": "क्या",
+    "کیوں": "क्यों",
+    "کون": "कौन",
+    "بہت": "बहुत",
+    "اچھا": "अच्छा",
+    "اچھی": "अच्छी",
+    "اچھے": "अच्छे",
+    "کچھ": "कुछ",
+    "درست": "दुरुस्त",
+    "ایک": "एक",
+}
+
 
 def contains_urdu_script(text: str) -> bool:
     """True if the text contains Perso-Arabic script characters — used to
@@ -119,24 +211,24 @@ def contains_urdu_script(text: str) -> bool:
     return bool(_URDU_SCRIPT_RE.search(text or ""))
 
 
-def transliterate_urdu_to_devanagari(text: str) -> str:
-    """Best-effort Urdu -> Hindi (Devanagari) transliteration. See module
-    docstring for the honest accuracy caveat. Non-Urdu characters (spaces,
-    Latin text, punctuation, digits) pass through unchanged."""
-    if not text:
-        return text
-
+def _transliterate_word_chars(word: str) -> str:
+    """Character-by-character conversion for a single word (may include
+    trailing punctuation) — the original algorithm, unchanged, just scoped
+    to one word instead of the whole string. Scoping to a word doesn't
+    change behavior: prev_was_consonant already reset at every whitespace
+    boundary anyway, since no medial-vowel or shadda rule looks across a
+    space."""
     result = []
     i = 0
-    n = len(text)
+    n = len(word)
     prev_was_consonant = False
 
     while i < n:
-        ch = text[i]
+        ch = word[i]
 
         # Aspirated digraphs (2-char lookahead) take priority.
         if i + 1 < n:
-            pair = text[i:i + 2]
+            pair = word[i:i + 2]
             if pair in _ASPIRATED_DIGRAPHS:
                 result.append(_ASPIRATED_DIGRAPHS[pair])
                 prev_was_consonant = True
@@ -147,7 +239,7 @@ def transliterate_urdu_to_devanagari(text: str) -> str:
         if not prev_was_consonant:
             matched = False
             for seq in sorted(_INDEPENDENT_VOWEL_START, key=len, reverse=True):
-                if text[i:i + len(seq)] == seq:
+                if word[i:i + len(seq)] == seq:
                     result.append(_INDEPENDENT_VOWEL_START[seq])
                     prev_was_consonant = False
                     i += len(seq)
@@ -199,6 +291,46 @@ def transliterate_urdu_to_devanagari(text: str) -> str:
         i += 1
 
     return "".join(result)
+
+
+def transliterate_urdu_to_devanagari(text: str) -> str:
+    """Best-effort Urdu -> Hindi (Devanagari) transliteration. See module
+    docstring for the honest accuracy caveat. Non-Urdu characters (spaces,
+    Latin text, punctuation, digits) pass through unchanged.
+
+    Checks each word against _WORD_OVERRIDES first (see that table's
+    docstring for why) — only words NOT in the table fall through to the
+    character-by-character rules below.
+    """
+    if not text:
+        return text
+
+    # Split on whitespace but KEEP the whitespace itself (capturing group),
+    # so the exact spacing of the input is reproduced exactly on output —
+    # this also naturally isolates each word for the override lookup.
+    segments = re.split(r"(\s+)", text)
+    out = []
+    for seg in segments:
+        if not seg or seg.isspace():
+            out.append(seg)
+            continue
+
+        # Strip trailing punctuation before checking the override table —
+        # a sentence-final "دل۔" needs to match the dictionary's "دل" —
+        # then re-attach the (transliterated) punctuation afterward.
+        core = seg
+        trailing = ""
+        while core and core[-1] in _PUNCTUATION:
+            trailing = core[-1] + trailing
+            core = core[:-1]
+
+        if core in _WORD_OVERRIDES:
+            out.append(_WORD_OVERRIDES[core])
+            out.append(_transliterate_word_chars(trailing))
+        else:
+            out.append(_transliterate_word_chars(seg))
+
+    return "".join(out)
 
 
 def prepare_text_for_tts(text: str) -> tuple:
