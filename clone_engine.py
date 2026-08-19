@@ -1,23 +1,5 @@
 """
-clone_engine.py — voice cloning via Chatterbox Multilingual (Resemble AI, MIT
-license — genuinely free for commercial use, unlike XTTS-v2/F5-TTS whose
-official weights are CC-BY-NC-4.0, non-commercial only).
-
-Runs on Modal (modal_workers/chatterbox/app.py), not on this VPS — a clone
-request could otherwise pin the CPU for 10-60+ seconds or exhaust RAM on a
-1 vCPU / 2GB VPS shared with the rest of the site.
-
-CHANGED: originally used RunPod (async /run + /status polling), then Modal
-with an in-memory dict. Switched to SQLite-backed job storage because the
-in-memory dict caused the "Unknown job" bug under gunicorn: each worker
-process had its own _jobs dict, so a job created on Worker A was invisible
-to Worker B when the frontend polled /api/clone/status/<job_id>.
-
-SQLite lives on disk at /tmp/voxcraft_clone_jobs.db, so it's shared across
-all gunicorn workers and survives worker restarts. Jobs auto-expire after
-10 minutes to prevent unbounded DB growth.
-
-Same public interface (start_clone_job / get_job) — app.py never changes.
+clone_engine.py — Voice cloning orchestration via SQLite job queue & Modal client.
 """
 
 import base64
@@ -31,31 +13,19 @@ import uuid
 import modal_client
 import urdu_transliteration
 
-# ── Configuration ──────────────────────────────────────────────────────────
 JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
-JOB_MAX_AGE_SECONDS = 600  # 10 min — old jobs cleaned up so the DB doesn't grow forever
-
-# ── SQLite job store ───────────────────────────────────────────────────────
-# Each gunicorn worker is a separate process with its own memory space.
-# An in-memory dict (the old _jobs = {}) meant Worker A created the job,
-# Worker B polled for it — and saw nothing. SQLite on disk is shared by
-# all processes, fixing this without adding Redis or another service.
+JOB_MAX_AGE_SECONDS = 600
 
 _db_lock = threading.Lock()
 
 
 def _db_conn():
-    """Return a fresh SQLite connection. SQLite connections are NOT thread-safe
-    across threads, so each call gets its own. The DB file itself is process-safe
-    (OS-level file locking), but we add _db_lock on writes to serialize them
-    and avoid "database is locked" errors under concurrent load."""
     conn = sqlite3.connect(JOB_DB_PATH, check_same_thread=False, timeout=10.0)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def _init_db():
-    """Create the jobs table if it doesn't exist yet."""
     with _db_lock:
         conn = _db_conn()
         conn.execute(
@@ -76,13 +46,7 @@ def _init_db():
         conn.close()
 
 
-# Run once at import time — safe because CREATE TABLE IF NOT EXISTS is idempotent
 _init_db()
-
-
-# ── Background sweeper ─────────────────────────────────────────────────────
-# Old jobs pile up forever if we never clean them. A daemon thread sweeps
-# every 60 seconds. Non-fatal if it fails — worst case the DB grows slowly.
 
 _sweep_thread = None
 
@@ -103,7 +67,7 @@ def _start_sweep_thread():
                     conn.commit()
                     conn.close()
             except Exception:
-                pass  # don't crash the sweeper thread
+                pass
 
     _sweep_thread = threading.Thread(target=_sweep_loop, daemon=True)
     _sweep_thread.start()
@@ -111,8 +75,6 @@ def _start_sweep_thread():
 
 _start_sweep_thread()
 
-
-# ── Low-level DB helpers ───────────────────────────────────────────────────
 
 def _insert_job(job_id: str) -> None:
     now = time.time()
@@ -130,7 +92,6 @@ def _insert_job(job_id: str) -> None:
 
 
 def _update_job(job_id: str, status: str = None, audio: bytes = None, error: str = None) -> None:
-    """Update one or more fields on a job. Only non-None fields are written."""
     fields = []
     values = []
     if status is not None:
@@ -158,7 +119,6 @@ def _update_job(job_id: str, status: str = None, audio: bytes = None, error: str
 
 
 def _fetch_job(job_id: str):
-    """Return a dict matching the old in-memory shape, or None if not found."""
     conn = _db_conn()
     row = conn.execute(
         "SELECT job_id, status, audio, error, created_at, updated_at FROM clone_jobs WHERE job_id = ?",
@@ -177,24 +137,14 @@ def _fetch_job(job_id: str):
     }
 
 
-# ── Core clone logic ───────────────────────────────────────────────────────
-
-def _run_clone_job(job_id: str, text: str, reference_audio_path: str):
+def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_lang: str = "en"):
     _update_job(job_id, status="generating")
     try:
         with open(reference_audio_path, "rb") as f:
             ref_b64 = base64.b64encode(f.read()).decode("ascii")
 
-        # Chatterbox Multilingual has no Urdu mode. Urdu and Hindi are the
-        # same spoken language (Hindustani), differing only in script — so
-        # Urdu text gets transliterated to Devanagari and generated via the
-        # Hindi language_id, which produces correctly-pronounced audio.
-        # See urdu_transliteration.py for the full explanation and the
-        # licensing reason this is hand-built rather than using an
-        # existing library.
-        #
-        # prepare_text_for_tts() auto-detects language and handles transliteration.
-        processed_text, language_id = urdu_transliteration.prepare_text_for_tts(text)
+        processed_text, auto_lang_id = urdu_transliteration.prepare_text_for_tts(text)
+        language_id = requested_lang if requested_lang in ("hi", "en") and requested_lang != "en" else auto_lang_id
 
         result = modal_client.generate(processed_text, ref_b64, language_id=language_id)
         if not result.get("success"):
@@ -219,19 +169,7 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str):
         )
 
 
-# ── Public API (unchanged interface — app.py calls these) ──────────────────
-
 def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en") -> str:
-    """Queue a new clone job and return its ID immediately.
-
-    The actual generation runs in a background thread so the HTTP response
-    returns instantly — the frontend polls /api/clone/status/<job_id>.
-
-    NOTE: language_id is accepted for API compatibility (Flask passes it)
-    but is currently ignored because urdu_transliteration.prepare_text_for_tts()
-    auto-detects the language from the text content. If you later want to
-    force a specific language, pass it through to _run_clone_job here.
-    """
     job_id = uuid.uuid4().hex
     _insert_job(job_id)
 
@@ -248,7 +186,7 @@ def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en
 
     thread = threading.Thread(
         target=_run_clone_job,
-        args=(job_id, text, reference_audio_path),
+        args=(job_id, text, reference_audio_path, language_id),
         daemon=True,
     )
     thread.start()
@@ -256,6 +194,4 @@ def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en
 
 
 def get_job(job_id: str):
-    """Return job dict (or None) — same shape as the old in-memory version
-    so api_clone_status in app.py doesn't need to change."""
     return _fetch_job(job_id)
