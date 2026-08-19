@@ -7,34 +7,53 @@ import re
 
 # ── 1. Native Urdu Script (Perso-Arabic) to Devanagari Dictionary ─────────────
 URDU_SCRIPT_WORD_MAP = {
-    "زندگی": "जिंदगी",
+    # Function Words & Possessives
+    "کی": "की",
+    "کا": "का",
+    "کے": "के",
+    "کو": "को",
+    "میں": "में",
+    "سے": "से",
+    "پر": "पर",
+    "بھی": "भी",
+    "کل": "कल",
+    "یہ": "यह",
+    "وہ": "वह",
+    "تھا": "था",
+    "تھی": "थी",
+    "تھے": "थे",
+    "ہے": "है",
+    "ہیں": "हैं",
+    "ہو": "हो",
+    "ہونا": "होना",
+    "چاہیے": "चाहिए",
+    "نہ": "ना",
+    
+    # Vocabulary Mappings
+    "زندگی": "ज़िंदगी",
     "ایک": "एक",
     "خاص": "खास",
     "تحفہ": "तोहफा",
-    "ہے": "है",
     "ہم": "हम",
     "سب": "सब",
-    "کو": "को",
     "خوش": "खुश",
-    "ہونا": "होना",
-    "چاہیے": "चाहिए",
     "چھوٹی": "छोटी",
     "خوشیاں": "खुशियां",
-    "معنی": "मानी",
+    "معنی": "مانی",
     "دیتی": "देती",
-    "ہیں": "हैं",
     "صبح": "सुबह",
     "جلدی": "जल्दी",
     "اٹھنا": "उठना",
     "اچھی": "अच्छी",
+    "اچھا": "अच्छा",
+    "اچھے": "अच्छे",
     "عادت": "आदत",
     "اس": "इस",
-    "سے": "से",
     "دن": "दिन",
-    "اچھا": "अच्छा",
     "بنتا": "बनता",
     "کتابوں": "किताबों",
     "سیکھنا": "सीखना",
+    "سیکھنے": "सीखने",
     "علم": "इल्म",
     "انسان": "इंसान",
     "طاقت": "ताकत",
@@ -42,6 +61,7 @@ URDU_SCRIPT_WORD_MAP = {
     "ہمیشہ": "हमेशा",
     "کچھ": "कुछ",
     "نیا": "नया",
+    "نئی": "नयी",
     "ذہن": "ज़हन",
     "کھلتا": "खुलता",
     "کھلا": "खुला",
@@ -58,12 +78,11 @@ URDU_SCRIPT_WORD_MAP = {
     "دیتے": "देते",
     "مشکل": "मुश्किल",
     "وقت": "वक्त",
-    "میں": "में",
     "ہی": "ही",
     "کام": "काम",
     "آتے": "आते",
     "محبت": "मोहब्बत",
-    "خلوص": "खुलूस",
+    "خلوص": "ख़ुलूस",
     "دلوں": "दिलों",
     "ملاتی": "मिलाती",
     "لوگوں": "लोगों",
@@ -83,15 +102,12 @@ URDU_SCRIPT_WORD_MAP = {
     "خوابوں": "ख्वाबों",
     "سچ": "सच",
     "بنانے": "बनाने",
-    "کے": "के",
-    "لیے": "लिए",
     "محنت": "मेहनत",
     "کبھی": "कभी",
     "ضائع": "ज़ाया",
     "نہیں": "नहीं",
     "انسانوں": "इंसानों",
     "کوئی": "कोई",
-    "نہ": "ना",
     "خاصیت": "खासियत",
     "ہوتی": "होती",
     "اپنے": "अपने",
@@ -100,10 +116,10 @@ URDU_SCRIPT_WORD_MAP = {
     "اہم": "अहम",
     "ہمت": "हिम्मत",
     "ملتی": "मिलती",
+    "ملتا": "मिलता",
     "کامیابی": "कामयाबी",
     "مستقل": "मुस्तकिल",
-    "مزاجی": "मिजाजी",
-    "بھی": "بھی",
+    "مزاجی": "मिज़ाजी",
     "سوچ": "सोच",
     "مثبت": "मुस्बत",
     "فائدہ": "फ़ायदा",
@@ -114,10 +130,7 @@ URDU_SCRIPT_WORD_MAP = {
     "ہوتے": "होते",
     "مستقبل": "मुस्तक़बिल",
     "آج": "आज",
-    "کل": "کل",
-    "کا": "का",
     "پھل": "फल",
-    "یہ": "यह",
     "سچائی": "सच्चाई",
     "معلوم": "मालूम",
     "ہونی": "होनी",
@@ -132,13 +145,15 @@ URDU_SCRIPT_WORD_MAP = {
     "تنہا": "तन्हा",
     "نیکی": "नेकी",
     "بدلہ": "बदला",
-    "خدمت": "खिदमत",
+    "خدمت": "ख़िदमत",
     "لوگ": "लोग",
     "بناتے": "बनाते",
     "اچھائی": "अच्छाई",
     "ملتے": "मिलते",
     "نیکیاں": "नेकियां",
     "خوشی": "खुशी",
+    "بڑھاتا": "बढ़ाता",
+    "والا": "वाला",
 }
 
 # Aspirated Digraph replacements for Fallback transliteration
@@ -151,7 +166,7 @@ URDU_DIGRAPHS = {
 URDU_CHAR_MAP = {
     "ا": "अ", "آ": "आ", "ب": "ब", "پ": "प", "ت": "त", "ٹ": "ट", "ث": "स",
     "ج": "ज", "چ": "च", "ح": "ह", "خ": "ख़", "د": "द", "ڈ": "ड", "ذ": "ज़",
-    "ر": "र", "ڑ": "ड़", "ز": "ज़", "ژ": "झ़", "س": "स", "ش": "श", "ص": "स",
+    "ر": "ر", "ڑ": "ड़", "ز": "ज़", "ژ": "झ़", "س": "स", "ش": "श", "ص": "स",
     "ض": "ज़", "ط": "त", "ظ": "ज़", "ع": "अ", "غ": "ग़", "ف": "फ़", "ق": "क़",
     "ک": "क", "گ": "ग", "ل": "ल", "م": "म", "ن": "न", "ں": "ं", "و": "व",
     "ہ": "ह", "ھ": "ह", "ی": "य", "ے": "ए", "۔": "।", "؟": "?", "ئ": "इ",
@@ -167,56 +182,55 @@ ROMAN_URDU_FIXES = {
 }
 
 ROMAN_TO_DEVANAGARI_WORDS = {
-    "zindagi": "जिंदगी", "khas": "खास", "khaas": "खास", "tohfa": "तोहफा",
-    "hum": "हम", "sab": "सब", "ko": "को", "khush": "खुश", "hona": "होना",
-    "chahiye": "चाहिए", "chhoti": "छोटी", "khushiyan": "खुशियां", "maani": "मानी",
-    "deti": "देती", "deta": "देता", "hain": "हैं", "hai": "है", "subah": "सुबह",
-    "jaldi": "जल्दी", "uthna": "उठना", "ek": "एक", "achhi": "अच्छी", "achha": "अच्छा",
-    "aadat": "आदत", "is": "इस", "se": "से", "din": "दिन", "banta": "बनता",
-    "kitabon": "किताबों", "ilm": "इल्म", "insan": "इंसान", "taakat": "ताकत", "hamesha": "हमेशा",
-    "kuch": "कुछ", "naya": "नया", "seekhna": "सीखना", "jahan": "जहां",
-    "khulta": "खुलता", "khula": "खुला", "nayi": "नयी", "baatein": "बातें",
-    "samajhta": "समझता", "samajh": "समझ", "aasan": "आसान", "banti": "बनती",
-    "pasand": "पसंद", "dosti": "दोस्ती", "banati": "बनाती", "dost": "दोस्त",
-    "saath": "साथ", "dete": "देते", "mushkil": "मुश्किल", "waqt": "वक्त",
-    "mein": "में", "hi": "ही", "kaam": "काम", "aate": "आते", "mohabbat": "मोहब्बत",
-    "khuluus": "खुलूस", "dilon": "दिलों", "milati": "मिलाती", "logon": "लोगों",
-    "madad": "मदद", "dena": "देना", "amal": "अमल", "dil": "दिल", "hota": "होता",
-    "aata": "आता", "umeed": "उम्मीद", "aage": "आगे", "le": "ले", "jaati": "जाती",
-    "khwab": "ख्वाब", "dekhna": "देखना", "baat": "बात", "khwabon": "ख्वाबों",
-    "sach": "सच", "banane": "बनाने", "ke": "के", "liye": "लिए", "mehnat": "मेहनत",
-    "kabhi": "कभी", "zaya": "जाया", "nahi": "नहीं", "insanon": "इंसानों",
-    "koi": "कोई", "na": "ना", "khasiyat": "खासियत", "hoti": "होती", "apne": "अपने",
-    "aap": "आप", "yakeen": "यकीन", "ahem": "अहम", "himmat": "हिम्मत",
-    "milti": "मिलती", "kaamyabi": "कामयाबी", "mustaqil": "मुस्तकिल",
-    "mizaji": "मिजाजी", "bhi": "भी", "soch": "सोच", "musbat": "मुस्बत",
-    "fayda": "फ़ायदा", "dono": "दोनों", "halaton": "हालतों", "sukoon": "सुकून",
-    "faisle": "फैसले", "hote": "होते", "mustaqbil": "मुस्तक़बिल", "aaj": "आज",
-    "kal": "कल", "ka": "का", "phal": "फल", "yeh": "यह", "sachai": "सच्चाई",
-    "maloom": "मालूम", "honi": "होनी", "aur": "और", "sathi": "साथी",
-    "taleem": "तालीम", "neemat": "नेमत", "ustad": "उस्ताद", "talib": "तालिब",
-    "e": "ए", "ilmon": "इल्मों", "talib-e-ilmon": "तालिब-ए-इल्मों",
-    "badal": "बदल", "seekhne": "सीखने", "wala": "वाला", "tanha": "तन्हा",
-    "neki": "नेकी", "badla": "बदला", "khidmat": "ख़िदमत", "log": "लोग",
-    "banate": "बनाते", "achhai": "अच्छाई", "milte": "मिलते", "nekiyan": "नेकियां",
-    "khushi": "खुशी",
+    "ki": "की", "ka": "का", "ke": "کے", "ko": "को", "bhi": "भी", "kal": "कल",
+    "zindagi": "ज़िंदगी", "khas": "खास", "khaas": "खास", "tohfa": "तोहफा",
+    "hum": "हम", "sab": "सब", "khush": "खुश", "hona": "होना", "chahiye": "चाहिए",
+    "chhoti": "छोटी", "khushiyan": "खुशियां", "maani": "مانی", "deti": "देती",
+    "deta": "देता", "hain": "हैं", "hai": "है", "subah": "सुबह", "jaldi": "जल्दी",
+    "uthna": "उठना", "ek": "एक", "achhi": "अच्छी", "achha": "अच्छा", "achhe": "अच्छे",
+    "aadat": "آदत", "is": "इस", "se": "से", "din": "दिन", "banta": "बनता",
+    "kitabon": "किताबों", "ilm": "इल्म", "insan": "इंसान", "taakat": "ताकत",
+    "hamesha": "हमेशा", "kuch": "कुछ", "naya": "नया", "nayi": "نئی",
+    "seekhna": "सीखना", "seekhne": "सीखने", "jahan": "जहां", "khulta": "खुलता",
+    "khula": "खुला", "baatein": "बातें", "samajhta": "समझता", "samajh": "समझ",
+    "aasan": "आसान", "banti": "बनती", "pasand": "पसंद", "dosti": "दोस्ती",
+    "banati": "बनाती", "dost": "दोस्त", "saath": "साथ", "dete": "देते",
+    "mushkil": "मुश्किल", "waqt": "वक्त", "mein": "में", "hi": "ही", "kaam": "काम",
+    "aate": "آتے", "mohabbat": "मोहब्बत", "khuluus": "ख़ुलूस", "dilon": "दिलों",
+    "milati": "मिलाती", "logon": "लोगों", "madad": "मदद", "dena": "देना",
+    "amal": "अमल", "dil": "दिल", "hota": "होता", "aata": "आता", "umeed": "उम्मीद",
+    "aage": "आगे", "le": "ले", "jaati": "जाती", "khwab": "ख्वाब", "dekhna": "देखना",
+    "baat": "बात", "khwabon": "ख्वाबों", "sach": "सच", "banane": "बनाने",
+    "liye": "लिए", "mehnat": "मेहनत", "kabhi": "कभी", "zaya": "ज़ाया",
+    "nahi": "नहीं", "insanon": "इंसानों", "koi": "कोई", "na": "ना",
+    "khasiyat": "खासियत", "hoti": "ہوتی", "apne": "अपने", "aap": "आप",
+    "yakeen": "यकीन", "ahem": "अहम", "himmat": "हिम्मत", "milti": "मिलती",
+    "milta": "मिलता", "kaamyabi": "کامیابی", "mustaqil": "मुस्तकिल",
+    "mizaji": "मिज़ाजी", "soch": "सोچ", "musbat": "मुस्बत", "fayda": "फ़ایدا",
+    "dono": "दोनों", "halaton": "हालतों", "sukoon": "سکون", "faisle": "फैसले",
+    "hote": "ہوتے", "mustaqbil": "मुस्तक़बिल", "aaj": "आज", "phal": "फल",
+    "yeh": "یہ", "sachai": "सच्चाई", "maloom": "मालूम", "honi": "होनी",
+    "aur": "और", "sathi": "साथी", "taleem": "तालीम", "neemat": "نعمت",
+    "ustad": "उस्ताद", "talib": "طالب", "e": "ए", "ilmon": "इल्मوں",
+    "talib-e-ilmon": "तालिب-ای-इल्मों", "badal": "بدل", "wala": "वाला",
+    "tanha": "तन्हा", "neki": "नेکی", "badla": "बदला", "khidmat": "ख़िदमत",
+    "log": "लोग", "banate": "بناتے", "achhai": "अच्छाई", "milte": "मिलते",
+    "nekiyan": "नेकियां", "khushi": "खुशी", "barhata": "बढ़ाता",
 }
 
 
 def transliterate_urdu_script_to_devanagari(text: str) -> str:
     """Converts native Urdu Perso-Arabic text to Devanagari."""
-    tokens = re.split(r"(\s+|[.,!?۔؟।—-])", text)
+    tokens = re.split(r"(\s+|[.,!?۔؟—\-\"'():;«»])", text)
     result = []
     for token in tokens:
         clean_token = token.strip()
         if clean_token in URDU_SCRIPT_WORD_MAP:
             result.append(URDU_SCRIPT_WORD_MAP[clean_token])
         elif clean_token:
-            # First replace aspirated digraphs (e.g. کھ -> ख)
-            word = token
+            word = clean_token
             for digraph, dev_char in URDU_DIGRAPHS.items():
                 word = word.replace(digraph, dev_char)
-            # Fallback character conversion
             char_converted = "".join(URDU_CHAR_MAP.get(ch, ch) for ch in word)
             result.append(char_converted)
         else:
@@ -232,7 +246,7 @@ def fix_roman_urdu_misspellings(text: str) -> str:
 
 
 def transliterate_roman_to_devanagari(text: str) -> str:
-    tokens = re.split(r"(\s+|[.,!?۔؟।])", text)
+    tokens = re.split(r"(\s+|[.,!?۔؟—\-\"'():;«»])", text)
     result = []
     for token in tokens:
         lower_token = token.lower().strip()
@@ -251,13 +265,11 @@ def prepare_text_for_tts(text: str) -> tuple[str, str]:
     if not text or not text.strip():
         return "", "en"
 
-    # Check for native Urdu Perso-Arabic script (\u0600-\u06FF)
     has_urdu_script = bool(re.search(r"[\u0600-\u06FF]", text))
     if has_urdu_script:
         devanagari_text = transliterate_urdu_script_to_devanagari(text.strip())
         return devanagari_text, "hi"
 
-    # Process Roman Urdu text
     cleaned_text = fix_roman_urdu_misspellings(text)
     devanagari_text = transliterate_roman_to_devanagari(cleaned_text)
 
