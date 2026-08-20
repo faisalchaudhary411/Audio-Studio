@@ -110,6 +110,33 @@
 
 <section class="section">
   <div class="section__head">
+    <span class="section__eyebrow">Audio toolkit</span>
+    <h2 class="section__title">More than narration — a full audio toolkit, free.</h2>
+    <p class="section__sub">Transcribe, convert formats, merge clips, trim audio, remove background noise, change voice effects, and extract audio from video — all in one place, no desktop editor required.</p>
+  </div>
+  <div class="chain" style="margin-top:0;">
+    <div class="chain__node">
+      <h3>Transcribe &amp; convert</h3>
+      <p>Turn recordings into text, or switch between MP3, WAV, OGG, M4A and FLAC.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <h3>Edit &amp; clean up</h3>
+      <p>Merge clips, trim or split audio, and reduce steady background noise.</p>
+    </div>
+    <span class="chain__arrow" style="visibility:hidden;">→</span>
+    <div class="chain__node">
+      <h3>Effects &amp; video</h3>
+      <p>Apply voice effects, or pull the audio track out of a video file.</p>
+    </div>
+  </div>
+  <div style="margin-top:24px;text-align:center;">
+    <a href="{{ url_for('tools_hub') }}" class="btn btn--ghost">See all audio tools</a>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
     <span class="section__eyebrow">Pro+</span>
     <h2 class="section__title">Beyond narration — clone your voice, generate original music.</h2>
     <p class="section__sub">Two more tools live in Studio, included with Pro+: clone any voice from a short reference clip, and generate instrumental tracks from a text description. Both run on dedicated GPUs — no separate app, no separate login.</p>
@@ -165,8 +192,8 @@
 <section class="section">
   <div class="section__head">
     <span class="section__eyebrow">Pricing</span>
-    <h2 class="section__title">Free to start. One plan when you're ready.</h2>
-    <p class="section__sub">Unlimited characters, all 88 voices, zero ads — no tiers to compare, no feature gate to hunt for.</p>
+    <h2 class="section__title">Free to start. Upgrade when you need more.</h2>
+    <p class="section__sub">Free tier works with no signup. Pro removes daily limits; Pro+ adds voice cloning and AI music. Pay by card or local PKR methods (EasyPaisa, JazzCash, bank).</p>
   </div>
   <div style="text-align:center;">
     <a href="{{ url_for('pricing') }}" class="btn btn--brass">See full pricing</a>

@@ -10,12 +10,12 @@
 
   <div class="panel" style="margin-bottom:16px;display:flex;gap:10px;">
     <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro' %}border-color:var(--brass);{% endif %}">
-      <input type="radio" name="plan" value="pro" form="upgrade-form" data-checkout-url="{{ checkout_url or '' }}" {% if requested_plan == 'pro' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
-      <strong>Pro</strong> — {{ '$3/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">TTS only</span>
+      <input type="radio" name="plan" value="pro" form="upgrade-form" data-checkout-url="{{ checkout_url or '' }}" data-pkr="{{ pro_price_pkr }}" {% if requested_plan == 'pro' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
+      <strong>Pro</strong> — {{ pro_price_usd }}/mo<br><span style="color:var(--text-dim);font-size:0.78rem;">TTS only · or {{ pro_price_pkr }} PKR</span>
     </label>
     <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro_plus' %}border-color:var(--brass);{% endif %}">
-      <input type="radio" name="plan" value="pro_plus" form="upgrade-form" data-checkout-url="{{ checkout_url_pro_plus or '' }}" {% if requested_plan == 'pro_plus' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
-      <strong>Pro+</strong> — {{ '$6/mo' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">+ Voice clone, music</span>
+      <input type="radio" name="plan" value="pro_plus" form="upgrade-form" data-checkout-url="{{ checkout_url_pro_plus or '' }}" data-pkr="{{ pro_plus_price_pkr }}" {% if requested_plan == 'pro_plus' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
+      <strong>Pro+</strong> — {{ pro_plus_price_usd }}/mo<br><span style="color:var(--text-dim);font-size:0.78rem;">+ Voice clone, music · or {{ pro_plus_price_pkr }} PKR</span>
     </label>
   </div>
 
@@ -32,10 +32,18 @@
     // has selected below it, instead of always linking to one fixed URL
     // regardless of which plan they picked (the original bug: Pro+ buyers
     // landed on the Pro checkout page no matter what).
+    // ALSO now keeps the "send Rs X" amount below in sync with the same
+    // selection — previously the manual-payment instructions never showed
+    // an amount at all, for either plan, so a Pakistani customer paying by
+    // EasyPaisa/JazzCash/bank had to guess how much to send.
     function voxcraftUpdateCheckoutLink() {
       var selected = document.querySelector('input[name="plan"]:checked');
       var link = document.getElementById('voxcraft-checkout-link');
       var missing = document.getElementById('voxcraft-checkout-missing');
+      var amountEl = document.getElementById('voxcraft-pkr-amount');
+      if (selected && amountEl) {
+        amountEl.textContent = 'Rs ' + selected.getAttribute('data-pkr');
+      }
       if (!selected || !link) return;
       var url = selected.getAttribute('data-checkout-url');
       if (url) {
@@ -75,6 +83,11 @@
       {% endif %}
     {% else %}
       {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
+
+      <div class="panel" style="margin-bottom:16px;background:rgba(232,169,60,0.08);border-color:var(--brass);">
+        <span style="color:var(--text-dim);font-size:0.78rem;">Amount to send for <strong style="color:var(--text-hi);">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong></span>
+        <div style="font-family:var(--display);font-size:1.6rem;color:var(--brass-hi);font-weight:700;" id="voxcraft-pkr-amount">Rs {{ pro_plus_price_pkr if requested_plan == 'pro_plus' else pro_price_pkr }}</div>
+      </div>
 
       <div style="font-family:var(--mono);font-size:0.85rem;color:var(--text-mid);margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:14px;display:grid;gap:10px;">
         <div><strong style="color:var(--text-hi);">📱 EasyPaisa:</strong> 0334-1771875 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Open EasyPaisa app → Send Money → Mobile Account</span></div>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% from "partials/usage_bar.html" import usage_bar %}
-{% block title %}Tools — VoxCraft{% endblock %}
+{% block title %}Free Online Audio Tools — Transcribe, Convert, Merge & More{% endblock %}
+{% block meta_description %}Free online audio toolkit: transcribe, convert format, merge, trim, denoise, change voice, extract from video, or generate music. Pick a tool below.{% endblock %}
 
 {% block content %}
 <div class="section" style="padding-bottom:0;">
@@ -9,85 +9,32 @@
     <h1 class="section__title">Free online audio tools for everyday creator workflows.</h1>
     <p class="section__sub">Transcribe recordings, convert formats, combine clips, trim audio, reduce steady background noise, change voice effects and extract audio from video. Each tool is designed to handle a specific job without requiring a full desktop editor.</p>
   </div>
-  {% if not is_pro_ctx %}
-  <div class="panel" style="margin-bottom:16px;">
-    <span class="panel__label">Today's usage (per tool)</span>
-    {{ usage_bar('Transcribe', usage.transcribe.used, usage.transcribe.limit) }}
-    {{ usage_bar('Convert', usage.convert.used, usage.convert.limit) }}
-    {{ usage_bar('Merge', usage.merge.used, usage.merge.limit) }}
-    {{ usage_bar('Cutter', usage.cutter.used, usage.cutter.limit) }}
-    {{ usage_bar('Denoise', usage.denoise.used, usage.denoise.limit) }}
-    {{ usage_bar('Voice Changer', usage.voicechange.used, usage.voicechange.limit) }}
-    {{ usage_bar('Video Extract', usage.videoxtract.used, usage.videoxtract.limit) }}
-  </div>
-  {% endif %}
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-    <button class="btn btn--sm btn--brass" data-tool-tab="transcribe">Transcribe</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="convert">Convert</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="merge">Merge</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="cutter">Cutter</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="denoise">Denoise</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="voicechange">Voice Changer</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="videoxtract">Video Extract</button>
-    <button class="btn btn--sm btn--ghost" data-tool-tab="music">Music {% if not is_pro_ctx %}🔒{% endif %}</button>
-    {% if filedesk_url %}
-    <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="btn btn--sm btn--ghost">FileDesk ↗</a>
-    {% endif %}
-  </div>
 </div>
 
 {% if not is_pro_ctx %}
 {% include "partials/ads_banner.html" %}
 {% endif %}
 
-<!-- Transcribe -->
-<div class="section" style="padding-top:0;" id="panel-transcribe">
-  {% include "partials/tool_widgets/transcribe.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
+<div class="section" style="padding-top:0;">
+  <div class="voice-grid">
+    {% for tool in ordered_tools %}
+    <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="panel" style="display:block;text-decoration:none;">
+      <span class="voice-card__tag" style="margin-bottom:10px;display:inline-block;">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
+      <h2 style="font-family:var(--display);font-size:1.1rem;margin:2px 0 8px;color:var(--text-hi);">{{ tool.h1 }}</h2>
+      <p style="color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:0 0 14px;">{{ tool.sub }}</p>
+      <span style="color:var(--brass-hi);font-size:0.85rem;font-weight:600;">Open tool →</span>
+    </a>
+    {% endfor %}
+    {% if filedesk_url %}
+    <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="panel" style="display:block;text-decoration:none;">
+      <span class="voice-card__tag" style="margin-bottom:10px;display:inline-block;">PDF Tools</span>
+      <h2 style="font-family:var(--display);font-size:1.1rem;margin:2px 0 8px;color:var(--text-hi);">FileDesk — PDF tools</h2>
+      <p style="color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:0 0 14px;">Merge, split, compress and convert PDFs — a separate free toolkit, opens in a new tab.</p>
+      <span style="color:var(--brass-hi);font-size:0.85rem;font-weight:600;">Open FileDesk ↗</span>
+    </a>
+    {% endif %}
+  </div>
 </div>
-
-<!-- Convert -->
-<div class="section" style="padding-top:0;display:none;" id="panel-convert">
-  {% include "partials/tool_widgets/convert.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
-<!-- Merge -->
-<div class="section" style="padding-top:0;display:none;" id="panel-merge">
-  {% include "partials/tool_widgets/merge.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
-<!-- Cutter -->
-<div class="section" style="padding-top:0;display:none;" id="panel-cutter">
-  {% include "partials/tool_widgets/cutter.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
-<!-- Denoise -->
-<div class="section" style="padding-top:0;display:none;" id="panel-denoise">
-  {% include "partials/tool_widgets/denoise.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
-<!-- Voice Changer -->
-<div class="section" style="padding-top:0;display:none;" id="panel-voicechange">
-  {% include "partials/tool_widgets/voicechange.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='voice-changer') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
-<!-- Video Extract -->
-<div class="section" style="padding-top:0;display:none;" id="panel-videoxtract">
-  {% include "partials/tool_widgets/videoxtract.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
-<!-- Music -->
-<div class="section" style="padding-top:0;display:none;" id="panel-music">
-  {% include "partials/tool_widgets/music.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
-</div>
-
 
 <section class="section" style="padding-top:10px;max-width:900px;">
   <div class="section__head">
@@ -99,34 +46,34 @@
   <div class="chain" style="margin-top:0;">
     <div class="chain__node">
       <h3>Need text from speech?</h3>
-      <p>Use <strong>Transcribe</strong> to turn supported audio recordings into text. Clear speech and limited background noise generally produce better transcripts.</p>
+      <p>Use <a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi);"><strong>Transcribe</strong></a> to turn supported audio recordings into text. Clear speech and limited background noise generally produce better transcripts.</p>
     </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
     <div class="chain__node">
       <h3>Need a different file format?</h3>
-      <p>Use <strong>Convert</strong> when you need MP3, WAV, OGG, M4A or FLAC output. Keep the original file if you may need to make a different conversion later.</p>
+      <p>Use <a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--brass-hi);"><strong>Convert</strong></a> when you need MP3, WAV, OGG, M4A or FLAC output. Keep the original file if you may need to make a different conversion later.</p>
     </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
     <div class="chain__node">
       <h3>Need to edit a recording?</h3>
-      <p>Use <strong>Merge</strong>, <strong>Cutter</strong> or <strong>Denoise</strong> for common editing tasks without opening a full desktop editor.</p>
+      <p>Use <a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--brass-hi);"><strong>Merge</strong></a>, <a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--brass-hi);"><strong>Cutter</strong></a> or <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi);"><strong>Denoise</strong></a> for common editing tasks without opening a full desktop editor.</p>
     </div>
   </div>
 
   <div class="chain" style="margin-top:16px;">
     <div class="chain__node">
       <h3>Need a voice effect?</h3>
-      <p><strong>Voice Changer</strong> provides pitch, robot, echo, chipmunk and deep-voice effects for clips where a deliberate character or processing effect is wanted.</p>
+      <p><a href="{{ url_for('tool_page', slug='voice-changer') }}" style="color:var(--brass-hi);"><strong>Voice Changer</strong></a> provides pitch, robot, echo, chipmunk and deep-voice effects for clips where a deliberate character or processing effect is wanted.</p>
     </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
     <div class="chain__node">
       <h3>Need audio from a video?</h3>
-      <p><strong>Video to Audio</strong> extracts an audio track from supported video formats so you can continue editing or converting it separately.</p>
+      <p><a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--brass-hi);"><strong>Video to Audio</strong></a> extracts an audio track from supported video formats so you can continue editing or converting it separately.</p>
     </div>
     <span class="chain__arrow" style="visibility:hidden;">→</span>
     <div class="chain__node">
       <h3>Need a quick music bed?</h3>
-      <p><strong>Music Generator</strong> is available to Pro users for generating tracks from a description. Check the current licensing information before using generated music commercially.</p>
+      <p><a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--brass-hi);"><strong>Music Generator</strong></a> is available to Pro+ users for generating tracks from a description. Check the current licensing information before using generated music commercially.</p>
     </div>
   </div>
 
@@ -177,11 +124,4 @@
   </div>
 </section>
 
-{% endblock %}
-
-{% block scripts %}
-<script src="{{ static_url('js/tools.js') }}"></script>
-{% if is_pro_ctx %}
-<script src="{{ static_url('js/music.js') }}"></script>
-{% endif %}
 {% endblock %}

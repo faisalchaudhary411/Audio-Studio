@@ -103,32 +103,34 @@
   </div>
 </div>
 
-<!-- ===== Clone voice tab ===== -->
+<!-- ===== Clone voice tab — preview only, full tool lives at /voice-cloning ===== -->
 <div class="section" id="tab-clone" style="padding-top:0;display:none;">
-  {% include "partials/tool_widgets/voiceclone.html" %}
-  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('voice_cloning') }}" style="color:var(--text-dim);font-size:0.8rem;">Full voice cloning guide →</a></p>
+  <div class="panel">
+    <span class="panel__label">Clone a voice</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;">English, Hindi &amp; Urdu</span>
+      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference clip: 5–10s</span>
+    </div>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:14px;">Upload a clear reference clip and generate new speech in that voice — runs on a dedicated GPU, ready in 30–90 seconds.</p>
+    {% if has_clone_music_ctx %}
+    <a href="{{ url_for('voice_cloning') }}" class="btn btn--brass">Open voice cloning →</a>
+    {% else %}
+    {% include "partials/pro_plus_upsell.html" %}
+    {% endif %}
+  </div>
 </div>
 
-<!-- ===== Music generation tab ===== -->
+<!-- ===== Music generation tab — preview only, full tool lives at /tools/ai-music-generator ===== -->
 <div class="section" id="tab-music" style="padding-top:0;display:none;">
   <div class="panel">
-    {% if has_clone_music_ctx %}
     <span class="panel__label">Generate music</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;">Instrumental only</span>
-      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">5–30 seconds</span>
+      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;">Instrumental or vocal</span>
+      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">10–120 seconds</span>
     </div>
-    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:4px;">Describe the music you want — genre, mood, instruments.</p>
-    <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:12px;">Describe in English — genre/mood/instrument words work best (e.g. "genre", "tempo", "piano"). This generates instrumental tracks, not sung lyrics.</p>
-    <textarea class="script-input" id="music-prompt" placeholder="e.g. upbeat lo-fi hip hop with soft piano and vinyl crackle" maxlength="500" style="min-height:80px;"></textarea>
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Duration: <span id="music-duration-label">15s</span></label>
-    <input id="music-duration-slider" type="range" min="10" max="30" step="5" value="15" style="width:100%;margin-bottom:12px;">
-    <div class="render-bar">
-      <button class="btn btn--brass" id="generate-music-btn">Generate music</button>
-      <span class="render-status" data-music-status></span>
-    </div>
-    <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;">Music generation runs on a GPU and can take 30–90 seconds — don't close this tab while it's working.</p>
-    <div id="music-result" style="margin-top:16px;"></div>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:14px;">Describe genre, mood and instruments — get back a real track in under a minute. Powered by ACE-Step (Apache 2.0).</p>
+    {% if has_clone_music_ctx %}
+    <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" class="btn btn--brass">Open music generator →</a>
     {% else %}
     {% include "partials/pro_plus_upsell.html" %}
     {% endif %}
@@ -212,10 +214,6 @@
 {% block scripts %}
 <script>
   window.VOXCRAFT_VOICES = {{ voices|tojson }};
-  window.VOXCRAFT_HAS_CLONE_MUSIC = {{ has_clone_music_ctx|tojson }};
 </script>
 <script src="{{ static_url('js/studio.js') }}"></script>
-{% if has_clone_music_ctx %}
-<script src="{{ static_url('js/clone_music.js') }}"></script>
-{% endif %}
 {% endblock %}

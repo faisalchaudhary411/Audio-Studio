@@ -17,6 +17,9 @@
         <span class="plan__price">{{ p.price }}</span>
         <span class="plan__period">{{ p.period }}</span>
       </div>
+      {% if p.pkr %}
+      <p style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;">or {{ p.pkr }}/mo — EasyPaisa / JazzCash / bank</p>
+      {% endif %}
       <ul class="plan__list">
         {% for item in p.limits %}
         <li>{{ item }}</li>
