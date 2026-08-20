@@ -35,10 +35,17 @@
   }
 
   // ---- Transcribe ----
+  // Guarded: this file is now shared between the all-in-one /tools hub
+  // (every panel present) and individual /tools/<slug> pages (only ONE
+  // panel's markup exists in the DOM). Without the `if (transcribeBtn)`
+  // guard, addEventListener on a null element would throw and silently
+  // kill every tool wired up AFTER this one in the same script.
   const transcribeBtn = document.getElementById('transcribe-btn');
   const transcribeStatus = document.querySelector('[data-transcribe-status]');
   const transcribeResult = document.getElementById('transcribe-result');
-  transcribeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runTranscribe); });
+  if (transcribeBtn) {
+    transcribeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runTranscribe); });
+  }
   async function runTranscribe() {
     const file = document.getElementById('transcribe-file').files[0];
     if (!file) { transcribeStatus.textContent = 'Choose a file first.'; return; }
@@ -67,14 +74,18 @@
 
   // ---- Convert ----
   const convertQuality = document.getElementById('convert-quality');
-  document.getElementById('convert-quality-label').textContent = convertQuality.value;
-  convertQuality.addEventListener('input', () => {
-    document.getElementById('convert-quality-label').textContent = convertQuality.value;
-  });
   const convertBtn = document.getElementById('convert-btn');
   const convertStatus = document.querySelector('[data-convert-status]');
   const convertResult = document.getElementById('convert-result');
-  convertBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runConvert); });
+  if (convertQuality) {
+    document.getElementById('convert-quality-label').textContent = convertQuality.value;
+    convertQuality.addEventListener('input', () => {
+      document.getElementById('convert-quality-label').textContent = convertQuality.value;
+    });
+  }
+  if (convertBtn) {
+    convertBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runConvert); });
+  }
   async function runConvert() {
     const file = document.getElementById('convert-file').files[0];
     if (!file) { convertStatus.textContent = 'Choose a file first.'; return; }
@@ -100,10 +111,6 @@
 
   // ---- Merge ----
   const mergeGap = document.getElementById('merge-gap');
-  document.getElementById('merge-gap-label').textContent = mergeGap.value;
-  mergeGap.addEventListener('input', () => {
-    document.getElementById('merge-gap-label').textContent = mergeGap.value;
-  });
   const mergeAddBtn = document.getElementById('merge-add-btn');
   const mergeFilesInput = document.getElementById('merge-files');
   const mergeFileList = document.getElementById('merge-file-list');
@@ -113,6 +120,7 @@
   let mergeSelectedFiles = []; // accumulates across multiple picks, unlike the raw <input> which replaces on reselect
 
   function renderMergeList() {
+    if (!mergeFileList) return;
     if (!mergeSelectedFiles.length) {
       mergeFileList.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No files added yet.</p>';
       return;
@@ -130,16 +138,25 @@
       });
     });
   }
-  renderMergeList();
 
-  mergeAddBtn.addEventListener('click', () => mergeFilesInput.click());
-  mergeFilesInput.addEventListener('change', () => {
-    for (const f of mergeFilesInput.files) mergeSelectedFiles.push(f);
-    mergeFilesInput.value = ''; // reset so picking the same file again still fires 'change'
-    renderMergeList();
-  });
-
-  mergeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runMerge); });
+  if (mergeGap) {
+    document.getElementById('merge-gap-label').textContent = mergeGap.value;
+    mergeGap.addEventListener('input', () => {
+      document.getElementById('merge-gap-label').textContent = mergeGap.value;
+    });
+  }
+  if (mergeFileList) renderMergeList();
+  if (mergeAddBtn) mergeAddBtn.addEventListener('click', () => mergeFilesInput.click());
+  if (mergeFilesInput) {
+    mergeFilesInput.addEventListener('change', () => {
+      for (const f of mergeFilesInput.files) mergeSelectedFiles.push(f);
+      mergeFilesInput.value = ''; // reset so picking the same file again still fires 'change'
+      renderMergeList();
+    });
+  }
+  if (mergeBtn) {
+    mergeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runMerge); });
+  }
   async function runMerge() {
     if (mergeSelectedFiles.length < 2) { mergeStatus.textContent = 'Add at least 2 files first.'; return; }
     mergeBtn.disabled = true;
@@ -174,35 +191,41 @@
   let cutterMode = 'trim';
   let cutterDurationSec = 0;
 
-  cutterModeBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      cutterMode = btn.dataset.cutterMode;
-      cutterModeBtns.forEach(b => b.className = b.dataset.cutterMode === cutterMode ? 'btn btn--sm btn--brass' : 'btn btn--sm btn--ghost');
-      trimControls.style.display = cutterMode === 'trim' ? '' : 'none';
-      splitControls.style.display = cutterMode === 'split' ? '' : 'none';
+  if (cutterModeBtns.length) {
+    cutterModeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        cutterMode = btn.dataset.cutterMode;
+        cutterModeBtns.forEach(b => b.className = b.dataset.cutterMode === cutterMode ? 'btn btn--sm btn--brass' : 'btn btn--sm btn--ghost');
+        trimControls.style.display = cutterMode === 'trim' ? '' : 'none';
+        splitControls.style.display = cutterMode === 'split' ? '' : 'none';
+      });
     });
-  });
+  }
 
-  cutterFile.addEventListener('change', async () => {
-    const file = cutterFile.files[0];
-    if (!file) return;
-    cutterDuration.textContent = 'Reading duration…';
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const res = await fetch('/api/tools/cutter/duration', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { cutterDuration.textContent = data.error || 'Could not read file.'; return; }
-      cutterDurationSec = data.duration_sec;
-      cutterDuration.textContent = `Duration: ${cutterDurationSec.toFixed(1)}s`;
-      document.getElementById('cutter-end').value = cutterDurationSec.toFixed(1);
-      document.getElementById('cutter-split-at').value = (cutterDurationSec / 2).toFixed(1);
-    } catch (e) {
-      cutterDuration.textContent = 'Network error.';
-    }
-  });
+  if (cutterFile) {
+    cutterFile.addEventListener('change', async () => {
+      const file = cutterFile.files[0];
+      if (!file) return;
+      cutterDuration.textContent = 'Reading duration…';
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await fetch('/api/tools/cutter/duration', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) { cutterDuration.textContent = data.error || 'Could not read file.'; return; }
+        cutterDurationSec = data.duration_sec;
+        cutterDuration.textContent = `Duration: ${cutterDurationSec.toFixed(1)}s`;
+        document.getElementById('cutter-end').value = cutterDurationSec.toFixed(1);
+        document.getElementById('cutter-split-at').value = (cutterDurationSec / 2).toFixed(1);
+      } catch (e) {
+        cutterDuration.textContent = 'Network error.';
+      }
+    });
+  }
 
-  cutterBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runCutter); });
+  if (cutterBtn) {
+    cutterBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runCutter); });
+  }
   async function runCutter() {
     const file = cutterFile.files[0];
     if (!file) { cutterStatus.textContent = 'Choose a file first.'; return; }
