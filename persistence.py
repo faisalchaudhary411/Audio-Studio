@@ -56,6 +56,14 @@ DEFAULT_LIMITS = {
     "FREE_VOICES_COUNT": 20,
     "PRO_PRICE_PKR": 840,
     "PRO_PRICE_LABEL": "840 PKR",
+    "PRO_PRICE_USD_LABEL": "$3",
+    # Pro+ previously had NO PKR fields at all — only Pro did — so the
+    # manual-payment flow (EasyPaisa/JazzCash/bank, used by Pakistani
+    # customers who can't pay by card) never told a Pro+ buyer how many
+    # rupees to actually send. Mirrors the existing Pro fields exactly.
+    "PRO_PLUS_PRICE_PKR": 1680,
+    "PRO_PLUS_PRICE_LABEL": "1680 PKR",
+    "PRO_PLUS_PRICE_USD_LABEL": "$6",
     "FREE_PRICE_LABEL": "$0",
     "CHECKOUT_URL": "",
     # Was one field for both plans, so every checkout — Pro or Pro+ — sent

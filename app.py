@@ -597,14 +597,17 @@ def pricing():
     current_plan = get_plan() or "free"
     plans = [
         {"id": "free", "name": "Free", "price": limits.get("FREE_PRICE_LABEL", "$0"), "period": "forever",
+         "pkr": None,
          "limits": free_features,
          "cta": "Current plan" if current_plan == "free" else "Downgrade automatically at renewal",
          "cta_url": None},
-        {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_LABEL", "$3"), "period": "/month",
+        {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_USD_LABEL", "$3"), "period": "/month",
+         "pkr": limits.get("PRO_PRICE_LABEL", "840 PKR"),
          "limits": pro_features,
          "cta": "Current plan" if current_plan == "pro" else "Get Pro",
          "cta_url": None if current_plan == "pro" else url_for("upgrade", plan="pro")},
-        {"id": "pro_plus", "name": "Pro+", "price": limits.get("PRO_PLUS_PRICE_LABEL", "$6"), "period": "/month",
+        {"id": "pro_plus", "name": "Pro+", "price": limits.get("PRO_PLUS_PRICE_USD_LABEL", "$6"), "period": "/month",
+         "pkr": limits.get("PRO_PLUS_PRICE_LABEL", "1680 PKR"),
          "limits": pro_plus_features, "featured": True,
          "cta": "Current plan" if current_plan == "pro_plus" else "Get Pro+",
          "cta_url": None if current_plan == "pro_plus" else url_for("upgrade", plan="pro_plus")},
@@ -651,7 +654,11 @@ def upgrade():
         # whatever was actually set in /admin/limits.
         grace_hours = lim.get("MANUAL_GRACE_HOURS", 72)
         return render_template("upgrade.html", checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus,
-                                grace_hours=grace_hours, requested_plan=requested_plan)
+                                grace_hours=grace_hours, requested_plan=requested_plan,
+                                pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
+                                pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
+                                pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
+                                pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
@@ -659,7 +666,11 @@ def upgrade():
     txn_id = (request.form.get("txn_id") or "").strip()
     if not name or not email:
         return render_template("upgrade.html", error="Name and email are required.", checkout_url=checkout_url,
-                                checkout_url_pro_plus=checkout_url_pro_plus, requested_plan=requested_plan)
+                                checkout_url_pro_plus=checkout_url_pro_plus, requested_plan=requested_plan,
+                                pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
+                                pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
+                                pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
+                                pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
 
     screenshot_b64 = ""
     file = request.files.get("screenshot")
@@ -685,9 +696,18 @@ def upgrade():
                                 checkout_url_pro_plus=checkout_url_pro_plus,
                                 auto_approved=result.get("auto_approved", False),
                                 grace_hours=result.get("grace_hours"),
-                                already_pro=already_pro)
+                                already_pro=already_pro, requested_plan=requested_plan,
+                                pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
+                                pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
+                                pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
+                                pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
     return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."),
-                            checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus)
+                            checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus,
+                            requested_plan=requested_plan,
+                            pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
+                            pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
+                            pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
+                            pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
 
 
 # ---------------------------------------------------------------------------
@@ -1037,6 +1057,10 @@ def admin_limits():
             "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 20)),
             "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
             "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
+            "PRO_PRICE_USD_LABEL": request.form.get("PRO_PRICE_USD_LABEL", "$3"),
+            "PRO_PLUS_PRICE_PKR": int(request.form.get("PRO_PLUS_PRICE_PKR", 1680)),
+            "PRO_PLUS_PRICE_LABEL": request.form.get("PRO_PLUS_PRICE_LABEL", "1680 PKR"),
+            "PRO_PLUS_PRICE_USD_LABEL": request.form.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
             "FREE_PRICE_LABEL": request.form.get("FREE_PRICE_LABEL", "$0"),
             "CHECKOUT_URL": request.form.get("CHECKOUT_URL", ""),
             "CHECKOUT_URL_PRO_PLUS": request.form.get("CHECKOUT_URL_PRO_PLUS", ""),
@@ -1388,7 +1412,18 @@ def fs_callback_activate():
 
 @app.route("/tools")
 def tools_hub():
-    return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary(),
+    """Directory page — lists all 8 tools as preview cards linking to their
+    own dedicated /tools/<slug> page, which is where the actual widget
+    lives now. Previously this page embedded every tool's full working
+    widget itself (behind tabs), which meant a visitor's need was already
+    met right here — nobody had a reason to click through to the richer,
+    more indexable dedicated pages that actually rank in search. Directory
+    + dedicated-page-does-the-work keeps each tool's functionality in
+    exactly one place (the tool_widgets partials, unchanged) while giving
+    search traffic a real reason to land on, and stay on, the specific
+    page that matches their query."""
+    ordered_tools = [dict(slug=s, **tool_pages.TOOL_PAGES[s]) for s in tool_pages.TOOL_ORDER]
+    return render_template("tools.html", ordered_tools=ordered_tools,
                             filedesk_url=os.environ.get("FILEDESK_URL", "").strip())
 
 
