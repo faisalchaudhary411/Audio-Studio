@@ -125,7 +125,7 @@ class ChatterboxWorker:
             audio_prompt_path=ref_path,
             language_id=language_id,
             temperature=0.20,          # commercial: very stable, minimal hallucination
-            top_p=0.75,
+            top_p=0.72,
             repetition_penalty=1.35,
             min_p=0.05,
             cfg_weight=0.0,
@@ -287,7 +287,7 @@ class ChatterboxWorker:
                     energy = float(candidate.abs().mean())
                     min_expected = max(1.2, len(chunk_text.strip()) / 14.0)
 
-                    if duration >= min_expected * 0.55 and energy > 0.008:
+                    if duration >= min_expected * 0.55 and energy > 0.006:
                         wav = candidate
                         break
                     # otherwise retry once
