@@ -137,6 +137,72 @@ def _fetch_job(job_id: str):
     }
 
 
+def _split_for_stable_generation(text: str, max_chars: int = 450) -> list:
+    """
+    Split long Devanagari/English text into natural segments for stable TTS.
+    Prefers paragraph breaks, then sentence boundaries.
+    Keeps each segment under max_chars for commercial quality.
+    """
+    import re
+    text = text.strip()
+    if len(text) <= max_chars:
+        return [text]
+
+    # First try paragraph breaks
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if len(paragraphs) == 1:
+        # Fall back to sentence boundaries
+        paragraphs = [s.strip() for s in re.split(r"(?<=[.!?।؟])\s+", text) if s.strip()]
+
+    segments = []
+    current = ""
+    for part in paragraphs:
+        candidate = (current + " " + part).strip() if current else part
+        if len(candidate) <= max_chars:
+            current = candidate
+        else:
+            if current:
+                segments.append(current)
+            if len(part) <= max_chars:
+                current = part
+            else:
+                # Hard split long sentence by words
+                words = part.split()
+                piece = ""
+                for w in words:
+                    cand = (piece + " " + w).strip() if piece else w
+                    if len(cand) <= max_chars:
+                        piece = cand
+                    else:
+                        if piece:
+                            segments.append(piece)
+                        piece = w
+                current = piece
+    if current:
+        segments.append(current)
+    return [s for s in segments if s.strip()]
+
+
+def _concat_wav_segments(wav_bytes_list: list) -> bytes:
+    """Concatenate multiple WAV byte strings into one using pydub."""
+    from pydub import AudioSegment
+    import io
+
+    if not wav_bytes_list:
+        return b""
+    if len(wav_bytes_list) == 1:
+        return wav_bytes_list[0]
+
+    combined = AudioSegment.empty()
+    for raw in wav_bytes_list:
+        seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
+        # Small crossfade-like silence between segments for natural flow
+        combined += seg + AudioSegment.silent(duration=120)
+    buf = io.BytesIO()
+    combined.export(buf, format="wav")
+    return buf.getvalue()
+
+
 def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_lang: str = "en"):
     _update_job(job_id, status="generating")
     try:
@@ -146,19 +212,27 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_
         processed_text, auto_lang_id = urdu_transliteration.prepare_text_for_tts(text)
         language_id = requested_lang if requested_lang in ("hi", "en") and requested_lang != "en" else auto_lang_id
 
-        result = modal_client.generate(processed_text, ref_b64, language_id=language_id)
-        if not result.get("success"):
-            _update_job(
-                job_id,
-                status="error",
-                error=result.get("error", "Generation failed."),
-            )
-            return
+        # Commercial: split long text into stable segments, generate each, then stitch
+        segments = _split_for_stable_generation(processed_text, max_chars=450)
+        audio_parts = []
+
+        for i, segment in enumerate(segments):
+            result = modal_client.generate(segment, ref_b64, language_id=language_id)
+            if not result.get("success"):
+                _update_job(
+                    job_id,
+                    status="error",
+                    error=result.get("error", f"Segment {i+1}/{len(segments)} failed."),
+                )
+                return
+            audio_parts.append(base64.b64decode(result["audio_b64"]))
+
+        final_audio = _concat_wav_segments(audio_parts) if len(audio_parts) > 1 else audio_parts[0]
 
         _update_job(
             job_id,
             status="done",
-            audio=base64.b64decode(result["audio_b64"]),
+            audio=final_audio,
         )
     except Exception as e:
         err_msg = str(e) + "\n" + traceback.format_exc()

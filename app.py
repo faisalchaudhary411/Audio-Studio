@@ -49,7 +49,7 @@ import hmac
 
 CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
 os.makedirs(CLONE_UPLOAD_DIR, exist_ok=True)
-CLONE_CHAR_LIMIT = 2000  # generous — GPU inference on RunPod is fast, unlike the old CPU path this replaced
+CLONE_CHAR_LIMIT = 1400  # aligned with Modal worker MAX_TOTAL_CHARS for stable commercial quality
 
 # Reference clips uploaded to CLONE_UPLOAD_DIR (via /api/clone/upload) had no
 # expiry at all — every clip ever uploaded sat on disk permanently, only
