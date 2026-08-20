@@ -1,0 +1,33 @@
+  <div class="panel">
+    <span class="panel__label">Music generator {% if not is_pro_ctx %}— Pro only{% endif %}</span>
+    {% if not is_pro_ctx %}
+    <p style="color:var(--text-mid);font-size:0.9rem;">Generate real instrumental or vocal tracks from a text description — for videos, projects, anything.
+      <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to unlock this.</p>
+    {% else %}
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:14px;">
+      Powered by ACE-Step (Apache 2.0 — safe for commercial use). Takes ~30-60 seconds per track.
+      Describe genre/mood/instruments as comma-separated tags.
+    </p>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Style tags</label>
+    <input type="text" id="music-tags" placeholder="e.g. lofi, chill, piano, 90 bpm, warm" class="script-input" style="min-height:auto;padding:12px;margin:6px 0 12px;">
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;color:var(--text-mid);margin-bottom:10px;">
+      <input type="checkbox" id="music-instrumental" checked> Instrumental (no vocals)
+    </label>
+
+    <div id="music-lyrics-wrap" style="display:none;margin-bottom:12px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Lyrics (use [verse], [chorus], [bridge] to structure)</label>
+      <textarea id="music-lyrics" class="script-input" style="min-height:120px;margin-top:6px;" placeholder="[verse]&#10;Your lyrics here..."></textarea>
+    </div>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Duration: <span id="music-duration-label">60</span>s</label>
+    <input type="range" id="music-duration" min="10" max="120" step="5" value="60" style="width:100%;margin-bottom:14px;">
+
+    <div class="render-bar">
+      <button class="btn btn--brass" id="music-generate-btn">Generate track</button>
+      <span class="render-status" data-music-status></span>
+    </div>
+    <div id="music-result" style="margin-top:16px;"></div>
+    {% endif %}
+  </div>

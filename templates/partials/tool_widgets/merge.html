@@ -1,0 +1,22 @@
+  <div class="panel">
+    <span class="panel__label">Merge — combine 2 or more clips, in order</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:4px;">Stitches multiple clips into one file with a configurable silence gap between them. Up to 10MB per file.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;">Tap "Add files" as many times as you need — each pick adds to the list below rather than replacing it. Max 10MB per file.</p>
+    <button type="button" class="btn btn--ghost btn--sm" id="merge-add-btn" style="margin-bottom:10px;">+ Add files</button>
+    <input type="file" id="merge-files" accept=".wav,.mp3,.ogg,.m4a,.flac" multiple style="display:none;">
+    <div id="merge-file-list" style="margin-bottom:14px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Gap: <span id="merge-gap-label">500</span> ms</label>
+        <input type="range" min="0" max="3000" step="100" value="500" id="merge-gap" style="width:100%;">
+      </div>
+      <select id="merge-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
+        <option value="mp3">MP3</option><option value="wav">WAV</option><option value="ogg">OGG</option>
+      </select>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="merge-btn">Merge audio</button>
+      <span class="render-status" data-merge-status></span>
+    </div>
+    <div id="merge-result" style="margin-top:14px;"></div>
+  </div>

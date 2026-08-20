@@ -1,0 +1,20 @@
+  <div class="panel">
+    <span class="panel__label">Convert</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Changes an audio file's format and bitrate. Supports MP3, WAV, OGG, M4A, FLAC — up to 10MB.</p>
+    <input type="file" id="convert-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <select id="convert-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
+        <option value="mp3">MP3</option><option value="wav">WAV</option>
+        <option value="ogg">OGG</option><option value="m4a">M4A</option><option value="flac">FLAC</option>
+      </select>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Quality: <span id="convert-quality-label">192</span> kbps</label>
+        <input type="range" min="64" max="320" step="16" value="192" id="convert-quality" style="width:100%;">
+      </div>
+    </div>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="convert-btn">Convert</button>
+      <span class="render-status" data-convert-status></span>
+    </div>
+    <div id="convert-result" style="margin-top:14px;"></div>
+  </div>
