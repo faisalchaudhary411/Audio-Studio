@@ -1265,9 +1265,15 @@ def admin_notifications():
 def api_announcements():
     """Public, unauthenticated — the bell dropdown and top banner fetch
     this on every page load. Deliberately returns only the fields the
-    frontend needs, not the raw DB rows."""
+    frontend needs, not the raw DB rows.
+
+    BUG FIX: this never set Cache-Control, so a browser could legitimately
+    serve a stale cached copy of this GET response on a later page load —
+    e.g. testing Free, then activating Pro on the SAME device/browser
+    minutes later, could still show the old response. Explicit no-store
+    guarantees every page load gets the current announcement list."""
     live = persistence.load_active_announcements()
-    return jsonify([{
+    resp = jsonify([{
         "id": a["id"],
         "type": a.get("type", "update"),
         "title": a.get("title", ""),
@@ -1277,6 +1283,8 @@ def api_announcements():
         "banner": bool(a.get("banner")),
         "created": a.get("created", ""),
     } for a in live])
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/ads.txt")
