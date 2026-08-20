@@ -42,215 +42,50 @@
 
 <!-- Transcribe -->
 <div class="section" style="padding-top:0;" id="panel-transcribe">
-  <div class="panel">
-    <span class="panel__label">Transcribe</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Converts speech in an audio file to text. Supports WAV, MP3, M4A, OGG, FLAC — up to 10MB. Long files are processed in chunks, so it works for anything from a voice memo to a full interview.</p>
-    <input type="file" id="transcribe-file" accept=".wav,.mp3,.m4a,.ogg,.flac" style="margin-bottom:10px;">
-    <select id="transcribe-lang" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
-      {% for name, code in lang_options.items() %}
-      <option value="{{ code }}">{{ name }}</option>
-      {% endfor %}
-    </select>
-    <div class="render-bar">
-      <button class="btn btn--brass" id="transcribe-btn">Transcribe</button>
-      <span class="render-status" data-transcribe-status></span>
-    </div>
-    <div id="transcribe-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/transcribe.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Convert -->
 <div class="section" style="padding-top:0;display:none;" id="panel-convert">
-  <div class="panel">
-    <span class="panel__label">Convert</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Changes an audio file's format and bitrate. Supports MP3, WAV, OGG, M4A, FLAC — up to 10MB.</p>
-    <input type="file" id="convert-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <select id="convert-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
-        <option value="mp3">MP3</option><option value="wav">WAV</option>
-        <option value="ogg">OGG</option><option value="m4a">M4A</option><option value="flac">FLAC</option>
-      </select>
-      <div>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Quality: <span id="convert-quality-label">192</span> kbps</label>
-        <input type="range" min="64" max="320" step="16" value="192" id="convert-quality" style="width:100%;">
-      </div>
-    </div>
-    <div class="render-bar">
-      <button class="btn btn--brass" id="convert-btn">Convert</button>
-      <span class="render-status" data-convert-status></span>
-    </div>
-    <div id="convert-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/convert.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Merge -->
 <div class="section" style="padding-top:0;display:none;" id="panel-merge">
-  <div class="panel">
-    <span class="panel__label">Merge — combine 2 or more clips, in order</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:4px;">Stitches multiple clips into one file with a configurable silence gap between them. Up to 10MB per file.</p>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;">Tap "Add files" as many times as you need — each pick adds to the list below rather than replacing it. Max 10MB per file.</p>
-    <button type="button" class="btn btn--ghost btn--sm" id="merge-add-btn" style="margin-bottom:10px;">+ Add files</button>
-    <input type="file" id="merge-files" accept=".wav,.mp3,.ogg,.m4a,.flac" multiple style="display:none;">
-    <div id="merge-file-list" style="margin-bottom:14px;"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Gap: <span id="merge-gap-label">500</span> ms</label>
-        <input type="range" min="0" max="3000" step="100" value="500" id="merge-gap" style="width:100%;">
-      </div>
-      <select id="merge-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
-        <option value="mp3">MP3</option><option value="wav">WAV</option><option value="ogg">OGG</option>
-      </select>
-    </div>
-    <div class="render-bar">
-      <button class="btn btn--brass" id="merge-btn">Merge audio</button>
-      <span class="render-status" data-merge-status></span>
-    </div>
-    <div id="merge-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/merge.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Cutter -->
 <div class="section" style="padding-top:0;display:none;" id="panel-cutter">
-  <div class="panel">
-    <span class="panel__label">Cutter</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Trim a clip to a start/end range, or split it into two files at a chosen point. Up to 10MB.</p>
-    <input type="file" id="cutter-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
-    <div id="cutter-duration" style="font-family:var(--mono);font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;"></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <button class="btn btn--sm btn--brass" data-cutter-mode="trim">Trim (start-end)</button>
-      <button class="btn btn--sm btn--ghost" data-cutter-mode="split">Split at time</button>
-    </div>
-
-    <div id="cutter-trim-controls">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Start (s)</label>
-      <input type="number" id="cutter-start" value="0" min="0" step="0.1" class="admin-input" style="width:100%;margin-bottom:8px;">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">End (s)</label>
-      <input type="number" id="cutter-end" value="0" min="0" step="0.1" class="admin-input" style="width:100%;">
-    </div>
-    <div id="cutter-split-controls" style="display:none;">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Split at (s)</label>
-      <input type="number" id="cutter-split-at" value="0" min="0" step="0.1" class="admin-input" style="width:100%;">
-    </div>
-
-    <div class="render-bar">
-      <button class="btn btn--brass" id="cutter-btn">Run</button>
-      <span class="render-status" data-cutter-status></span>
-    </div>
-    <div id="cutter-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/cutter.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Denoise -->
 <div class="section" style="padding-top:0;display:none;" id="panel-denoise">
-  <div class="panel">
-    <span class="panel__label">Denoise</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Reduces background hiss/hum using spectral noise reduction. Works best on speech with fairly steady background noise (fans, room tone) — won't remove sudden noises like claps or barks. Up to 10MB. Output is mono.</p>
-    <input type="file" id="denoise-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:10px;">
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Strength: <span id="denoise-strength-label">0.5</span></label>
-    <input type="range" id="denoise-strength" min="0" max="1" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
-    <div class="render-bar">
-      <button class="btn btn--brass" id="denoise-btn">Remove noise</button>
-      <span class="render-status" data-denoise-status></span>
-    </div>
-    <div id="denoise-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/denoise.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Voice Changer -->
 <div class="section" style="padding-top:0;display:none;" id="panel-voicechange">
-  <div class="panel">
-    <span class="panel__label">Voice Changer</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Applies an effect to a voice clip — Pitch Shift preserves the original speaking speed while changing pitch; Chipmunk/Deep Voice intentionally change both pitch and speed for a character-voice effect. Up to 10MB.</p>
-    <input type="file" id="voicechange-file" accept=".wav,.mp3,.ogg,.m4a" style="margin-bottom:10px;">
-    <select id="voicechange-effect" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
-      <option value="pitch_shift">Pitch Shift</option>
-      <option value="robot">Robot</option>
-      <option value="echo">Echo</option>
-      <option value="chipmunk">Chipmunk</option>
-      <option value="deep_voice">Deep Voice</option>
-    </select>
-
-    <div id="voicechange-pitch-controls">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Semitones: <span id="voicechange-semitones-label">0</span></label>
-      <input type="range" id="voicechange-semitones" min="-12" max="12" step="1" value="0" style="width:100%;margin-bottom:10px;">
-    </div>
-    <div id="voicechange-robot-controls" style="display:none;">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Robot intensity: <span id="voicechange-intensity-label">0.5</span></label>
-      <input type="range" id="voicechange-intensity" min="0" max="1" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
-    </div>
-    <div id="voicechange-echo-controls" style="display:none;">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Delay (ms): <span id="voicechange-delay-label">200</span></label>
-      <input type="range" id="voicechange-delay" min="50" max="1000" step="10" value="200" style="width:100%;margin-bottom:8px;">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Decay: <span id="voicechange-decay-label">0.5</span></label>
-      <input type="range" id="voicechange-decay" min="0.1" max="0.9" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
-    </div>
-
-    <div class="render-bar">
-      <button class="btn btn--brass" id="voicechange-btn">Apply effect</button>
-      <span class="render-status" data-voicechange-status></span>
-    </div>
-    <div id="voicechange-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/voicechange.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='voice-changer') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Video Extract -->
 <div class="section" style="padding-top:0;display:none;" id="panel-videoxtract">
-  <div class="panel">
-    <span class="panel__label">Video to Audio</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Extracts the audio track from a video file. Supports MP4, AVI, MOV, MKV, WEBM — <strong style="color:var(--brass-hi);">up to 50MB</strong> (larger than the other tools, since video files are naturally bigger). Files over the limit, or corrupted/incomplete uploads, will fail with an error rather than a silent hang.</p>
-    <input type="file" id="videoxtract-file" accept=".mp4,.avi,.mov,.mkv,.webm" style="margin-bottom:10px;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <select id="videoxtract-format" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);">
-        <option value="mp3">MP3</option><option value="wav">WAV</option><option value="ogg">OGG</option>
-      </select>
-      <div>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Quality: <span id="videoxtract-quality-label">192</span> kbps</label>
-        <input type="range" id="videoxtract-quality" min="64" max="320" step="16" value="192" style="width:100%;">
-      </div>
-    </div>
-    <div class="render-bar">
-      <button class="btn btn--brass" id="videoxtract-btn">Extract audio</button>
-      <span class="render-status" data-videoxtract-status></span>
-    </div>
-    <div id="videoxtract-result" style="margin-top:14px;"></div>
-  </div>
+  {% include "partials/tool_widgets/videoxtract.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 <!-- Music -->
 <div class="section" style="padding-top:0;display:none;" id="panel-music">
-  <div class="panel">
-    <span class="panel__label">Music generator {% if not is_pro_ctx %}— Pro only{% endif %}</span>
-    {% if not is_pro_ctx %}
-    <p style="color:var(--text-mid);font-size:0.9rem;">Generate real instrumental or vocal tracks from a text description — for videos, projects, anything.
-      <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to unlock this.</p>
-    {% else %}
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:14px;">
-      Powered by ACE-Step (Apache 2.0 — safe for commercial use). Takes ~30-60 seconds per track.
-      Describe genre/mood/instruments as comma-separated tags.
-    </p>
-
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Style tags</label>
-    <input type="text" id="music-tags" placeholder="e.g. lofi, chill, piano, 90 bpm, warm" class="script-input" style="min-height:auto;padding:12px;margin:6px 0 12px;">
-
-    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;color:var(--text-mid);margin-bottom:10px;">
-      <input type="checkbox" id="music-instrumental" checked> Instrumental (no vocals)
-    </label>
-
-    <div id="music-lyrics-wrap" style="display:none;margin-bottom:12px;">
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Lyrics (use [verse], [chorus], [bridge] to structure)</label>
-      <textarea id="music-lyrics" class="script-input" style="min-height:120px;margin-top:6px;" placeholder="[verse]&#10;Your lyrics here..."></textarea>
-    </div>
-
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Duration: <span id="music-duration-label">60</span>s</label>
-    <input type="range" id="music-duration" min="10" max="120" step="5" value="60" style="width:100%;margin-bottom:14px;">
-
-    <div class="render-bar">
-      <button class="btn btn--brass" id="music-generate-btn">Generate track</button>
-      <span class="render-status" data-music-status></span>
-    </div>
-    <div id="music-result" style="margin-top:16px;"></div>
-    {% endif %}
-  </div>
+  {% include "partials/tool_widgets/music.html" %}
+  <p style="text-align:right;margin-top:6px;"><a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--text-dim);font-size:0.8rem;">Full guide for this tool →</a></p>
 </div>
 
 

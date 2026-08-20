@@ -1,32 +1,45 @@
 {% extends "base.html" %}
 {% block title %}Terms of Service — VoxCraft{% endblock %}
+{% block meta_description %}Terms for using VoxCraft's text-to-speech, voice cloning, transcription, and audio editing tools, including Free and Pro tier rules.{% endblock %}
 
 {% block content %}
-<section class="section" style="max-width:720px;">
+<section class="section" style="max-width:760px;">
   <div class="section__head">
     <span class="section__eyebrow">Legal</span>
-    <h2 class="section__title">Terms of Service</h2>
-    <p class="section__sub">Last updated: {{ '2026-07-31' }} — this is a starting template, not legal advice. Have it reviewed before relying on it.</p>
+    <h1 class="section__title">Terms of Service</h1>
+    <p class="section__sub">Last updated: 2026-08-19. These terms govern your use of VoxCraft's studio and tools.</p>
   </div>
 
-  <div class="panel" style="color:var(--text-mid);line-height:1.7;">
-    <h3 style="color:var(--text-hi);margin-bottom:8px;">Using VoxCraft</h3>
-    <p>You may use VoxCraft to generate speech and process audio for lawful purposes. You're responsible for the content you submit and for having the rights to any voices, audio, or text you upload.</p>
+  <div class="panel" style="color:var(--text-mid);line-height:1.75;">
+    <h2 style="color:var(--text-hi);margin-bottom:8px;font-size:1.1rem;">Using VoxCraft</h2>
+    <p>You may use VoxCraft's text-to-speech, voice cloning, transcription, conversion, and editing tools to generate and process audio for lawful purposes. You're responsible for the content you submit and for having the rights to any voice, audio, or text you upload — including reference clips used for voice cloning.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Free and Pro tiers</h3>
-    <p>Free tier usage limits are set at our discretion and enforced per device/network. Pro licenses are tied to a single device and are non-transferable except through support.</p>
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Free and Pro tiers</h2>
+    <p>The Free tier includes a daily action limit and monthly character quota, enforced per device using a hashed IP and browser fingerprint — not a login. Pro ($3/mo) unlocks unlimited text-to-speech; Pro+ ($6/mo) adds voice cloning and AI music generation. Pro licenses are tied to a single device at a time and are non-transferable except through <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">support</a>. We may adjust free-tier limits at our discretion to keep the service sustainable for everyone.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Prohibited use</h3>
-    <p>No generating voice content to impersonate a real person without consent, no illegal content, no attempting to circumvent usage limits or reverse-engineer the service.</p>
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Voice cloning specifically</h2>
+    <p>Voice cloning must only be used on voices you own or have explicit permission to clone. Generating cloned speech to impersonate a real person without their consent, for fraud, harassment, or to create misleading content, is prohibited and may result in immediate license revocation without refund.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Availability</h3>
-    <p>VoxCraft is provided "as is" — we aim for reliability but don't guarantee uninterrupted availability.</p>
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Prohibited use</h2>
+    <ul style="padding-left:18px;">
+      <li>Impersonating a real person via generated voice without consent.</li>
+      <li>Generating or processing illegal content.</li>
+      <li>Attempting to circumvent free-tier usage limits (e.g. spoofing device fingerprints or IP headers).</li>
+      <li>Reverse-engineering, scraping, or automating bulk use of the service outside a paid plan's intended scope.</li>
+      <li>Reselling or redistributing Pro license access.</li>
+    </ul>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Changes</h3>
-    <p>We may update these terms; continued use after changes means you accept the updated terms.</p>
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Payments and refunds</h2>
+    <p>Card/PayPal payments are processed through Freemius; manual payments (for regions without card support) are verified by our team, typically within the grace window shown at checkout. Refund requests are handled case by case — contact support with your request ID.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Contact</h3>
-    <p>Questions? See <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">Contact</a>.</p>
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Availability and liability</h2>
+    <p>VoxCraft is provided "as is." We aim for reliable uptime but don't guarantee uninterrupted availability, and we're not liable for losses arising from service interruptions, generation errors, or reliance on tool output. Generated audio may occasionally contain artifacts or inaccuracies — review output before publishing or relying on it.</p>
+
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Changes to these terms</h2>
+    <p>We may update these terms as the product evolves; the date at the top reflects the latest revision. Continued use after a change means you accept the updated terms.</p>
+
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Contact</h2>
+    <p>Questions about these terms? Reach us via <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">Contact</a>.</p>
   </div>
 </section>
 {% endblock %}

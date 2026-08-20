@@ -1,29 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Privacy Policy — VoxCraft{% endblock %}
+{% block meta_description %}How VoxCraft collects, uses, and retains data across its text-to-speech, voice cloning, transcription, and audio editing tools.{% endblock %}
 
 {% block content %}
-<section class="section" style="max-width:720px;">
+<section class="section" style="max-width:760px;">
   <div class="section__head">
     <span class="section__eyebrow">Legal</span>
-    <h2 class="section__title">Privacy Policy</h2>
-    <p class="section__sub">Last updated: {{ '2026-07-31' }} — this is a starting template, not legal advice. Have it reviewed before relying on it.</p>
+    <h1 class="section__title">Privacy Policy</h1>
+    <p class="section__sub">Last updated: 2026-08-19. This describes exactly what VoxCraft collects and why, tool by tool.</p>
   </div>
 
-  <div class="panel" style="color:var(--text-mid);line-height:1.7;">
-    <h3 style="color:var(--text-hi);margin-bottom:8px;">What we collect</h3>
-    <p>Text you submit for speech generation, uploaded audio files for our tools, your email if you request Pro access or contact support, and a hashed (not raw) version of your IP address used to enforce free-tier usage limits.</p>
+  <div class="panel" style="color:var(--text-mid);line-height:1.75;">
+    <h2 style="color:var(--text-hi);margin-bottom:8px;font-size:1.1rem;">What we collect, and from which tools</h2>
+    <p><strong>Text-to-speech (Studio):</strong> the script text you submit, your voice and language selection, and the generated audio. Script text is sent to the TTS engine you select (Microsoft Edge or our self-hosted models) to produce audio, and is not stored longer than needed to generate and return the result.</p>
+    <p style="margin-top:10px;"><strong>Voice cloning (Pro+):</strong> a short reference audio clip you upload is processed on our GPU workers to generate cloned speech. The reference clip is not retained after processing completes.</p>
+    <p style="margin-top:10px;"><strong>Transcription, conversion, merge, cut, denoise, voice-changer, video-to-audio tools:</strong> the audio or video file you upload is processed in memory or in a temporary location and deleted once the tool returns your result — we don't keep a library of files you've processed.</p>
+    <p style="margin-top:10px;"><strong>Music generation (Pro+):</strong> your text prompt and generation settings are sent to our self-hosted model on Modal's GPU infrastructure to produce the track.</p>
+    <p style="margin-top:10px;"><strong>Account and licensing:</strong> your email address if you request Pro access, submit a payment for verification, or contact support; a hashed (not raw) version of your IP address and a browser fingerprint, used only to enforce free-tier usage limits per device and to detect duplicate license activations.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">How we use it</h3>
-    <p>To generate the audio/text output you request, to enforce free-tier limits fairly, to send license keys and support replies, and to improve the service. We do not sell your data.</p>
+    <h2 style="color:var(--text-hi);margin:22px 0 8px;font-size:1.1rem;">How we use it</h2>
+    <p>To generate the audio or text output you request, to enforce free-tier limits fairly across devices, to verify and deliver Pro license keys, to respond to support requests submitted through <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">Contact</a>, and to diagnose bugs when a tool fails. We do not sell your data, and we do not use your submitted text or audio to train models beyond what's needed to generate your own output.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Third parties</h3>
-    <p>We use Microsoft Edge's and Google's text-to-speech services to generate audio, Resend to send transactional email, and Adsterra to serve ads to free-tier users. Each has its own privacy practices.</p>
+    <h2 style="color:var(--text-hi);margin:22px 0 8px;font-size:1.1rem;">Third parties we use</h2>
+    <ul style="padding-left:18px;">
+      <li>Microsoft Edge and self-hosted TTS/voice models — to generate speech and cloned voice audio.</li>
+      <li>Modal (GPU infrastructure) — to run voice cloning and music generation workloads.</li>
+      <li>Resend — to deliver license key emails and support/contact notifications.</li>
+      <li>Freemius — to process Pro subscription payments (card/PayPal); Freemius handles your payment details directly, we never see full card numbers.</li>
+      <li>Adsterra and, where approved, Google AdSense — to serve advertising to free-tier visitors. These networks may use cookies or similar technology as described in their own privacy policies.</li>
+    </ul>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Data retention</h3>
-    <p>Uploaded audio for tool processing is not stored beyond the request. Usage records are pruned after roughly 2 months. License and account data is kept as long as needed to provide the service.</p>
+    <h2 style="color:var(--text-hi);margin:22px 0 8px;font-size:1.1rem;">Data retention</h2>
+    <p>Uploaded audio/video and generated output are not stored beyond the request — they exist only long enough to process and return your result. Free-tier usage counters (tied to hashed IP and fingerprint) are pruned after roughly 2 months. License records, request IDs, and support messages are kept as long as needed to provide and support the service, or to resolve a dispute.</p>
 
-    <h3 style="color:var(--text-hi);margin:20px 0 8px;">Your choices</h3>
-    <p>Contact us (see <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">Contact</a>) to request deletion of your data.</p>
+    <h2 style="color:var(--text-hi);margin:22px 0 8px;font-size:1.1rem;">Your choices</h2>
+    <p>You can request a copy of, or deletion of, the data we hold about your license or contact history at any time — email <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi)">support@voxcraft.site</a> or use the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">contact form</a>. We'll confirm and act on deletion requests within a reasonable time, except where records must be kept for fraud prevention or legal reasons.</p>
+
+    <h2 style="color:var(--text-hi);margin:22px 0 8px;font-size:1.1rem;">Children's privacy</h2>
+    <p>VoxCraft is not directed at children under 13, and we do not knowingly collect personal information from them.</p>
+
+    <h2 style="color:var(--text-hi);margin:22px 0 8px;font-size:1.1rem;">Changes to this policy</h2>
+    <p>If we materially change how we collect or use data, we'll update the date at the top of this page. Continued use of VoxCraft after a change means you accept the updated policy.</p>
   </div>
 </section>
 {% endblock %}
