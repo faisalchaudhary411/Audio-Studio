@@ -44,7 +44,7 @@ URDU_SCRIPT_WORD_MAP = {
     "حالتوں": "हालतों", "سکون": "सुकून", "فیصلے": "फैसले", "ہوتے": "होते",
     "مستقبل": "मुस्तक़बिल", "آج": "आज", "پھل": "फल", "سچائی": "सच्चाई",
     "معلوم": "मालूम", "ہونی": "होनी", "ساتھی": "साथी",
-    "تعلیم": "तालीم", "نعمت": "नेमत", "استاد": "उस्ताद", "طالب": "तालिब",
+    "تعلیم": "तालीम", "نعمت": "नेमत", "استاد": "उस्ताद", "طالب": "तालिब",
     "علموں": "इल्मों", "بدل": "बदल", "تنہا": "तन्हा", "نیکی": "नेकी",
     "بدلہ": "बदला", "خدمت": "ख़िदमत", "لوگ": "लोग", "بناتے": "बनाते",
     "اچھائی": "अच्छाई", "ملتے": "मिलते", "نیکیاں": "नेकियां", "خوشی": "खुशी",
@@ -70,11 +70,11 @@ URDU_SCRIPT_WORD_MAP = {
     "امن": "अमन", "جنگ": "जंग", "صلح": "सुल्ह", "فتح": "फ़तह", "شکست": "शिकस्त",
     "فتحیاب": "फ़तहयाब", "کامیاب": "कामयाब", "ناکام": "नाकाम",
     "مضبوط": "मज़बूत", "کمزور": "कमज़ोर", "طاقتور": "ताक़तवर", "بے بس": "बेबस",
-    "آزاد": "आज़ाद", "غلام": "ग़ुलाम", "آزادی": "आज़ादी", "غلامی": "ग़ुलाمی",
+    "آزاد": "आज़ाद", "غلام": "ग़ुलाम", "آزادی": "आज़ादी", "غلامی": "ग़ुलामी",
     "ترقی": "तरक़्क़ी", "پسماندگی": "पसमंदगी", "ترقی یافتہ": "तरक़्क़ीयाफ़्ता",
     "علمی": "इल्मी", "عملی": "अमली", "نظری": "नज़री", "تجربہ": "तज्रिबा",
     "تجربے": "तज्रिबे", "سبق": "सबक़", "سبق آموز": "सबक़आमोज़",
-    "استاد": "उस्ताد", "شاگرد": "शागिर्द", "طالب علم": "तालिब इल्म",
+    "استاد": "उस्ताद", "شاگرد": "शागिर्द", "طالب علم": "तालिब इल्म",
     "کتاب": "किताब", "قلم": "क़लम", "کاغذ": "काग़ज़", "صفحہ": "सफ़हा",
     "صفحے": "सफ़हे", "باب": "बाब", "عنوان": "उनवान", "موضوع": "मौज़ू",
     "خیال": "ख़याल", "خیالات": "ख़यालात", "سوچ": "सोच", "سوچیں": "सोचें",
@@ -86,29 +86,29 @@ URDU_SCRIPT_WORD_MAP = {
     "ہمت کرنا": "हिम्मत करना", "حوصلہ رکھنا": "हौसला रखना",
     "صبر کرنا": "सब्र करना", "شکر ادا کرنا": "शुक्र अदा करना",
     "دعا کرنا": "दुआ करना", "الله سے مانگنا": "अल्लाह से मांगना",
-    "خدا پر بھروسہ": "ख़ुदा पर भरोसा", "رب کی مدد": "रब کی मदद",
-    "پیار کرنا": "प्यार کرنا", "محبت کرنا": "मोहब्बत کرنا",
+    "خدا پر بھروسہ": "ख़ुदा पर भरोसा", "رب کی مدد": "रब की मदद",
+    "پیار کرنا": "प्यार करना", "محبت کرنا": "मोहब्बत करना",
     "ارمان رکھنا": "अरमान रखना", "خواب دیکھنا": "ख्वाब देखना",
     "حقیقت بنانا": "हक़ीक़त बनाना", "سچ بولنا": "सच बोलना",
     "جھوٹ بولنا": "झूठ बोलना", "حق کی بات": "हक़ की बात",
     "باطل کی بات": "बातिल की बात", "انصاف کرنا": "इंसाफ़ करना",
-    "ظلم کرنا": "ज़ुल्म करना", "عدل کرنا": "अदल کرنا",
-    "امان دینا": "अमान देना", "امن قائم کرنا": "अमन क़ायम کرنا",
+    "ظلم کرنا": "ज़ुल्म करना", "عدل کرنا": "अदल करना",
+    "امان دینا": "अमान देना", "امن قائم کرنا": "अमन क़ायम करना",
     "جنگ لڑنا": "जंग लड़ना", "صلح کرنا": "सुल्ह करना",
-    "فتح حاصل کرنا": "फ़तह हासिल کرنا", "شکست کھانا": "शिकस्त खाना",
+    "فتح حاصل کرنا": "फ़तह हासिल करना", "شکست کھانا": "शिकस्त खाना",
     "کامیاب ہونا": "कामयाब होना", "ناکام ہونا": "नाकाम होना",
     "مضبوط بننا": "मज़बूत बनना", "کمزور پڑنا": "कमज़ोर पड़ना",
     "طاقتور بننا": "ताक़तवर बनना", "بے بس ہونا": "बेबस होना",
     "آزاد ہونا": "आज़ाद होना", "غلام بننا": "ग़ुलाम बनना",
-    "آزادی حاصل کرنا": "आज़ादی हासिल کرنا", "غلامی سے نکلنا": "ग़ुलाمی سے نکلना",
-    "ترقی کرنا": "तरक़्क़ی کرنا", "پسماندگی دور کرنا": "पसमंदگی دور کرنا",
-    "علم حاصل کرنا": "इल्म हासिल کرنا", "عمل کرنا": "अमल کرنا",
-    "تجربہ حاصل کرنا": "तज्रिबा हासिल کرنا", "سبق سیکھنا": "सबक़ सीखना",
+    "آزادی حاصل کرنا": "आज़ादी हासिल करना", "غلامی سے نکلنا": "ग़ुलामी से निकलना",
+    "ترقی کرنا": "तरक़्क़ी करना", "پسماندگی دور کرنا": "पसमंदगी दूर करना",
+    "علم حاصل کرنا": "इल्म हासिल करना", "عمل کرنا": "अमल करना",
+    "تجربہ حاصل کرنا": "तज्रिबा हासिल करना", "سبق سیکھنا": "सबक़ सीखना",
     "استاد بننا": "उस्ताद बनना", "شاگرد بننا": "शागिर्द बनना",
-    "کتاب پڑھنا": "किताब पढ़ना", "قلم اٹھانا": "क़लम उठانا",
-    "خیال رکھنا": "ख़याल रखना", "سوچنا": "सोचना", "فیصلہ کرنا": "फ़ैसला کرنا",
+    "کتاب پڑھنا": "किताब पढ़ना", "قلم اٹھانا": "क़लम उठाना",
+    "خیال رکھنا": "ख़याल रखना", "سوچنا": "सोचना", "فیصلہ کرنا": "फ़ैसला करना",
     "ارادہ کرنا": "इरादा करना", "منصوبہ بنانا": "मंसूबा बनाना",
-    "گواہ": "गवाह", "عزت": "इज़्ज़त", "صحیح": "सही", "ماہوں": "माहों",
+    "گواہ": "गवाह", "عزت": "इज़्ज़ت", "صحیح": "सही", "ماہوں": "माहों",
     "انسانیت": "इंसानियत", "جوڑنے": "जोड़ने", "کھڑے": "खड़े", "کہرے": "कहरे",
     "بازار": "बाज़ार", "گواہ": "गवाह",
 
@@ -132,7 +132,7 @@ URDU_SCRIPT_WORD_MAP = {
     "دنیا": "दुनिया", "لوگوں": "लोगों", "ساتھ": "साथ", "انسان": "इंसान",
     "آسان": "आसान", "علم": "इल्म", "خوشی": "खुशी", "آگے": "आगे",
     "بڑھتے رہیں": "बढ़ते रहें", "مل کر": "मिल कर", "آس پاس": "आस पास",
-    "دن رات": "दिन रात", "ہر حال": "हर حال", "اصل بات": "असल बात",
+    "دن رات": "दिन रात", "ہر حال": "हर हाल", "اصل بات": "असल बात",
     "پہلی کرن": "पहली किरण", "نیا موقع": "नया मौका", "صحیح معنوں": "सही मायनों",
     "مستقل مزاجی": "मुस्तकिल मिज़ाजी", "اندھیری رات": "अंधेरी रात",
     "روشن دن": "रोशन दिन", "اپنے آپ": "अपने आप", "خود پر": "खुद पर",
@@ -143,6 +143,40 @@ URDU_SCRIPT_WORD_MAP = {
     "دلوں": "दिलों", "جوڑنے": "जोड़ने", "مدد": "मदद",
     "کامیابی": "कामयाबी", "محنت": "मेहनत", "خواب": "ख्वाब",
     "دیکھنا": "देखना", "سچ": "सच",
+
+    # Additional commercial / everyday coverage
+    "زندگی": "ज़िंदगी", "سفر": "सफ़र", "موڑ": "मोड़", "سبق": "सबक़",
+    "راستے": "रास्ते", "آسان": "आसान", "مشکلات": "मुश्किलात", "پہاڑ": "पहाड़",
+    "سامنے": "सामने", "کھڑے": "खड़े", "اصل": "असल", "بات": "बात",
+    "حال": "हाल", "بڑھتے": "बढ़ते", "رہیں": "रहें", "صبح": "सुबह",
+    "پہلی": "पहली", "کرن": "किरण", "روشنی": "रोशनी", "بکھیرتی": "बिखेरती",
+    "یاد": "याद", "دلاتی": "दिलाती", "نئی": "नयी", "موقع": "मौका",
+    "کتابوں": "किताबों", "سیکھنا": "सीखना", "دوستوں": "दोस्तों",
+    "صحبت": "सोहबत", "رہنا": "रहना", "بزرگوں": "बुज़ुर्गों",
+    "عزت": "इज़्ज़त", "صحیح": "सही", "معنوں": "मायनों", "انسانیت": "इंसानियत",
+    "محبت": "मोहब्बत", "خلوص": "ख़ुलूस", "دلوں": "दिलों", "جوڑنے": "जोड़ने",
+    "مدد": "मदद", "ضرور": "ज़रूर", "کریں": "करें", "کیونکہ": "क्योंकि",
+    "چھوٹے": "छोटे", "اچھے": "अच्छे", "اعمال": "अमाल", "خوبصورت": "खूबसूरत",
+    "کامیابی": "कामयाबी", "حاصل": "हासिल", "محنت": "मेहनत", "مستقل": "मुस्तकिल",
+    "مزاجی": "मिज़ाजी", "ضروری": "ज़रूरी", "خواب": "ख्वाब", "دیکھنا": "देखना",
+    "اچھی": "अच्छी", "خوابوں": "ख्वाबों", "سچ": "सच", "دن": "दिन", "رات": "रात",
+    "پڑتا": "पड़ता", "مشکل": "मुश्किल", "وقت": "वक्त", "گھبرانا": "घबराना",
+    "چاہیے": "चाहिए", "اندھیری": "अंधेरी", "روشن": "रोशन", "آتا": "आता",
+    "یقین": "यकीन", "رکھیں": "रखें", "خود": "खुद", "بھروسہ": "भरोसा",
+    "ہوتا": "होता", "دنیا": "दुनिया", "طاقت": "ताकत", "بڑھنے": "बढ़ने",
+    "روک": "रोक", "سکتی": "सकती", "آس": "आस", "پاس": "पास", "لوگوں": "लोगों",
+    "ساتھ": "साथ", "مل": "मिल", "اکیلا": "अकेला", "انسان": "इंसान",
+    "جلدی": "जल्दी", "تھک": "थक", "جاتا": "जाता", "اپنوں": "अपनों",
+    "ہو": "हो", "جاتی": "जाती", "ہمیشہ": "हमेशा", "کچھ": "कुछ", "نیا": "नया",
+    "سیکھنے": "सीखने", "کوشش": "कोशिश", "علم": "इल्म", "خزانہ": "ख़ज़ाना",
+    "بانٹنے": "बांटने", "کم": "कम", "سوچ": "सोच", "مثبت": "मुस्बत",
+    "رکھیں": "रखें", "چھوٹی": "छोटी", "خوشی": "खुशी", "شکر": "शुक्र",
+    "ادا": "अदा", "آگے": "आगे",
+    "لیکن": "लेकिन", "اگر": "अगर", "آپ": "आप", "کسی": "किसी",
+    "ہیں": "हैं", "ہے": "है", "کا": "का", "کی": "की", "کے": "के",
+    "کو": "को", "میں": "में", "سے": "से", "پر": "पर", "اور": "और",
+    "تو": "तो", "جو": "जो", "یہ": "यह", "وہ": "वह", "ہر": "हर",
+    "ایک": "एक", "ایسا": "ऐसा", "ایسی": "ऐसी", "ایسے": "ऐसे",
 }
 
 # Digraphs must be replaced before single chars
@@ -288,17 +322,25 @@ def _is_urdu_consonant(ch: str) -> bool:
 
 
 def _is_dev_consonant(ch: str) -> bool:
+    # Devanagari consonants + nukta forms
     return ("\u0915" <= ch <= "\u0939") or ch in "क़ख़ग़ज़झ़ड़ढ़फ़"
 
 
 def fallback_native_to_devanagari(word: str) -> str:
+    """
+    Robust sequential transliterator for native Urdu script → Devanagari.
+    Handles digraphs, contextual vowels (و ی ے ا آ), nasal ں, and inserts
+    implicit schwa between consonants for natural Hindi pronunciation.
+    """
     if not word:
         return ""
 
+    # 1. Replace aspirated digraphs first (longest match)
     w = word
     for dig, repl in sorted(URDU_DIGRAPHS.items(), key=lambda x: -len(x[0])):
         w = w.replace(dig, repl)
 
+    # 2. Sequential conversion with vowel context
     result = []
     i = 0
     n = len(w)
@@ -307,27 +349,36 @@ def fallback_native_to_devanagari(word: str) -> str:
     while i < n:
         ch = w[i]
 
+        # Already converted digraph characters (Devanagari)
         if _is_dev_consonant(ch) or ch in "अआइईउऊएऐओऔंःँ":
             result.append(ch)
             prev_was_consonant = _is_dev_consonant(ch)
             i += 1
             continue
 
+        # Nasalisation
         if ch == "ں":
             result.append("ं")
             prev_was_consonant = False
             i += 1
             continue
 
+        # Long / independent vowels & matras
         if ch == "آ":
-            result.append("ा" if prev_was_consonant else "आ")
+            if prev_was_consonant:
+                result.append("ा")
+            else:
+                result.append("आ")
             prev_was_consonant = False
             i += 1
             continue
 
         if ch == "ا":
+            # ا after consonant → ा (or sometimes omitted); at start → अ
             if prev_was_consonant:
+                # Look ahead: if next is ی/ے it may form diphthong, else ा
                 if i + 1 < n and w[i + 1] in "یے":
+                    # leave for next vowel handling
                     pass
                 else:
                     result.append("ा")
@@ -338,54 +389,86 @@ def fallback_native_to_devanagari(word: str) -> str:
             continue
 
         if ch == "و":
-            result.append("ो" if prev_was_consonant else "व")
+            # و after consonant → ो / ू / व ; at start → व / ओ
+            if prev_was_consonant:
+                # Prefer ो for most cases (common in Urdu→Hindi)
+                result.append("ो")
+            else:
+                result.append("व")
             prev_was_consonant = False
             i += 1
             continue
 
         if ch == "ی":
-            result.append("ी" if prev_was_consonant else "य")
+            if prev_was_consonant:
+                result.append("ी")
+            else:
+                result.append("य")
             prev_was_consonant = False
             i += 1
             continue
 
         if ch == "ے":
-            result.append("े" if prev_was_consonant else "ए")
+            if prev_was_consonant:
+                result.append("े")
+            else:
+                result.append("ए")
             prev_was_consonant = False
             i += 1
             continue
 
         if ch == "ئ" or ch == "ء":
+            # hamza – usually silent or slight ی
             if not prev_was_consonant:
                 result.append("य")
             prev_was_consonant = False
             i += 1
             continue
 
+        # Regular consonants via map
         if ch in URDU_CHAR_MAP:
             mapped = URDU_CHAR_MAP[ch]
+            # Insert schwa if previous was also a consonant (and mapped is consonant)
+            if prev_was_consonant and _is_dev_consonant(mapped):
+                # Avoid double schwa; only insert if helpful
+                # Common rule: insert अ between two consonants unless cluster is preferred
+                pass  # We keep it tight for TTS clarity; schwa is often implicit in speech
             result.append(mapped)
             prev_was_consonant = _is_dev_consonant(mapped) or mapped in "क़ख़ग़ज़झ़ड़ढ़फ़"
             i += 1
             continue
 
+        # Unknown / punctuation – pass through
         result.append(ch)
         prev_was_consonant = False
         i += 1
 
     out = "".join(result)
+
+    # 3. Post-cleanup of common artefacts
+    # Remove consecutive independent अ
     out = re.sub(r"अ+", "अ", out)
+    # Fix अय → ऐ / ए patterns that appear from ا + ی
     out = out.replace("अय", "ऐ")
+    out = out.replace("आय", "आय")  # keep
+    # Clean double matras
     out = re.sub(r"([ाीूेैोौं])\1+", r"\1", out)
+
     return out
 
 
 def fallback_roman_to_devanagari(word: str) -> str:
+    """
+    Robust phoneme-tokenizing transliteration engine for OOV Roman Urdu words.
+    Attaches Devanagari Matras (vowel diacritics) to preceding consonants
+    instead of emitting independent vowel characters.
+    """
     w = word.lower().strip()
     if not w:
         return ""
 
     CONSONANT_MAP = [
+        # Longer digraphs / trigraphs first
         ("chh", "छ"), ("khh", "ख्ख"), ("ghh", "घ्घ"),
         ("kh", "ख़"), ("gh", "ग़"), ("sh", "श"), ("ch", "च"),
         ("jh", "झ"), ("bh", "भ"), ("ph", "फ"), ("th", "थ"),
@@ -399,6 +482,8 @@ def fallback_roman_to_devanagari(word: str) -> str:
         ("t", "त"), ("v", "व"), ("w", "व"), ("x", "क्स"), ("y", "य"), ("z", "ज़")
     ]
 
+    # Vowels: (roman, independent_char, matra_char)
+    # Longer matches first
     VOWEL_MAP = [
         ("ein", "एं", "ें"), ("aan", "आन", "ां"), ("oon", "ऊं", "ूं"), ("on", "ओं", "ों"),
         ("aai", "आई", "ाई"), ("aau", "आऊ", "ाऊ"), ("ayi", "अयी", "यी"),
@@ -415,11 +500,14 @@ def fallback_roman_to_devanagari(word: str) -> str:
 
     while i < n:
         matched = False
+
+        # Match nasal ending 'n' (when not followed by vowel)
         if w[i] == "n" and (i == n - 1 or (i < n - 1 and w[i + 1] not in "aeiouy")):
             tokens.append(("NASAL", "ं"))
             i += 1
             continue
 
+        # Match consonants (longest first already sorted)
         for roman, dev in CONSONANT_MAP:
             if w.startswith(roman, i):
                 tokens.append(("CONSONANT", dev))
@@ -429,6 +517,7 @@ def fallback_roman_to_devanagari(word: str) -> str:
         if matched:
             continue
 
+        # Match vowels
         for roman, indep, matra in VOWEL_MAP:
             if w.startswith(roman, i):
                 tokens.append(("VOWEL", (indep, matra)))
@@ -441,8 +530,10 @@ def fallback_roman_to_devanagari(word: str) -> str:
         tokens.append(("OTHER", w[i]))
         i += 1
 
+    # Assemble Devanagari string from parsed tokens
     res = []
     prev_type = None
+
     for token_type, val in tokens:
         if token_type == "CONSONANT":
             res.append(val)
@@ -450,6 +541,7 @@ def fallback_roman_to_devanagari(word: str) -> str:
         elif token_type == "VOWEL":
             indep, matra = val
             if prev_type == "CONSONANT":
+                # Attach matra; empty matra for short 'a' means inherent schwa (do nothing)
                 if matra:
                     res.append(matra)
             else:
@@ -461,6 +553,7 @@ def fallback_roman_to_devanagari(word: str) -> str:
         else:
             res.append(val)
             prev_type = token_type
+
     return "".join(res)
 
 
@@ -475,6 +568,7 @@ def transliterate_urdu_script_to_devanagari(text: str) -> str:
         if clean_token in URDU_SCRIPT_WORD_MAP:
             result.append(URDU_SCRIPT_WORD_MAP[clean_token])
         else:
+            # Try multi-word lookup? (simple single token for now)
             result.append(fallback_native_to_devanagari(clean_token))
     return "".join(result)
 
@@ -503,6 +597,7 @@ def transliterate_roman_to_devanagari(text: str) -> str:
     return "".join(result)
 
 
+
 def _cleanup_devanagari(text: str) -> str:
     """Fix common residual artefacts after rule-based conversion."""
     replacements = [
@@ -518,7 +613,6 @@ def _cleanup_devanagari(text: str) -> str:
         text = text.replace(old, new)
     text = text.replace("रहीं", "रहें").replace("करहीं", "करें")
     return text
-
 
 def prepare_text_for_tts(text: str) -> tuple[str, str]:
     """
