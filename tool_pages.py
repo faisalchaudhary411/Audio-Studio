@@ -1,0 +1,317 @@
+"""
+Content and metadata for VoxCraft's individual tool pages (/tools/<slug>).
+
+Why this exists: the tools used to live only as tabs on one /tools page, all
+sharing a single URL. Google (and AdSense's content reviewer) never saw them
+as distinct pages, and each tab had almost no unique text around the widget
+itself — a common "thin/low-value content" pattern for AI tool sites.
+
+This module gives each tool its own indexable URL and enough real, specific
+written content (how it works, use cases, tips, FAQ) to stand on its own as
+a page, while the actual widget markup is still shared from
+templates/partials/tool_widgets/<widget>.html so there's no duplicated UI
+code to keep in sync.
+
+To add a new tool page: add an entry here, drop its widget partial in
+templates/partials/tool_widgets/, and it's automatically routed, sitemapped,
+and cross-linked — nothing else to touch.
+"""
+
+TOOL_PAGES = {
+    "transcribe-audio-to-text": {
+        "widget": "transcribe",
+        "usage_key": "transcribe",
+        "title": "Transcribe Audio to Text Online — Free",
+        "meta_description": "Turn WAV, MP3, M4A, OGG or FLAC recordings into text online. Free, no install, works for voice memos, interviews, lectures and podcasts.",
+        "eyebrow": "Audio → Text",
+        "h1": "Transcribe audio to text, free and in your browser",
+        "sub": "Upload a recording and get a text transcript back. No install, no account required for free-tier use.",
+        "intro": [
+            "Transcription turns spoken audio into readable, searchable text. It's the step between \"I have a recording\" and \"I have something I can edit, quote, or publish\" — useful for turning an interview into an article, a lecture into study notes, or a voice memo into a to-do list.",
+            "VoxCraft's transcriber accepts WAV, MP3, M4A, OGG and FLAC files up to 10MB, and processes longer recordings in chunks so a 20-minute interview works the same way as a 30-second clip.",
+        ],
+        "how_it_works": [
+            "Upload your audio file (WAV, MP3, M4A, OGG or FLAC, up to 10MB).",
+            "Pick the spoken language from the dropdown — matching the language improves accuracy.",
+            "Tap Transcribe and wait a few seconds to a minute depending on length.",
+            "Review the text, then copy it or download it as a .txt file.",
+        ],
+        "use_cases": [
+            ("Podcasters & YouTubers", "Turn an episode into a blog post or show notes without re-typing everything by hand."),
+            ("Students", "Convert a recorded lecture into text you can search, highlight, and study from."),
+            ("Journalists & researchers", "Get a rough transcript of an interview to quote from, then verify the exact wording against the audio."),
+            ("Meeting notes", "Record a call and get a working transcript to build minutes from."),
+        ],
+        "tips": [
+            "Clear speech with minimal background noise transcribes far more accurately than noisy recordings — if your file is noisy, try the <a href=\"{denoise_url}\" style=\"color:var(--brass-hi)\">Denoise tool</a> first.",
+            "Multiple overlapping speakers reduce accuracy — review the transcript rather than assuming perfect speaker separation.",
+            "Matching the correct spoken language in the dropdown matters more than most people expect.",
+        ],
+        "faq": [
+            ("Is transcription free?", "Yes, within the free-tier daily limit shown above the tool. Pro removes the daily cap."),
+            ("What languages are supported?", "Check the language dropdown in the tool above for the current list."),
+            ("Are my files stored after transcribing?", "See our <a href=\"{privacy_url}\" style=\"color:var(--brass-hi)\">privacy policy</a> for exactly how long uploaded audio is retained."),
+        ],
+        "related_tools": ["remove-background-noise", "convert-audio-format", "extract-audio-from-video"],
+        "blog_keywords": ["transcri", "speech to text", "subtitle"],
+    },
+    "convert-audio-format": {
+        "widget": "convert",
+        "usage_key": "convert",
+        "title": "Convert Audio Format Online — MP3, WAV, OGG, M4A, FLAC",
+        "meta_description": "Convert audio between MP3, WAV, OGG, M4A and FLAC online for free, with adjustable bitrate. No software install needed.",
+        "eyebrow": "Format Conversion",
+        "h1": "Convert audio between MP3, WAV, OGG, M4A and FLAC",
+        "sub": "Change format and bitrate in one step — useful when a platform, editor, or device only accepts a specific file type.",
+        "intro": [
+            "Different tools and platforms expect different audio formats — a video editor might want WAV, a podcast host might want MP3 at a specific bitrate, and an archival copy might call for lossless FLAC. This tool converts between the five most common formats in one step.",
+            "You also control bitrate for lossy formats (64–320 kbps), so you can trade file size against audio quality depending on where the file is going.",
+        ],
+        "how_it_works": [
+            "Upload your source file (WAV, MP3, OGG, M4A or FLAC, up to 10MB).",
+            "Choose the output format from the dropdown.",
+            "For MP3/OGG/M4A output, set the bitrate — higher means better quality and a larger file.",
+            "Tap Convert and download the result.",
+        ],
+        "use_cases": [
+            ("Podcast hosting", "Convert a WAV master down to a smaller MP3 at 128–192 kbps for faster hosting and streaming."),
+            ("Video editors", "Convert MP3 voiceovers to WAV, since some editing software handles uncompressed audio more reliably."),
+            ("Archiving", "Convert a compressed file to FLAC when you want a lossless copy for long-term storage — note this won't restore quality already lost to compression."),
+            ("Compatibility", "Convert to whatever format a specific app, device or platform requires."),
+        ],
+        "tips": [
+            "Converting an already-compressed MP3 to another lossy format (or to FLAC) does not recover detail that compression already removed — start from the highest-quality source you have.",
+            "Use WAV or FLAC when you plan to edit the file further; use MP3 for final, distribution-ready files where size matters.",
+            "192 kbps MP3 is a reasonable default for spoken-word content; music generally benefits from 256–320 kbps.",
+        ],
+        "faq": [
+            ("What's the max file size?", "10MB per file on the free tool. For larger files, try compressing first or splitting with the Cutter."),
+            ("Does converting to a lossless format improve quality?", "No — converting a lossy file to FLAC or WAV keeps the same quality, it just changes the container/encoding."),
+            ("Can I batch-convert multiple files?", "Not yet on this tool — each conversion is one file at a time."),
+        ],
+        "related_tools": ["trim-cut-audio", "extract-audio-from-video", "merge-audio-files"],
+        "blog_keywords": ["format", "mp3", "convert", "bitrate"],
+    },
+    "merge-audio-files": {
+        "widget": "merge",
+        "usage_key": "merge",
+        "title": "Merge Audio Files Online — Combine Multiple Clips Free",
+        "meta_description": "Combine two or more audio clips into a single file, with a configurable silence gap between them. Free, works in-browser.",
+        "eyebrow": "Combine Clips",
+        "h1": "Merge multiple audio clips into one file",
+        "sub": "Stitch clips together in order, with a configurable gap between them — no editing software required.",
+        "intro": [
+            "Merging combines two or more separate audio files into a single continuous track, in the order you add them, with a configurable silence gap between each clip. It's the fastest way to stitch together intro + main content + outro, or combine several voice memos into one file, without opening a full editor.",
+            "Add files one at a time or in batches — each pick adds to your list rather than replacing it, so you can build up a queue before merging.",
+        ],
+        "how_it_works": [
+            "Tap \"Add files\" and select one or more clips (repeat as needed to build your list).",
+            "Reorder by removing and re-adding if needed — files merge in the order shown.",
+            "Set the silence gap between clips (0–3000ms) and choose an output format.",
+            "Tap Merge audio and download the combined file.",
+        ],
+        "use_cases": [
+            ("Podcast production", "Combine an intro jingle, the main recording, and an outro into one deliverable file."),
+            ("Audiobook chapters", "Stitch multiple recording sessions of the same chapter into one continuous track."),
+            ("Voice memos", "Combine several short recordings into a single file for easier storage or sharing."),
+            ("YouTube narration", "Merge separately-recorded voiceover segments in the right order before syncing to video."),
+        ],
+        "tips": [
+            "A small gap (300–600ms) between clips usually sounds more natural than 0ms, which can make transitions feel abrupt.",
+            "Keep source files in a consistent format going in — mixing very different sample rates can occasionally affect the output.",
+            "If a clip needs trimming before merging, run it through <a href=\"{cutter_url}\" style=\"color:var(--brass-hi)\">Cutter</a> first.",
+        ],
+        "faq": [
+            ("Is there a limit on how many files I can merge?", "No hard limit on count, but each individual file must be under 10MB."),
+            ("Can I reorder files after adding them?", "Currently you remove and re-add in the order you want — files merge top to bottom as listed."),
+            ("What output formats are available?", "MP3, WAV, or OGG."),
+        ],
+        "related_tools": ["trim-cut-audio", "convert-audio-format", "remove-background-noise"],
+        "blog_keywords": ["merge", "combine", "stitch"],
+    },
+    "trim-cut-audio": {
+        "widget": "cutter",
+        "usage_key": "cutter",
+        "title": "Trim & Cut Audio Online — Free Audio Cutter",
+        "meta_description": "Trim audio to a start/end range or split a clip into two files at any point, free and in your browser.",
+        "eyebrow": "Trim / Split",
+        "h1": "Trim or split an audio clip",
+        "sub": "Cut down to exactly the range you need, or split one file into two at a chosen point.",
+        "intro": [
+            "The Cutter does two related jobs: trimming a clip down to a specific start/end range, and splitting one file into two separate files at a chosen timestamp. Upload a file and the tool reads its duration automatically, so you can see exactly how much room you have to work with before setting your times.",
+        ],
+        "how_it_works": [
+            "Upload your file — its duration is detected automatically.",
+            "Choose Trim (keep a start–end range) or Split (break into two files at one point).",
+            "Enter times in seconds, then tap Run.",
+            "Download the trimmed file, or both halves if you split.",
+        ],
+        "use_cases": [
+            ("Removing dead air", "Trim silence or filler from the start/end of a recording before publishing."),
+            ("Extracting a soundbite", "Pull just the relevant few seconds out of a longer interview or recording."),
+            ("Splitting a long file", "Break a long recording into two parts for separate editing or upload-size limits."),
+            ("Cleaning up voice memos", "Cut a recording down to just the useful part before sharing it."),
+        ],
+        "tips": [
+            "The duration shown is read directly from your uploaded file — if it looks wrong, the file may be corrupted or partially uploaded.",
+            "For splitting a file into more than two parts, split once, then split one of the resulting halves again.",
+            "Trim before you convert format, not after — it's one less step and keeps quality consistent.",
+        ],
+        "faq": [
+            ("Can I split into more than 2 parts in one pass?", "Not in a single run — split repeatedly on the resulting files for more than two parts."),
+            ("What file size limit applies?", "10MB, same as the other short-audio tools."),
+            ("Does trimming lose quality?", "For lossy formats there's a small re-encode; for WAV, trimming is lossless."),
+        ],
+        "related_tools": ["merge-audio-files", "convert-audio-format", "remove-background-noise"],
+        "blog_keywords": ["trim", "cut", "split"],
+    },
+    "remove-background-noise": {
+        "widget": "denoise",
+        "usage_key": "denoise",
+        "title": "Remove Background Noise from Audio — Free Denoiser",
+        "meta_description": "Reduce steady background hiss, hum and room noise from recordings online, free, with adjustable strength.",
+        "eyebrow": "Noise Reduction",
+        "h1": "Remove background noise from a recording",
+        "sub": "Reduce steady hiss, hum and room tone using spectral noise reduction, with a strength slider you control.",
+        "intro": [
+            "This tool uses spectral noise reduction to pull down steady, continuous background noise — fan hum, room tone, air conditioning, light hiss — while leaving speech as intact as possible. It's built for consistent background noise, not sudden one-off sounds like a door slam or a dog bark, which spectral methods can't reliably distinguish from the wanted signal.",
+        ],
+        "how_it_works": [
+            "Upload your recording (up to 10MB — output is mono).",
+            "Set the strength slider — higher removes more noise but can start to affect speech quality.",
+            "Tap Remove noise and listen to the result before downloading.",
+            "If it sounds metallic or thin, lower the strength and try again.",
+        ],
+        "use_cases": [
+            ("Podcast cleanup", "Reduce a constant room hum picked up by an entry-level microphone."),
+            ("Voice memos", "Clean up recordings made in noisy environments like a car or café."),
+            ("Interview audio", "Pull down background hiss before transcribing or publishing."),
+            ("Pre-transcription cleanup", "Denoise before running through the <a href=\"{transcribe_url}\" style=\"color:var(--brass-hi)\">Transcribe tool</a> to improve accuracy on noisy source audio."),
+        ],
+        "tips": [
+            "Start around 0.4–0.5 strength and increase only if noise is still noticeable — aggressive settings can make voices sound processed or unnatural.",
+            "This tool won't remove sudden noises (claps, coughs, door slams) — only steady background sound.",
+            "Denoise before, not after, converting to a lossy format for best results.",
+        ],
+        "faq": [
+            ("Will this fix a recording ruined by loud noise?", "It reduces steady background noise but can't reconstruct speech buried under very loud or non-steady noise."),
+            ("Why is the output mono?", "Spectral noise reduction is applied per-channel in a way that currently outputs a single mixed-down channel."),
+            ("Can I undo if it sounds worse?", "Keep your original file — reprocess from the untouched source with a lower strength setting."),
+        ],
+        "related_tools": ["transcribe-audio-to-text", "voice-changer", "convert-audio-format"],
+        "blog_keywords": ["noise", "denoise", "clean"],
+    },
+    "voice-changer": {
+        "widget": "voicechange",
+        "usage_key": "voicechange",
+        "title": "Voice Changer Online — Pitch Shift, Robot, Echo & More",
+        "meta_description": "Apply pitch shift, robot, echo, chipmunk or deep voice effects to an audio clip online, free.",
+        "eyebrow": "Voice Effects",
+        "h1": "Apply a voice effect to an audio clip",
+        "sub": "Pitch shift, robot, echo, chipmunk or deep voice — five effects with adjustable parameters.",
+        "intro": [
+            "The Voice Changer applies a deliberate effect to a voice recording rather than trying to make it sound more natural. Pitch Shift changes pitch while keeping speaking speed the same, which is different from Chipmunk and Deep Voice, which intentionally change both pitch and speed together for a more exaggerated character effect. Robot and Echo layer processing effects on top of the original voice.",
+        ],
+        "how_it_works": [
+            "Upload a voice clip (WAV, MP3, OGG or M4A, up to 10MB).",
+            "Pick an effect: Pitch Shift, Robot, Echo, Chipmunk, or Deep Voice.",
+            "Adjust the effect's specific controls (semitones, intensity, delay/decay).",
+            "Tap Apply effect and preview before downloading.",
+        ],
+        "use_cases": [
+            ("Content creators", "Add a character voice for a skit, animation, or narration bit without hiring voice talent."),
+            ("Anonymizing a voice", "Pitch-shift a recording where the speaker's identity should be obscured for privacy."),
+            ("Sound design", "Use Echo or Robot for stylized effects in a video or audio project."),
+            ("Fun/social content", "Chipmunk and Deep Voice are popular for short-form comedic clips."),
+        ],
+        "tips": [
+            "Pitch Shift preserves natural speaking rhythm — use it when you want a different-sounding voice that still sounds human.",
+            "Chipmunk/Deep Voice change speed too, so timing relative to any video will shift — account for that if syncing to picture.",
+            "Echo's decay controls how quickly repeats fade — lower decay values sound subtler.",
+        ],
+        "faq": [
+            ("Can I clone a specific person's voice with this?", "No — this tool applies effects to your uploaded audio. For AI voice cloning from a reference sample, see VoxCraft's <a href=\"{voiceclone_url}\" style=\"color:var(--brass-hi)\">voice cloning</a> page (Pro+)."),
+            ("What's the semitone range?", "±12 semitones (one full octave up or down) on Pitch Shift."),
+            ("Does this work on music, not just speech?", "It's tuned for voice, but you can experiment with other audio — results vary."),
+        ],
+        "related_tools": ["remove-background-noise", "ai-music-generator", "convert-audio-format"],
+        "blog_keywords": ["voice effect", "pitch", "robot voice"],
+    },
+    "extract-audio-from-video": {
+        "widget": "videoxtract",
+        "usage_key": "videoxtract",
+        "title": "Extract Audio from Video Online — Free MP4/MOV/MKV to MP3",
+        "meta_description": "Pull the audio track out of MP4, AVI, MOV, MKV or WEBM video files, free, up to 50MB, output as MP3, WAV or OGG.",
+        "eyebrow": "Video → Audio",
+        "h1": "Extract audio from a video file",
+        "sub": "Pull the soundtrack out of MP4, AVI, MOV, MKV or WEBM — up to 50MB, since video files run larger.",
+        "intro": [
+            "This tool separates the audio track from a video file so you can edit, convert, or reuse it independently — for example, pulling narration out of a screen recording, or getting a podcast-ready audio file from a recorded video interview. Because video files are naturally larger than audio-only files, this tool allows uploads up to 50MB, higher than VoxCraft's other short-audio tools.",
+        ],
+        "how_it_works": [
+            "Upload your video (MP4, AVI, MOV, MKV or WEBM, up to 50MB).",
+            "Choose an output format (MP3, WAV or OGG) and bitrate.",
+            "Tap Extract audio and wait — larger files take longer.",
+            "Download the resulting audio-only file.",
+        ],
+        "use_cases": [
+            ("Podcast from video", "Extract audio from a recorded video interview to publish as a podcast episode."),
+            ("Reusing narration", "Pull voiceover out of an old video project to reuse or edit separately."),
+            ("Transcription prep", "Extract the audio track, then run it through <a href=\"{transcribe_url}\" style=\"color:var(--brass-hi)\">Transcribe</a> for a text version of a video's dialogue."),
+            ("Music/sample extraction", "Get the audio from a video clip for further editing or sampling (where you have the rights to do so)."),
+        ],
+        "tips": [
+            "If your video is over 50MB, trimming it down first (in a video editor) or reducing its resolution/bitrate can bring it under the limit.",
+            "Corrupted or incomplete video uploads fail with a clear error rather than hanging — re-export the video if this happens.",
+            "WAV output preserves the most detail if you plan to edit the extracted audio further.",
+        ],
+        "faq": [
+            ("Why is the video limit higher than the audio tools?", "Video files are inherently larger even for a short clip, so a lower limit would make the tool unusable for typical files."),
+            ("Does this work on screen recordings?", "Yes, as long as the format is MP4, AVI, MOV, MKV or WEBM."),
+            ("Can I extract just part of the audio?", "Extract the full track first, then use <a href=\"{cutter_url}\" style=\"color:var(--brass-hi)\">Cutter</a> to trim it down."),
+        ],
+        "related_tools": ["convert-audio-format", "trim-cut-audio", "transcribe-audio-to-text"],
+        "blog_keywords": ["video", "extract", "screen recording"],
+    },
+    "ai-music-generator": {
+        "widget": "music",
+        "usage_key": None,
+        "title": "AI Music Generator Online — Text to Music, Pro",
+        "meta_description": "Generate original instrumental or vocal tracks from a text description using ACE-Step, an Apache 2.0-licensed model safe for commercial use.",
+        "eyebrow": "AI Music",
+        "h1": "Generate music from a text description",
+        "sub": "Describe genre, mood and instruments; get a real instrumental or vocal track back in under a minute. Pro+ feature.",
+        "intro": [
+            "VoxCraft's music generator is powered by ACE-Step, an Apache 2.0-licensed model, which means tracks generated here are safe for commercial use — always double-check the current licensing details before publishing anything commercially. Describe the style you want as comma-separated tags (genre, mood, instruments, tempo), optionally add structured lyrics, and get back a track between 10 and 120 seconds.",
+        ],
+        "how_it_works": [
+            "Describe your track using style tags — e.g. \"lofi, chill, piano, 90 bpm, warm.\"",
+            "Choose instrumental, or uncheck it and add lyrics using [verse]/[chorus]/[bridge] structure.",
+            "Set duration (10–120 seconds) and tap Generate track.",
+            "Wait roughly 30–60 seconds, then preview and download.",
+        ],
+        "use_cases": [
+            ("YouTube background music", "Generate a royalty-free-feeling music bed matched to a video's mood without licensing stock tracks."),
+            ("Podcast intros/outros", "Create a short, distinctive musical sting for show branding."),
+            ("Prototyping", "Quickly test what a genre/mood combination sounds like before committing to a direction."),
+            ("Short-form content", "Generate quick instrumental beds for Reels/Shorts/TikTok-style content."),
+        ],
+        "tips": [
+            "Specific tags produce more predictable results than vague ones — \"lofi, chill, piano, 90 bpm\" gives the model more to work with than just \"chill music.\"",
+            "For vocal tracks, structure lyrics clearly with [verse]/[chorus]/[bridge] tags so the model understands song structure.",
+            "Shorter durations (10–30s) generate faster and are often enough for intros, transitions, or short-form video.",
+        ],
+        "faq": [
+            ("Is this available on the free tier?", "No — AI music generation is a Pro+ feature. See <a href=\"{upgrade_url}\" style=\"color:var(--brass-hi)\">Upgrade</a> for plans."),
+            ("Can I use generated tracks commercially?", "ACE-Step is Apache 2.0 licensed, which is generally commercial-friendly — confirm current terms before relying on this for a commercial release."),
+            ("How long does generation take?", "Roughly 30–60 seconds per track, depending on length and current load."),
+        ],
+        "related_tools": ["voice-changer", "merge-audio-files", "convert-audio-format"],
+        "blog_keywords": ["music", "ace-step", "generate"],
+    },
+}
+
+TOOL_ORDER = [
+    "transcribe-audio-to-text", "convert-audio-format", "merge-audio-files", "trim-cut-audio",
+    "remove-background-noise", "voice-changer", "extract-audio-from-video", "ai-music-generator",
+]

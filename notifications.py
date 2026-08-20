@@ -167,6 +167,82 @@ def notify_admin_announcement_published(title, ann_type, message, site_url="") -
         return False
 
 
+def notify_contact_message(name, email, topic, message, req_id="", site_url="") -> bool:
+    """Sends the admin a copy of a message submitted via the public /contact
+    form. Mirrors notify_admin_new_request's Resend-first/SMTP-fallback
+    pattern. Does not send anything to the visitor — support replies happen
+    by email once the admin has read this."""
+    resend_key = _secret("RESEND_API_KEY")
+    admin_email = _secret("ADMIN_EMAIL")
+    topic_label = (topic or "General").strip() or "General"
+    plain_body = f"""New VoxCraft contact form message
+
+Name: {name}
+Email: {email}
+Topic: {topic_label}
+{'Request ID: ' + req_id if req_id else ''}
+
+Message:
+{message}
+"""
+    notified = False
+
+    if resend_key and admin_email:
+        try:
+            safe_message = (message or "").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+            html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">New Contact Message</div>
+    <div style="color:#1A1204;font-size:13px">{topic_label}</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Name</td><td style="padding:6px 0;color:#fff;font-size:13px;font-weight:700">{name}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Email</td><td style="padding:6px 0;color:#E8A93C;font-size:13px">{email}</td></tr>
+      <tr><td style="padding:6px 0;color:#888;font-size:13px">Topic</td><td style="padding:6px 0;color:#fff;font-size:13px">{topic_label}</td></tr>
+    </table>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;">
+    <div style="color:#888;font-size:11px;margin-bottom:6px">MESSAGE</div>
+    <div style="color:#fff;font-size:14px;line-height:1.6">{safe_message}</div>
+  </div>
+</div></body></html>"""
+            r = requests.post("https://api.resend.com/emails",
+                               headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                               json={"from": "VoxCraft <onboarding@resend.dev>", "to": [admin_email],
+                                     "reply_to": email,
+                                     "subject": f"Contact form — {topic_label} — {name}",
+                                     "html": html, "text": plain_body}, timeout=15)
+            notified = r.status_code in (200, 201)
+        except Exception:
+            notified = False
+
+    if not notified and _secret("SMTP_HOST") and _secret("SMTP_USER") and _secret("SMTP_PASS") and admin_email:
+        try:
+            msg = MIMEMultipart()
+            msg["From"] = _secret("SMTP_USER")
+            msg["To"] = admin_email
+            msg["Reply-To"] = email
+            msg["Subject"] = f"VoxCraft contact form - {topic_label} - {name}"
+            msg.attach(MIMEText(plain_body, "plain", "utf-8"))
+            port = int(_secret("SMTP_PORT") or "587")
+            if port == 465:
+                import ssl
+                server = smtplib.SMTP_SSL(_secret("SMTP_HOST"), port, context=ssl.create_default_context())
+            else:
+                server = smtplib.SMTP(_secret("SMTP_HOST"), port, timeout=15)
+                server.starttls()
+            server.login(_secret("SMTP_USER"), _secret("SMTP_PASS").replace(" ", ""))
+            server.send_message(msg)
+            server.quit()
+            notified = True
+        except Exception:
+            notified = False
+
+    return notified
+
+
 def send_key_email(user_email: str, user_name: str, license_key: str) -> bool:
     resend_key = _secret("RESEND_API_KEY")
     if not resend_key:

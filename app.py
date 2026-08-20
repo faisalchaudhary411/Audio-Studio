@@ -38,6 +38,7 @@ from clone_engine import start_clone_job, get_job
 import music_engine
 import audio_tools
 import persistence
+import tool_pages
 import licensing
 import usage_tracking
 import pro_requests
@@ -559,6 +560,18 @@ def studio():
                             usage=usage_summary(), clone_char_limit=CLONE_CHAR_LIMIT)
 
 
+@app.route("/voice-cloning")
+def voice_cloning():
+    """Dedicated, indexable page for AI voice cloning — previously only
+    reachable as one tab inside /studio (gated behind Pro+, with almost no
+    surrounding written content). Reuses the exact same widget partial as
+    the Clone tab on /studio (partials/tool_widgets/voiceclone.html) and
+    the same clone_music.js — no duplicated cloning logic, just a second,
+    content-rich entry point aimed at people searching for voice cloning
+    specifically rather than the Studio as a whole."""
+    return render_template("voice_cloning.html", clone_char_limit=CLONE_CHAR_LIMIT)
+
+
 @app.route("/pricing")
 def pricing():
     limits = persistence.load_limits()
@@ -806,7 +819,9 @@ def sitemap():
     static_paths = [
         ("/", "1.0", "weekly"),
         ("/studio", "0.9", "weekly"),
+        ("/voice-cloning", "0.85", "monthly"),
         ("/tools", "0.9", "weekly"),
+        *[(f"/tools/{slug}", "0.75", "monthly") for slug in tool_pages.TOOL_PAGES],
         ("/pricing", "0.8", "monthly"),
         ("/blog", "0.7", "weekly"),
         ("/upgrade", "0.6", "monthly"),
@@ -867,9 +882,45 @@ def terms():
     return render_template("terms.html")
 
 
-@app.route("/contact")
+@app.route("/contact", methods=["GET", "POST"])
 def contact():
-    return render_template("contact.html")
+    if request.method == "GET":
+        return render_template("contact.html")
+
+    # Honeypot: a hidden field real visitors never fill in. Bots that
+    # blindly fill every input trip this and get silently dropped —
+    # no CSRF-style rejection needed, just show the same success state.
+    if (request.form.get("website") or "").strip():
+        return render_template("contact.html", submitted=True)
+
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    topic = (request.form.get("topic") or "General").strip()
+    message = (request.form.get("message") or "").strip()
+
+    errors = {}
+    if not name:
+        errors["name"] = "Enter your name."
+    if not email or "@" not in email or "." not in email.split("@")[-1]:
+        errors["email"] = "Enter a valid email so we can reply."
+    if not message or len(message) < 10:
+        errors["message"] = "Message is too short — give us a bit more detail."
+
+    if errors:
+        return render_template("contact.html", errors=errors, name=name, email=email,
+                                topic=topic, message=message)
+
+    req_id = secrets.token_hex(4)
+    sent = notifications.notify_contact_message(name, email, topic, message, req_id=req_id,
+                                                  site_url=request.host_url)
+    # Even if email delivery fails (e.g. RESEND_API_KEY not set yet), don't
+    # show the visitor an error — the message isn't lost from their side,
+    # and a "something went wrong" screen after a real submission just
+    # invites duplicate sends. Log server-side instead.
+    if not sent:
+        app.logger.warning(f"Contact form message not delivered (req {req_id}) — check RESEND_API_KEY/ADMIN_EMAIL.")
+
+    return render_template("contact.html", submitted=True, req_id=req_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1339,6 +1390,56 @@ def fs_callback_activate():
 def tools_hub():
     return render_template("tools.html", lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary(),
                             filedesk_url=os.environ.get("FILEDESK_URL", "").strip())
+
+
+@app.route("/tools/<slug>")
+def tool_page(slug):
+    """Each tool's own indexable page — full write-up (how it works, use
+    cases, tips, FAQ) plus the same widget used on the /tools hub, via the
+    shared partials/tool_widgets/ include. See tool_pages.py for why this
+    exists: individual URLs with real content instead of one tabbed page
+    with almost no unique text per tool."""
+    tool = tool_pages.TOOL_PAGES.get(slug)
+    if not tool:
+        return render_template("404.html") if os.path.exists(os.path.join(app.root_path, "templates", "404.html")) \
+            else (f"Tool '{slug}' not found.", 404)
+
+    related_tools = [dict(slug=s, **tool_pages.TOOL_PAGES[s]) for s in tool.get("related_tools", [])
+                      if s in tool_pages.TOOL_PAGES]
+
+    # Related blog posts: cheap keyword match against title/category/excerpt
+    # so each tool page pulls in relevant articles without hand-maintaining
+    # a per-tool post list that goes stale as new posts get published.
+    related_posts = []
+    keywords = [k.lower() for k in tool.get("blog_keywords", [])]
+    if keywords:
+        for post in persistence.load_blogs():
+            if not post.get("published"):
+                continue
+            haystack = f"{post.get('title', '')} {post.get('category', '')} {post.get('excerpt', '')}".lower()
+            if any(k in haystack for k in keywords):
+                related_posts.append(post)
+        related_posts = related_posts[:3]
+
+    # A couple of the content strings above reference other tool/page URLs
+    # via {placeholder} tokens — fill them in here rather than hardcoding
+    # url_for() calls inside tool_pages.py, which doesn't have app context.
+    url_map = {
+        "denoise_url": url_for("tool_page", slug="remove-background-noise"),
+        "cutter_url": url_for("tool_page", slug="trim-cut-audio"),
+        "transcribe_url": url_for("tool_page", slug="transcribe-audio-to-text"),
+        "privacy_url": url_for("privacy"),
+        "upgrade_url": url_for("upgrade"),
+        "voiceclone_url": url_for("voice_cloning"),
+    }
+    tool = dict(tool)
+    tool["intro"] = [p.format(**url_map) for p in tool.get("intro", [])]
+    tool["tips"] = [t.format(**url_map) for t in tool.get("tips", [])]
+    tool["use_cases"] = [(n, d.format(**url_map)) for n, d in tool.get("use_cases", [])]
+    tool["faq"] = [(q, a.format(**url_map)) for q, a in tool.get("faq", [])]
+
+    return render_template("tool_page.html", tool=tool, related_tools=related_tools, related_posts=related_posts,
+                            lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
 
 
 @app.route("/api/tools/transcribe", methods=["POST"])
