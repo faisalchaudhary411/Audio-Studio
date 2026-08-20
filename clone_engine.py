@@ -137,7 +137,7 @@ def _fetch_job(job_id: str):
     }
 
 
-def _split_for_stable_generation(text: str, max_chars: int = 450) -> list:
+def _split_for_stable_generation(text: str, max_chars: int = 380) -> list:
     """
     Split long Devanagari/English text into natural segments for stable TTS.
     Prefers paragraph breaks, then sentence boundaries.
@@ -197,7 +197,7 @@ def _concat_wav_segments(wav_bytes_list: list) -> bytes:
     for raw in wav_bytes_list:
         seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
         # Small crossfade-like silence between segments for natural flow
-        combined += seg + AudioSegment.silent(duration=120)
+        combined += seg + AudioSegment.silent(duration=180)
     buf = io.BytesIO()
     combined.export(buf, format="wav")
     return buf.getvalue()
@@ -213,7 +213,7 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_
         language_id = requested_lang if requested_lang in ("hi", "en") and requested_lang != "en" else auto_lang_id
 
         # Commercial: split long text into stable segments, generate each, then stitch
-        segments = _split_for_stable_generation(processed_text, max_chars=450)
+        segments = _split_for_stable_generation(processed_text, max_chars=380)
         audio_parts = []
 
         for i, segment in enumerate(segments):
