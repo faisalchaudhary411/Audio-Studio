@@ -105,6 +105,13 @@ img{max-width:100%;display:block;}
   .nav__links.is-open{display:flex;}
   .nav__links a{width:100%;padding:10px 4px;}
   .nav__actions{gap:8px;}
+  /* The "Open Voice Studio" CTA duplicates the "Voice Studio" link that's
+     already inside the hamburger menu — on a narrow screen, showing both
+     the bell, the hamburger, AND a full pill button on one row crowded the
+     header (see the mobile screenshot that flagged this). Hiding the
+     duplicate CTA here keeps the top row to just bell + hamburger; the
+     hamburger menu is still one tap away from Voice Studio. */
+  .nav__cta{display:none;}
 }
 
 /* ===== Notification bell + dropdown ===== */
