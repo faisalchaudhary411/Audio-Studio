@@ -16,7 +16,7 @@ image = (
     .apt_install("git", "ffmpeg")
     .pip_install("torch==2.4.0", "torchaudio==2.4.0", "numpy", "fastapi[standard]")
     .run_commands(
-        "rm -rf ~/.cache/huggingface/hub/models--ResembleAI--chatterbox* || true",
+        "rm -rf \~/.cache/huggingface/hub/models--ResembleAI--chatterbox* || true",
         "git clone --depth 1 https://github.com/resemble-ai/chatterbox.git /opt/chatterbox",
         "cd /opt/chatterbox && sed -i '/pkuseg/d' pyproject.toml && pip install --no-cache-dir -e .",
     )
@@ -25,7 +25,7 @@ image = (
 app = modal.App("voxcraft-clone-worker", image=image)
 
 MAX_TOTAL_CHARS = 2000
-MAX_CHUNK_CHARS = 200
+MAX_CHUNK_CHARS = 280
 CROSSFADE_MS = 40
 
 
@@ -124,19 +124,19 @@ class ChatterboxWorker:
             text,
             audio_prompt_path=ref_path,
             language_id=language_id,
-            temperature=0.35,
-            top_p=0.85,
-            repetition_penalty=1.5,
+            temperature=0.28,          # lower = more stable, less hallucination
+            top_p=0.80,
+            repetition_penalty=1.4,
             min_p=0.05,
             cfg_weight=0.0,
-            exaggeration=0.5,
+            exaggeration=0.45,         # slightly less dramatic for cleaner speech
         )
 
     def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
-        min_duration_sec = 1.5
+        min_duration_sec = 1.8
         chars = max(len(chunk_text.strip()), 1)
-        expected_sec = chars / 10.0
-        max_duration_sec = max(min_duration_sec, expected_sec * 2.5)
+        expected_sec = chars / 9.5          # Hindi is a bit denser
+        max_duration_sec = max(min_duration_sec, expected_sec * 2.8)
         max_samples = int(max_duration_sec * sr)
         if wav.shape[-1] > max_samples:
             wav = wav[..., :max_samples]
