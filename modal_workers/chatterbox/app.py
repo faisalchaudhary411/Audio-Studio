@@ -25,7 +25,7 @@ image = (
 app = modal.App("voxcraft-clone-worker", image=image)
 
 MAX_TOTAL_CHARS = 1400
-MAX_CHUNK_CHARS = 220
+MAX_CHUNK_CHARS = 150
 CROSSFADE_MS = 40
 
 
@@ -124,12 +124,12 @@ class ChatterboxWorker:
             text,
             audio_prompt_path=ref_path,
             language_id=language_id,
-            temperature=0.22,          # commercial: very stable, minimal hallucination
+            temperature=0.20,          # commercial: very stable, minimal hallucination
             top_p=0.75,
             repetition_penalty=1.35,
             min_p=0.05,
             cfg_weight=0.0,
-            exaggeration=0.40,         # controlled expressiveness
+            exaggeration=0.38,         # controlled expressiveness
         )
 
     def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
