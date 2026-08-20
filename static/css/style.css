@@ -110,8 +110,16 @@ img{max-width:100%;display:block;}
      the bell, the hamburger, AND a full pill button on one row crowded the
      header (see the mobile screenshot that flagged this). Hiding the
      duplicate CTA here keeps the top row to just bell + hamburger; the
-     hamburger menu is still one tap away from Voice Studio. */
-  .nav__cta{display:none;}
+     hamburger menu is still one tap away from Voice Studio.
+
+     BUG FIX: ".nav__cta{display:none}" alone didn't actually work — the
+     button also carries the unconditional ".btn{display:inline-flex}"
+     rule (for "btn btn--brass btn--sm nav__cta"), which has the SAME
+     specificity (one class) and is declared later in this file, so it won
+     the cascade tie and the button stayed visible even on mobile. Scoping
+     the selector to ".nav__actions .nav__cta" raises specificity above
+     ".btn" so this wins regardless of where ".btn" sits in the file. */
+  .nav__actions .nav__cta{display:none;}
 }
 
 /* ===== Notification bell + dropdown ===== */
