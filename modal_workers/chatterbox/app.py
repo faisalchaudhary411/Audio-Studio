@@ -24,8 +24,8 @@ image = (
 
 app = modal.App("voxcraft-clone-worker", image=image)
 
-MAX_TOTAL_CHARS = 2000
-MAX_CHUNK_CHARS = 280
+MAX_TOTAL_CHARS = 1400
+MAX_CHUNK_CHARS = 220
 CROSSFADE_MS = 40
 
 
@@ -124,19 +124,19 @@ class ChatterboxWorker:
             text,
             audio_prompt_path=ref_path,
             language_id=language_id,
-            temperature=0.28,          # lower = more stable, less hallucination
-            top_p=0.80,
-            repetition_penalty=1.4,
+            temperature=0.22,          # commercial: very stable, minimal hallucination
+            top_p=0.75,
+            repetition_penalty=1.35,
             min_p=0.05,
             cfg_weight=0.0,
-            exaggeration=0.45,         # slightly less dramatic for cleaner speech
+            exaggeration=0.40,         # controlled expressiveness
         )
 
     def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
-        min_duration_sec = 1.8
+        min_duration_sec = 1.6
         chars = max(len(chunk_text.strip()), 1)
-        expected_sec = chars / 9.5          # Hindi is a bit denser
-        max_duration_sec = max(min_duration_sec, expected_sec * 2.8)
+        expected_sec = chars / 10.0
+        max_duration_sec = max(min_duration_sec, expected_sec * 2.4)
         max_samples = int(max_duration_sec * sr)
         if wav.shape[-1] > max_samples:
             wav = wav[..., :max_samples]
@@ -261,23 +261,43 @@ class ChatterboxWorker:
 
             waveforms = []
             for i, chunk_text in enumerate(chunks):
-                try:
-                    wav = self._generate_chunk(chunk_text, ref_path, language_id)
-                except Exception as e:
+                wav = None
+                last_error = None
+                # Commercial: try up to 2 times if chunk is mostly silent / too short
+                for attempt in range(2):
+                    try:
+                        candidate = self._generate_chunk(chunk_text, ref_path, language_id)
+                    except Exception as e:
+                        last_error = e
+                        continue
+
+                    if not isinstance(candidate, torch.Tensor):
+                        candidate = torch.tensor(candidate)
+                    while candidate.dim() > 2:
+                        candidate = candidate.squeeze(0)
+                    if candidate.dim() == 1:
+                        candidate = candidate.unsqueeze(0)
+                    elif candidate.dim() == 2 and candidate.shape[0] > 2:
+                        candidate = candidate[0:1, :]
+
+                    candidate = self._cap_runaway_generation(candidate, chunk_text, self.model.sr)
+
+                    # Quality gate: reject near-silent or extremely short chunks
+                    duration = candidate.shape[-1] / self.model.sr
+                    energy = float(candidate.abs().mean())
+                    min_expected = max(1.2, len(chunk_text.strip()) / 14.0)
+
+                    if duration >= min_expected * 0.55 and energy > 0.008:
+                        wav = candidate
+                        break
+                    # otherwise retry once
+
+                if wav is None:
                     return CloneResponse(
                         success=False,
-                        error=f"Chunk {i+1}/{len(chunks)} failed: {e}"
+                        error=f"Chunk {i+1}/{len(chunks)} failed after retries: {last_error or 'low quality / silent output'}"
                     ).model_dump()
 
-                if not isinstance(wav, torch.Tensor):
-                    wav = torch.tensor(wav)
-                while wav.dim() > 2:
-                    wav = wav.squeeze(0)
-                if wav.dim() == 1:
-                    wav = wav.unsqueeze(0)
-                elif wav.dim() == 2 and wav.shape[0] > 2:
-                    wav = wav[0:1, :]
-                wav = self._cap_runaway_generation(wav, chunk_text, self.model.sr)
                 waveforms.append(wav)
 
             if len(waveforms) == 1:
