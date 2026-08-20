@@ -748,39 +748,52 @@ def blog_list():
 
 
 # A small, explicit mapping keeps article-to-product links predictable.
-# The values are Flask endpoint names rather than hard-coded URLs.
+# Each value is (endpoint, kwargs, label) — kwargs is passed to url_for()
+# so entries can point at either a plain page (voice cloning, studio) or a
+# specific /tools/<slug> page (tool_page endpoint takes a slug kwarg).
+#
+# BUG FIX: every non-TTS entry here used to point at the generic /tools
+# hub ("tools_hub") rather than the specific dedicated page for that tool
+# — e.g. a post about denoising linked to the whole tools directory
+# instead of straight to /tools/remove-background-noise. That was fine
+# back when /tools embedded every tool's widget on one page, but since the
+# hub became a lightweight directory (tools_hub is no longer where the
+# actual tool lives), these stale links meant a reader had to click
+# through an extra page to reach the tool the article was actually about.
 BLOG_TOOL_LINKS = {
-    "tts": ("studio", "Open TTS Studio"),
-    "text-to-speech": ("studio", "Open TTS Studio"),
-    "voice": ("studio", "Explore Voices"),
-    "urdu-tts": ("studio", "Try Urdu TTS"),
-    "hindi-tts": ("studio", "Try Hindi TTS"),
-    "arabic-tts": ("studio", "Try Arabic TTS"),
-    "transcription": ("tools_hub", "Open Transcription"),
-    "audio transcription": ("tools_hub", "Open Transcription"),
-    "convert": ("tools_hub", "Open Audio Converter"),
-    "audio converter": ("tools_hub", "Open Audio Converter"),
-    "merge": ("tools_hub", "Open Audio Tools"),
-    "audio merger": ("tools_hub", "Open Audio Tools"),
-    "cutter": ("tools_hub", "Open Audio Tools"),
-    "audio cutter": ("tools_hub", "Open Audio Tools"),
-    "denoise": ("tools_hub", "Open Noise Remover"),
-    "noise removal": ("tools_hub", "Open Noise Remover"),
-    "voice changer": ("tools_hub", "Open Voice Changer"),
-    "video to audio": ("tools_hub", "Open Video-to-Audio"),
-    "video extract": ("tools_hub", "Open Video-to-Audio"),
-    "music": ("tools_hub", "Open Music Generator"),
+    "tts": ("studio", {}, "Open Voice Studio"),
+    "text-to-speech": ("studio", {}, "Open Voice Studio"),
+    "voice": ("studio", {}, "Explore Voices"),
+    "urdu-tts": ("studio", {}, "Try Urdu TTS"),
+    "hindi-tts": ("studio", {}, "Try Hindi TTS"),
+    "arabic-tts": ("studio", {}, "Try Arabic TTS"),
+    "voice cloning": ("voice_cloning", {}, "Try Voice Cloning"),
+    "voice-cloning": ("voice_cloning", {}, "Try Voice Cloning"),
+    "transcription": ("tool_page", {"slug": "transcribe-audio-to-text"}, "Open Transcribe"),
+    "audio transcription": ("tool_page", {"slug": "transcribe-audio-to-text"}, "Open Transcribe"),
+    "convert": ("tool_page", {"slug": "convert-audio-format"}, "Open Convert"),
+    "audio converter": ("tool_page", {"slug": "convert-audio-format"}, "Open Convert"),
+    "merge": ("tool_page", {"slug": "merge-audio-files"}, "Open Merge"),
+    "audio merger": ("tool_page", {"slug": "merge-audio-files"}, "Open Merge"),
+    "cutter": ("tool_page", {"slug": "trim-cut-audio"}, "Open Cutter"),
+    "audio cutter": ("tool_page", {"slug": "trim-cut-audio"}, "Open Cutter"),
+    "denoise": ("tool_page", {"slug": "remove-background-noise"}, "Open Denoise"),
+    "noise removal": ("tool_page", {"slug": "remove-background-noise"}, "Open Denoise"),
+    "voice changer": ("tool_page", {"slug": "voice-changer"}, "Open Voice Changer"),
+    "video to audio": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
+    "video extract": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
+    "music": ("tool_page", {"slug": "ai-music-generator"}, "Open Music Generator"),
 }
 
 
 def _blog_tool_link(post):
     """Return a safe product link for a post's optional related_tool field."""
     key = (post.get("related_tool") or "").strip().lower()
-    endpoint_label = BLOG_TOOL_LINKS.get(key)
-    if not endpoint_label:
+    entry = BLOG_TOOL_LINKS.get(key)
+    if not entry:
         return None
-    endpoint, label = endpoint_label
-    return {"url": url_for(endpoint), "label": label}
+    endpoint, kwargs, label = entry
+    return {"url": url_for(endpoint, **kwargs), "label": label}
 
 
 @app.route("/blog/<post_id>")
@@ -790,7 +803,7 @@ def blog_detail(post_id):
     if not post:
         return render_template("blog_list.html", posts=[], not_found=True), 404
 
-    post_html = md_lib.markdown(post.get("body", ""))
+    post_html = md_lib.markdown(post.get("body", ""), extensions=["tables", "fenced_code"])
     body_text = re.sub(r"<[^>]+>", " ", post_html)
     word_count = len(re.findall(r"\b\w+\b", body_text))
     reading_minutes = max(1, round(word_count / 220))
