@@ -88,6 +88,8 @@ function notifInitBell(items){
   });
 }
 
+const BANNER_AUTO_DISMISS_MS = 6000; // toast stays visible this long, then slides back out on its own
+
 function notifInitBanner(items){
   const banner = document.getElementById('announce-banner');
   const badgeEl = document.getElementById('announce-banner-badge');
@@ -110,14 +112,28 @@ function notifInitBanner(items){
   } else {
     linkEl.hidden = true;
   }
-  banner.hidden = false;
-  document.body.classList.add('has-announce-banner');
 
-  closeEl.addEventListener('click', () => {
+  banner.hidden = false;
+  // Two rAFs, not one — the browser needs a full paint with the element
+  // still at its pre-transition state (opacity:0, translateY) before the
+  // is-visible class is added, or the transition can get collapsed into
+  // the initial paint and the toast just appears instantly with no slide.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    banner.classList.add('is-visible');
+  }));
+
+  let dismissTimer = null;
+  function hideToast(){
+    if(dismissTimer) clearTimeout(dismissTimer);
     notifDismiss(pick.id);
-    banner.hidden = true;
-    document.body.classList.remove('has-announce-banner');
-  });
+    banner.classList.remove('is-visible');
+    // Wait for the slide-up/fade-out transition (matches the 0.35s in CSS)
+    // before setting hidden, so it doesn't just vanish mid-animation.
+    setTimeout(() => { banner.hidden = true; }, 350);
+  }
+
+  dismissTimer = setTimeout(hideToast, BANNER_AUTO_DISMISS_MS);
+  closeEl.addEventListener('click', hideToast);
 }
 
 async function notifInit(){
