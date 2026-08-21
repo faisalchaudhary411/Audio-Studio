@@ -417,14 +417,9 @@ def fallback_native_to_devanagari(word: str) -> str:
             continue
 
         if ch == "ا":
-            # ا after consonant → ा (or sometimes omitted); at start → अ
+            # ا after consonant -> ा ; at start of word (or after a vowel) -> अ
             if prev_was_consonant:
-                # Look ahead: if next is ی/ے it may form diphthong, else ा
-                if i + 1 < n and w[i + 1] in "یے":
-                    # leave for next vowel handling
-                    pass
-                else:
-                    result.append("ा")
+                result.append("ा")
             else:
                 result.append("अ")
             prev_was_consonant = False
@@ -489,8 +484,10 @@ def fallback_native_to_devanagari(word: str) -> str:
     out = "".join(result)
 
     # 3. Post-cleanup of common artefacts
-    # Remove consecutive independent अ
-    out = re.sub(r"अ+", "अ", out)
+    # Two or more consecutive independent अ within one word represent a real
+    # long vowel (e.g. ع + ا in عادت -> "aa-dat"), not accidental duplication.
+    # Merge into आ rather than collapsing to a single short अ.
+    out = re.sub(r"अ{2,}", "आ", out)
     # Fix अय → ऐ / ए patterns that appear from ا + ی
     out = out.replace("अय", "ऐ")
     out = out.replace("आय", "आय")  # keep
@@ -601,7 +598,7 @@ def fallback_roman_to_devanagari(word: str) -> str:
 
 
 def transliterate_urdu_script_to_devanagari(text: str) -> str:
-    tokens = re.split(r"(\s+|[.,!?۔؟—\-\"'():;«»])", text)
+    tokens = re.split(r"(\s+|[.,!?۔؟،؛—\-\"'():;«»])", text)
     result = []
     for token in tokens:
         clean_token = token.strip()
@@ -624,7 +621,7 @@ def fix_roman_urdu_misspellings(text: str) -> str:
 
 
 def transliterate_roman_to_devanagari(text: str) -> str:
-    tokens = re.split(r"(\s+|[.,!?۔؟—\-\"'():;«»])", text)
+    tokens = re.split(r"(\s+|[.,!?۔؟،؛—\-\"'():;«»])", text)
     result = []
     for token in tokens:
         lower_token = token.lower().strip()
