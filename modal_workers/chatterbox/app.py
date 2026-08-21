@@ -43,6 +43,39 @@ class CloneResponse(BaseModel):
     duration_seconds: float = 0.0
 
 
+CFG_WEIGHT = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.0"))  # try 0.3 as a test
+
+
+def postprocess_output_audio(input_path: str, output_path: str) -> bool:
+    """Cleans the GENERATED clone output — mirrors preprocess_reference_audio()
+    but runs on the model's output, not the reference clip.
+    Fixes: low-frequency rumble (#7), volume inconsistency (#9), and light
+    de-essing to reduce buzz from harmonic irregularity (#3). Cannot recover
+    missing high-frequency sibilant content the vocoder never generated (#1) —
+    that needs a model/vocoder-level fix, not post-processing."""
+    filter_chain = (
+        "highpass=f=80,"
+        "acompressor=threshold=-24dB:ratio=2.5:attack=8:release=180,"  # tames RMS swings
+        "loudnorm=I=-16:TP=-1.5:LRA=11"
+    )
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_path,
+        "-af", filter_chain,
+        output_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception:
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+        return False
+
+
 def preprocess_reference_audio(input_path: str, output_path: str, sample_rate: int = 24000) -> bool:
     """Cleans reference audio using FFmpeg prior to TTS inference.
     Applies high-pass filtering (80Hz), FFT denoising, silence trimming, and loudness norm."""
@@ -128,7 +161,7 @@ class ChatterboxWorker:
             top_p=0.72,
             repetition_penalty=1.35,
             min_p=0.05,
-            cfg_weight=0.0,
+            cfg_weight=CFG_WEIGHT,      # try 0.3 via CHATTERBOX_CFG_WEIGHT env var
             exaggeration=0.38,         # controlled expressiveness
         )
 
@@ -311,10 +344,30 @@ class ChatterboxWorker:
             wav = self._trim_trailing_silence(wav, self.model.sr)
             wav = torch.clamp(wav, -1.0, 1.0)
 
-            buf = io.BytesIO()
-            ta.save(buf, wav, self.model.sr, format="wav")
-            buf.seek(0)
-            audio_b64 = base64.b64encode(buf.read()).decode("ascii")
+            # ── Post-process the GENERATED output (was previously only ──
+            # ── applied to the reference clip, never to the final audio) ──
+            raw_out_path = tmp_path_out = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix="_raw.wav", delete=False) as f:
+                    raw_out_path = f.name
+                ta.save(raw_out_path, wav, self.model.sr, format="wav")
+
+                tmp_path_out = raw_out_path + "_post.wav"
+                if postprocess_output_audio(raw_out_path, tmp_path_out):
+                    with open(tmp_path_out, "rb") as f:
+                        final_bytes = f.read()
+                else:
+                    with open(raw_out_path, "rb") as f:
+                        final_bytes = f.read()
+            finally:
+                for p in (raw_out_path, tmp_path_out):
+                    if p and os.path.exists(p):
+                        try:
+                            os.remove(p)
+                        except Exception:
+                            pass
+
+            audio_b64 = base64.b64encode(final_bytes).decode("ascii")
 
             duration_sec = wav.shape[-1] / self.model.sr
 
