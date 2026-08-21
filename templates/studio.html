@@ -71,7 +71,8 @@
     <div id="ssml-cheatsheet" style="display:none;font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin-bottom:10px;line-height:1.7;">
       [pause:500ms] silence &nbsp;·&nbsp; [strong]…[/strong] strong emphasis &nbsp;·&nbsp; [em]…[/em] moderate emphasis<br>
       [slow]…[/slow] slow rate &nbsp;·&nbsp; [fast]…[/fast] fast rate &nbsp;·&nbsp; [high]…[/high] higher pitch<br>
-      [low]…[/low] lower pitch &nbsp;·&nbsp; [whisper]…[/whisper] soft whisper
+      [low]…[/low] lower pitch &nbsp;·&nbsp; [whisper]…[/whisper] soft whisper<br>
+      <span style="color:var(--text-dim);">Expression presets:</span> [excited]…[/excited] &nbsp;·&nbsp; [cheerful]…[/cheerful] &nbsp;·&nbsp; [calm]…[/calm] &nbsp;·&nbsp; [serious]…[/serious] &nbsp;·&nbsp; [sad]…[/sad]
     </div>
     <textarea class="script-input" id="single-text" placeholder="Type or paste your text here…"></textarea>
     <div class="script-meta">
@@ -187,6 +188,7 @@
     <ul style="padding-left:18px;color:var(--text-mid);line-height:1.9;margin:8px 0 0;">
       <li>Punctuate normally — commas and periods create natural pauses without needing markup tags.</li>
       <li>Use Markup mode's <code>[pause:500ms]</code> for a deliberate beat, or <code>[slow]…[/slow]</code> to emphasize a key phrase.</li>
+      <li>Markup mode also has expression presets — <code>[excited]</code>, <code>[cheerful]</code>, <code>[calm]</code>, <code>[serious]</code>, <code>[sad]</code> — that combine pace, pitch and volume to approximate a tone. They shift delivery noticeably but aren't true emotional acting.</li>
       <li>For Urdu/Hindi scripts, write in the native script (Nastaliq/Devanagari) rather than transliterating into Latin letters — pronunciation is far more accurate.</li>
       <li>Preview the voice on a short line before generating a long script, to confirm pacing and tone fit your content.</li>
     </ul>
