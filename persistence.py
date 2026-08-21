@@ -128,6 +128,11 @@ def init_db():
                     position INTEGER NOT NULL,
                     data     TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS pronunciation_dict (
+                    id       TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL,
+                    data     TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS traffic_hits (
                     date    TEXT NOT NULL,
                     ip_hash TEXT NOT NULL,
@@ -212,6 +217,17 @@ def load_active_announcements(limit: int = 20) -> list:
     ]
     live.sort(key=lambda a: a.get("created", ""), reverse=True)
     return live[:limit]
+
+
+# ---- pronunciation dictionary (global, applied to Studio TTS text before
+#      it's sent to the engine — e.g. "Nginx" -> "Engine-X" so commonly
+#      mispronounced words, brand names, and acronyms come out right) ----
+def load_pronunciation_dict() -> list:
+    return _load_ordered_table("pronunciation_dict")
+
+
+def save_pronunciation_dict(items: list) -> tuple:
+    return _replace_ordered_table("pronunciation_dict", "id", items)
 
 
 # ---- traffic (lightweight daily visitor/pageview counter — NOT the same

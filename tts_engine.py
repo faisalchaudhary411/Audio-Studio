@@ -43,6 +43,46 @@ def _make_silence(duration_ms: int) -> bytes:
     return data
 
 
+def apply_pronunciation_dict(text: str, entries: list) -> str:
+    """Global find/say substitution applied to Studio TTS input before it
+    reaches edge-tts — e.g. 'Nginx' -> 'Engine-X' so the engine says
+    something closer to correct instead of sounding it out literally.
+
+    Deliberately plain text substitution, not SSML <phoneme> tags: the
+    edge-tts library wraps Microsoft Edge's free read-aloud feature rather
+    than the full Azure Cognitive Services SSML surface, and doesn't
+    expose phoneme-level pronunciation control. Respelling the word in the
+    input text is the reliable lever available with this engine — and it
+    has the added benefit of working identically through the gTTS
+    fallback path too, since that's plain text as well.
+
+    Each entry: {"find": "...", "say": "...", "match_case": bool}.
+    - Word-boundary matched (\\b), so "Go" doesn't also rewrite "Google".
+    - Case-insensitive by default; set match_case=true for entries where
+      capitalization matters (rare, but e.g. distinguishing an acronym
+      from a common word that happens to share letters).
+    - Matches are found longest-find-string-first, so a more specific
+      multi-word entry doesn't get pre-empted by a shorter one contained
+      inside it.
+    """
+    if not entries or not text:
+        return text
+
+    ordered = sorted(entries, key=lambda e: len(e.get("find", "")), reverse=True)
+    for entry in ordered:
+        find = (entry.get("find") or "").strip()
+        say = entry.get("say", "")
+        if not find:
+            continue
+        flags = 0 if entry.get("match_case") else re.IGNORECASE
+        try:
+            pattern = re.compile(r"\b" + re.escape(find) + r"\b", flags)
+        except re.error:
+            continue  # skip a malformed entry rather than failing the whole generation
+        text = pattern.sub(lambda m, _say=say: _say, text)
+    return text
+
+
 _MARKUP_RE = re.compile(
     r"\[pause:(\d+(?:\.\d+)?(?:ms|s))\]"
     r"|\[strong\](.*?)\[/strong\]"
@@ -51,7 +91,12 @@ _MARKUP_RE = re.compile(
     r"|\[fast\](.*?)\[/fast\]"
     r"|\[high\](.*?)\[/high\]"
     r"|\[low\](.*?)\[/low\]"
-    r"|\[whisper\](.*?)\[/whisper\]",
+    r"|\[whisper\](.*?)\[/whisper\]"
+    r"|\[excited\](.*?)\[/excited\]"
+    r"|\[serious\](.*?)\[/serious\]"
+    r"|\[calm\](.*?)\[/calm\]"
+    r"|\[cheerful\](.*?)\[/cheerful\]"
+    r"|\[sad\](.*?)\[/sad\]",
     re.DOTALL,
 )
 
@@ -80,6 +125,17 @@ def parse_markup_segments(text: str, base_rate: str) -> list:
         elif g[5] is not None: add_text(g[5], pitch="+10Hz")
         elif g[6] is not None: add_text(g[6], pitch="-10Hz")
         elif g[7] is not None: add_text(g[7], volume="-50%", pitch="-5Hz")
+        # Named "expression" presets — combinations of the same rate/pitch/
+        # volume levers above, just bundled under a more intuitive name.
+        # NOT true emotional synthesis (edge-tts doesn't expose Azure's
+        # mstts:express-as styles) — these approximate a feeling through
+        # pacing, pitch and loudness only. Good enough to noticeably
+        # change delivery; won't sound like a different acting choice.
+        elif g[8] is not None: add_text(g[8], rate="+20%", pitch="+8Hz", volume="+20%")   # excited
+        elif g[9] is not None: add_text(g[9], rate="-15%", pitch="-5Hz")                   # serious
+        elif g[10] is not None: add_text(g[10], rate="-10%", volume="-10%")                # calm
+        elif g[11] is not None: add_text(g[11], rate="+10%", pitch="+12Hz")                # cheerful
+        elif g[12] is not None: add_text(g[12], rate="-20%", pitch="-8Hz", volume="-15%")  # sad
         last = m.end()
     if last < len(text):
         add_text(text[last:])

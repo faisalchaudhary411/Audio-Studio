@@ -33,7 +33,7 @@ import datetime as dt
 import markdown as md_lib
 
 from voices import VOICES, FREE_VOICES, default_preview_text
-from tts_engine import tts_dispatch
+from tts_engine import tts_dispatch, apply_pronunciation_dict
 from clone_engine import start_clone_job, get_job
 import music_engine
 import audio_tools
@@ -1304,6 +1304,53 @@ def admin_notifications():
     return render_template("admin/notifications.html", anns=anns, edit_ann=edit_ann)
 
 
+@app.route("/admin/pronunciation", methods=["GET", "POST"])
+@admin_required
+def admin_pronunciation():
+    """Global pronunciation dictionary — plain find/say word substitution
+    applied to Studio TTS text right before it's sent to edge-tts. Same
+    create/edit/delete shape as admin_blog/admin_notifications above.
+
+    Deliberately global rather than per-language/per-voice: one word (a
+    brand name, an acronym) is usually mispronounced the same way
+    regardless of which voice reads it, so a single shared list avoids
+    the same entry needing to be duplicated across every language."""
+    entries = persistence.load_pronunciation_dict()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "create":
+            new_entry = {
+                "id": str(int(time.time() * 1000)),
+                "find": request.form.get("find", "").strip(),
+                "say": request.form.get("say", "").strip(),
+                "match_case": request.form.get("match_case") == "on",
+                "note": request.form.get("note", "").strip(),
+            }
+            if new_entry["find"] and new_entry["say"]:
+                entries.insert(0, new_entry)
+                persistence.save_pronunciation_dict(entries)
+        elif action == "update":
+            entry_id = request.form.get("entry_id")
+            for e in entries:
+                if str(e["id"]) == entry_id:
+                    e["find"] = request.form.get("find", "").strip()
+                    e["say"] = request.form.get("say", "").strip()
+                    e["match_case"] = request.form.get("match_case") == "on"
+                    e["note"] = request.form.get("note", "").strip()
+            persistence.save_pronunciation_dict(entries)
+        elif action == "delete":
+            entry_id = request.form.get("entry_id")
+            entries = [e for e in entries if str(e["id"]) != entry_id]
+            persistence.save_pronunciation_dict(entries)
+        return redirect(url_for("admin_pronunciation"))
+
+    edit_id = request.args.get("edit")
+    edit_entry = None
+    if edit_id:
+        edit_entry = next((e for e in entries if str(e["id"]) == edit_id), None)
+    return render_template("admin/pronunciation.html", entries=entries, edit_entry=edit_entry)
+
+
 @app.route("/api/announcements")
 def api_announcements():
     """Public, unauthenticated — the bell dropdown and top banner fetch
@@ -1753,6 +1800,7 @@ def api_generate():
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Upgrade to Pro for unlimited."}), 402
 
     rate_str = f"{speed_pct - 100:+d}%"
+    text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
     try:
         audio = tts_dispatch(text, voice_id, rate=rate_str, ssml_mode=ssml_mode, speed_pct=speed_pct)
     except Exception as e:
@@ -1798,10 +1846,11 @@ def api_batch():
     results = []
     errors = []
     timestamp_base = int(time.time())
+    pron_dict = persistence.load_pronunciation_dict()  # loaded once per batch, not once per line
 
     for idx, line in enumerate(lines):
         try:
-            audio = tts_dispatch(line, voice_id, rate=rate_str, speed_pct=speed_pct)
+            audio = tts_dispatch(apply_pronunciation_dict(line, pron_dict), voice_id, rate=rate_str, speed_pct=speed_pct)
             fname = f"tts-batch-{idx + 1:02d}-{timestamp_base}.mp3"
             results.append({"idx": idx + 1, "text": line, "filename": fname, "audio": audio})
             _bump_monthly_chars(len(line))  # only bump for lines that actually succeeded
