@@ -34,6 +34,7 @@ POSTS = [
         "title": "How to Add Urdu Voiceover to Your YouTube Videos for Free",
         "category": "Tutorials",
         "related_tool": "urdu-tts",
+        "tags": ["urdu", "tts", "youtube", "tutorial"],
         "excerpt": "A step-by-step guide to generating natural-sounding Urdu narration for YouTube, using free AI text-to-speech instead of hiring a voice artist or recording it yourself.",
         "body": """Urdu content on YouTube has grown fast over the last few years, but a lot of creators still get stuck at the same step: recording narration. Not everyone has a quiet room, a decent mic, or the confidence to read a script out loud in front of one. AI text-to-speech solves that specific problem — not by replacing a real voice everywhere, but by giving you a fast, free way to get a video out the door.
 
@@ -65,6 +66,7 @@ Urdu TTS won't replace a skilled voice artist for every project, but for the hug
         "title": "AI Text-to-Speech vs Human Voiceover: Which Should Creators Use in 2026?",
         "category": "Guides",
         "related_tool": "tts",
+        "tags": ["tts", "voiceover", "comparison"],
         "excerpt": "AI voices have gotten a lot better, but that doesn't mean they're always the right call. Here's an honest breakdown of when TTS makes sense and when it doesn't.",
         "body": """Every creator eventually faces this decision: record it yourself, hire a voice artist, or generate it with AI. There's no universal right answer — it depends on your content, budget, and timeline. Here's a practical way to think through it.
 
@@ -98,6 +100,7 @@ AI TTS in 2026 is good enough that most viewers won't consciously notice it in a
         "title": "How to Transcribe Audio to Text for Free (Step-by-Step Guide)",
         "category": "Tutorials",
         "related_tool": "transcription",
+        "tags": ["transcription", "speech-to-text", "tutorial"],
         "excerpt": "Turning a recording into text doesn't require expensive software. Here's how to get an accurate transcript from an interview, lecture, or podcast episode for free.",
         "body": """Whether you're turning a podcast into a blog post, studying from a recorded lecture, or pulling quotes from an interview, transcription is one of those tasks that used to mean typing along while replaying the audio in 5-second chunks. AI transcription has made that mostly unnecessary.
 
@@ -135,6 +138,7 @@ Free transcription tools have gotten good enough that for most everyday use — 
         "title": "How to Remove Background Noise from a Recording (Free, No Software Install)",
         "category": "Tutorials",
         "related_tool": "denoise",
+        "tags": ["denoise", "noise-reduction", "tutorial"],
         "excerpt": "Fan hum, room tone, and light hiss can quietly ruin an otherwise good recording. Here's how to clean it up without buying a plugin or installing an editor.",
         "body": """A surprising number of recordings get ruined not by anything dramatic, but by a quiet, constant background sound — a fan, an air conditioner, traffic outside a window, or just the natural hiss of a budget microphone. Noise reduction tools exist specifically for this steady, predictable kind of background noise.
 
@@ -170,6 +174,7 @@ Background noise is one of the most common reasons a recording sounds "amateur" 
         "title": "MP3 vs WAV vs FLAC: Which Audio Format Should You Actually Use?",
         "category": "Guides",
         "related_tool": "convert",
+        "tags": ["audio-format", "mp3", "wav", "flac"],
         "excerpt": "Every audio format is a trade-off between file size and quality. Here's a practical breakdown of when to use MP3, WAV, or FLAC, without the technical jargon.",
         "body": """Audio format questions come up constantly for anyone editing, publishing, or archiving audio, and the honest answer is: it depends on what you're doing with the file next. Here's a practical breakdown.
 
@@ -211,6 +216,7 @@ There's no single "best" format — just the right format for what you're about 
         "title": "AI Voice Cloning: What It Is and How to Use It Responsibly",
         "category": "Guides",
         "related_tool": "voice cloning",
+        "tags": ["voice-cloning", "ai-ethics", "guide"],
         "excerpt": "Voice cloning can generate new speech in a voice from just a short sample. Here's how it actually works, what it's genuinely useful for, and where the ethical lines are.",
         "body": """Voice cloning is one of the more powerful — and more misunderstood — capabilities in modern AI audio tools. Here's a grounded look at what it actually does, who legitimately uses it, and where the responsibility lines sit.
 
@@ -250,6 +256,7 @@ Voice cloning technology isn't going away, and platforms are increasingly buildi
         "title": "How to Merge and Trim Audio Clips Without Installing an Editor",
         "category": "Tutorials",
         "related_tool": "merge",
+        "tags": ["merge", "trim", "editing", "tutorial"],
         "excerpt": "Combining an intro, main recording, and outro — or trimming dead air off a clip — doesn't require a full audio editing suite. Here's how to do both in a browser.",
         "body": """Not every audio editing task needs a full desktop editor. Two of the most common jobs — combining multiple clips into one, and trimming a clip down to just the part you need — are simple enough to handle with lightweight browser-based tools.
 
@@ -289,6 +296,7 @@ Neither of these tasks needs specialized software or a steep learning curve — 
         "title": "Can You Use AI-Generated Music in YouTube Videos? A Licensing Guide",
         "category": "Guides",
         "related_tool": "music",
+        "tags": ["ai-music", "licensing", "youtube"],
         "excerpt": "AI music generation raises an obvious question for creators: can you actually use the output commercially? Here's how to think through licensing before you publish.",
         "body": """AI music generation tools make it easy to produce a custom background track in under a minute — but "easy to generate" and "safe to use commercially" aren't automatically the same thing. Here's how to think through it before you publish.
 
@@ -318,6 +326,7 @@ AI music generation is a genuinely useful tool for prototyping a video's mood, f
         "title": "5 Creative Ways to Use a Voice Changer for Content Creation",
         "category": "Tips",
         "related_tool": "voice changer",
+        "tags": ["voice-changer", "voice-effects", "creative"],
         "excerpt": "Voice effects aren't just for novelty clips. From anonymizing an interview to building a character voice, here are practical ways creators actually use them.",
         "body": """Voice changers get a reputation as a novelty — chipmunk voices, prank calls — but there's a real set of practical use cases behind the effect library too. Here's where they actually earn a place in a content workflow.
 
@@ -357,6 +366,7 @@ Voice effects are a small tool with a surprisingly wide range of legitimate uses
         "title": "How to Extract Audio from a Video File (No Software Needed)",
         "category": "Tutorials",
         "related_tool": "video to audio",
+        "tags": ["video-to-audio", "extraction", "tutorial"],
         "excerpt": "Need just the audio track from a video — for a podcast, for transcription, or to reuse a voiceover? Here's how to pull it out without a video editor.",
         "body": """Sometimes you don't need the video at all — just what's being said in it. Pulling the audio track out of a video file is a common enough need that it's worth knowing the fastest path to it, rather than opening a full video editor for a one-step job.
 
@@ -393,14 +403,27 @@ Extracting audio from video is one of those small, specific tasks that doesn't d
 
 def main():
     existing = persistence.load_blogs()
-    existing_titles = {(p.get("title") or "").strip().lower() for p in existing}
+    by_title = {(p.get("title") or "").strip().lower(): p for p in existing}
 
     added = 0
     skipped = 0
+    backfilled = 0
     for i, post in enumerate(POSTS):
-        if post["title"].strip().lower() in existing_titles:
-            print(f"SKIP (already exists): {post['title']}")
-            skipped += 1
+        key = post["title"].strip().lower()
+        if key in by_title:
+            existing_post = by_title[key]
+            # BACKFILL: if this script already ran once (e.g. on production)
+            # before the "tags" field existed, the post is there but has no
+            # tags. Add them now rather than just skipping, so re-running
+            # after this update actually finishes the job instead of
+            # silently leaving old posts tag-less forever.
+            if not existing_post.get("tags") and post.get("tags"):
+                existing_post["tags"] = post["tags"]
+                backfilled += 1
+                print(f"BACKFILL tags: {post['title']}")
+            else:
+                print(f"SKIP (already exists, tags present or none defined): {post['title']}")
+                skipped += 1
             continue
         # Stagger the millisecond timestamps by 1 second each so posts sort
         # in the intended order (list order = publish order, newest last
@@ -410,6 +433,7 @@ def main():
             "id": str(int(time.time() * 1000) + i),
             "title": post["title"],
             "category": post["category"],
+            "tags": post.get("tags", []),
             "excerpt": post["excerpt"],
             "body": post["body"],
             "author": AUTHOR,
@@ -422,9 +446,9 @@ def main():
         added += 1
         print(f"ADD: {post['title']}")
 
-    if added:
+    if added or backfilled:
         persistence.save_blogs(existing)
-        print(f"\nDone — added {added} post(s), skipped {skipped} already-existing.")
+        print(f"\nDone — added {added}, backfilled tags on {backfilled}, skipped {skipped}.")
     else:
         print(f"\nNothing to add — all {skipped} post(s) already exist.")
 

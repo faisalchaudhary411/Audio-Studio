@@ -744,7 +744,22 @@ def blog_list():
         if category and category not in categories:
             categories.append(category)
 
-    return render_template("blog_list.html", posts=posts, categories=categories)
+    # All tags across every post, for the filter chip list — independent
+    # of which tag (if any) is currently selected, so the full set of
+    # options stays visible even while filtered down to one.
+    all_tags = []
+    for p in posts:
+        for t in (p.get("tags") or []):
+            if t not in all_tags:
+                all_tags.append(t)
+    all_tags.sort()
+
+    active_tag = (request.args.get("tag") or "").strip().lower()
+    if active_tag:
+        posts = [p for p in posts if active_tag in (p.get("tags") or [])]
+
+    return render_template("blog_list.html", posts=posts, categories=categories,
+                            all_tags=all_tags, active_tag=active_tag)
 
 
 # A small, explicit mapping keeps article-to-product links predictable.
@@ -1156,6 +1171,19 @@ def admin_traffic():
 @app.route("/admin/blog", methods=["GET", "POST"])
 @admin_required
 def admin_blog():
+    def parse_tags(raw: str) -> list:
+        """'urdu, tts,  tutorial' -> ['urdu', 'tts', 'tutorial'] — trims
+        whitespace, drops empties from stray commas, lowercases for
+        consistent matching/display, and de-dupes while preserving order."""
+        seen = set()
+        out = []
+        for t in (raw or "").split(","):
+            t = t.strip().lower()
+            if t and t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
+
     posts = persistence.load_blogs()
     if request.method == "POST":
         action = request.form.get("action")
@@ -1165,6 +1193,7 @@ def admin_blog():
                 "id": str(int(time.time() * 1000)),
                 "title": request.form.get("title", "").strip(),
                 "category": request.form.get("category", "").strip(),
+                "tags": parse_tags(request.form.get("tags", "")),
                 "excerpt": request.form.get("excerpt", "").strip(),
                 "body": request.form.get("body", "").strip(),
                 "author": request.form.get("author", "").strip() or "VoxCraft Team",
@@ -1181,6 +1210,7 @@ def admin_blog():
                 if str(p["id"]) == post_id:
                     p["title"] = request.form.get("title", "").strip()
                     p["category"] = request.form.get("category", "").strip()
+                    p["tags"] = parse_tags(request.form.get("tags", ""))
                     p["excerpt"] = request.form.get("excerpt", "").strip()
                     p["body"] = request.form.get("body", "").strip()
                     p["author"] = request.form.get("author", "").strip() or p.get("author") or "VoxCraft Team"
