@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Admin — Pronunciation Dictionary{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Pronunciation Dictionary</h2>
+    <p class="section__sub">Global find/say word substitution, applied to all Studio text-to-speech generation before it's sent to the voice engine — for brand names, acronyms, and commonly mispronounced words.</p>
+  </div>
+
+  <div class="panel" style="margin-bottom:12px;background:rgba(232,169,60,0.06);">
+    <p style="color:var(--text-mid);font-size:0.85rem;margin:0;">
+      This works by respelling the word in the text itself (e.g. "Nginx" → "Engine-X") — not true phoneme-level pronunciation control, since the underlying voice engine (edge-tts) doesn't expose that. Matching is whole-word and case-insensitive by default, so "Find: Go" won't affect "Google". Applies to Single and Batch generation, not to voice previews.
+    </p>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">{{ 'Edit entry' if edit_entry else 'New entry' }}</span>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if edit_entry %}
+        <input type="hidden" name="action" value="update">
+        <input type="hidden" name="entry_id" value="{{ edit_entry.id }}">
+      {% else %}
+        <input type="hidden" name="action" value="create">
+      {% endif %}
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <input type="text" name="find" placeholder="Find (e.g. Nginx)" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" value="{{ edit_entry.find if edit_entry else '' }}" required>
+        <input type="text" name="say" placeholder="Say instead (e.g. Engine-X)" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" value="{{ edit_entry.say if edit_entry else '' }}" required>
+      </div>
+
+      <input type="text" name="note" placeholder="Note (optional — why this entry exists)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_entry.note if edit_entry else '' }}">
+
+      <label style="font-size:0.9rem;color:var(--text-mid);display:block;margin-bottom:6px;">
+        <input type="checkbox" name="match_case" {% if edit_entry and edit_entry.match_case %}checked{% endif %}> Match case exactly (default: case-insensitive)
+      </label>
+
+      <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">{{ 'Update entry' if edit_entry else 'Add entry' }}</button>
+      {% if edit_entry %}<a href="{{ url_for('admin_pronunciation') }}" class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-block;">Cancel edit</a>{% endif %}
+    </form>
+  </div>
+
+  <div style="display:grid;gap:10px;">
+    {% for e in entries %}
+    <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div>
+        <strong>{{ e.find }}</strong>
+        <span style="color:var(--text-dim);"> → </span>
+        <strong style="color:var(--brass-hi);">{{ e.say }}</strong>
+        <div style="color:var(--text-dim);font-size:0.78rem;margin-top:4px;">
+          {{ 'Case-sensitive' if e.match_case else 'Case-insensitive' }}{% if e.note %} · {{ e.note }}{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="{{ url_for('admin_pronunciation', edit=e.id) }}" class="btn btn--ghost btn--sm">Edit</a>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="entry_id" value="{{ e.id }}"><button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this pronunciation entry?')">Delete</button></form>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--text-dim);">No entries yet — add one above to override how a specific word is pronounced.</p>
+    {% endfor %}
+  </div>
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}

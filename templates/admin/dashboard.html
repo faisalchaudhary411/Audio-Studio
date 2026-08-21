@@ -40,6 +40,11 @@
         <p style="color:var(--text-mid);font-size:0.88rem;">Free-tier limits, pricing labels, checkout URL.</p>
         <a href="{{ url_for('admin_limits') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Edit limits</a>
       </div>
+      <div class="panel">
+        <span class="panel__label">Pronunciation dictionary</span>
+        <p style="color:var(--text-mid);font-size:0.88rem;">Word substitutions applied before TTS generation, for brand names and acronyms.</p>
+        <a href="{{ url_for('admin_pronunciation') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage dictionary</a>
+      </div>
     </div>
     <div style="margin-top:20px;"><a href="{{ url_for('admin_logout') }}" class="btn btn--ghost btn--sm">Log out</a></div>
   </div>
