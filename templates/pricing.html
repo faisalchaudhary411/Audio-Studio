@@ -39,5 +39,48 @@
   <p style="text-align:center;color:var(--text-dim);font-size:0.88rem;margin-top:24px;">
     Already have a license key? <a href="{{ url_for('activate') }}" style="color:var(--brass-hi)">Activate it here</a>.
   </p>
+
+  <div class="panel" style="margin-top:36px;max-width:820px;margin-left:auto;margin-right:auto;">
+    <span class="panel__label">Frequently asked questions</span>
+    <details style="margin-top:10px;">
+      <summary>How does manual payment (EasyPaisa/JazzCash/bank) work?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Select your plan on the <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">upgrade</a> page, send the PKR amount shown to one of the listed accounts, then submit the form with your payment details. Access activates automatically for a grace period while we verify the payment, and becomes permanent once confirmed.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>What happens if my manual payment isn't verified in time?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Temporary access granted while awaiting verification will stop working if we haven't confirmed the payment within the grace period. If that happens and you did pay, contact <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">support</a> with your reference ID — this is usually a delay on our end, not a rejection.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Can I switch between Pro and Pro+?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Yes — submit a new request for whichever plan you want on the <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">upgrade</a> page.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Is my license tied to one device?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Yes, a Pro/Pro+ license is tied to a single device at a time. If you get a new device or need to move your license, contact <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">support</a>.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Do you offer refunds?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Refund requests are handled case by case — <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact us</a> with your request ID and we'll take a look.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>What's included in the free tier?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Text-to-speech with a daily generation limit and monthly character quota, plus access to all the free <a href="{{ url_for('tools_hub') }}" style="color:var(--brass-hi);">audio tools</a> (transcribe, convert, merge, trim, denoise, voice effects, video-to-audio) with their own daily limits. No signup required.</p>
+    </details>
+  </div>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type": "Question", "name": "How does manual payment (EasyPaisa/JazzCash/bank) work?", "acceptedAnswer": {"@type": "Answer", "text": "Select your plan on the upgrade page, send the PKR amount shown to one of the listed accounts, then submit the form with your payment details. Access activates automatically for a grace period while the payment is verified, and becomes permanent once confirmed."}},
+      {"@type": "Question", "name": "What happens if my manual payment isn't verified in time?", "acceptedAnswer": {"@type": "Answer", "text": "Temporary access granted while awaiting verification will stop working if the payment hasn't been confirmed within the grace period. Contacting support with a reference ID usually resolves a delay."}},
+      {"@type": "Question", "name": "Can I switch between Pro and Pro+?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, submit a new request for whichever plan you want on the upgrade page."}},
+      {"@type": "Question", "name": "Is my license tied to one device?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, a Pro or Pro+ license is tied to a single device at a time."}},
+      {"@type": "Question", "name": "Do you offer refunds?", "acceptedAnswer": {"@type": "Answer", "text": "Refund requests are handled case by case via support."}},
+      {"@type": "Question", "name": "What's included in the free tier?", "acceptedAnswer": {"@type": "Answer", "text": "Text-to-speech with a daily generation limit and monthly character quota, plus access to all free audio tools with their own daily limits, with no signup required."}}
+    ]
+  }
+  </script>
 </section>
 {% endblock %}

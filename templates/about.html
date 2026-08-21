@@ -15,14 +15,18 @@
 
     <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">What you can do with VoxCraft</h2>
     <ul>
-      <li>Create narration from text with adjustable voice settings.</li>
-      <li>Transcribe supported audio files into text.</li>
-      <li>Convert audio between common formats.</li>
-      <li>Merge clips, trim recordings and split audio.</li>
-      <li>Reduce steady background noise in recordings.</li>
-      <li>Apply voice effects and extract audio from video.</li>
-      <li>Use additional creator features available with eligible plans.</li>
+      <li>Create narration from text in the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a>, with adjustable voice settings.</li>
+      <li><a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi);">Transcribe</a> supported audio files into text.</li>
+      <li><a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--brass-hi);">Convert</a> audio between common formats.</li>
+      <li><a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--brass-hi);">Merge</a> clips, <a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--brass-hi);">trim recordings and split audio</a>.</li>
+      <li><a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi);">Reduce steady background noise</a> in recordings.</li>
+      <li>Apply <a href="{{ url_for('tool_page', slug='voice-changer') }}" style="color:var(--brass-hi);">voice effects</a> and <a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--brass-hi);">extract audio from video</a>.</li>
+      <li><a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi);">Clone a voice</a> from a short reference clip, or <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--brass-hi);">generate music</a> from a text description, with eligible plans.</li>
     </ul>
+
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Why VoxCraft exists</h2>
+    <p>Most audio tasks are small and specific — transcribe this one interview, trim the dead air off this one clip, get a rough narration draft for this one video. Doing each of those with a different service, or a full desktop editor meant for much bigger jobs, adds friction that's out of proportion to the actual task. VoxCraft exists to make that middle ground — tasks too small for a full editor, too specific for a general-purpose tool — fast and free to start.</p>
+    <p>Multilingual support was a deliberate priority from the start, not an add-on. Urdu and Hindi narration in particular are often treated as an afterthought by tools built primarily for English, with pronunciation quality to match. Getting that right for South Asian creators specifically shaped a lot of the platform's design.</p>
 
     <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Built around real creator workflows</h2>
     <p>VoxCraft is designed for YouTube creators, educators, podcasters, developers, freelancers and anyone who needs practical audio processing without installing a desktop editor for every small task.</p>
@@ -32,7 +36,27 @@
     <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Privacy and transparency</h2>
     <p>VoxCraft publishes its <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">privacy policy</a>, <a href="{{ url_for('terms') }}" style="color:var(--brass-hi);">terms</a> and <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact information</a> so visitors can understand how the service operates. Specific processing and retention details are described in the privacy policy.</p>
 
-    <p style="margin-top:28px;">For the methodology behind our voice and tool comparisons, see <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">How We Test</a>.</p>
+    <p style="margin-top:28px;">For the methodology behind our voice and tool comparisons, see <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">How We Test</a>. For guides, tutorials, and deeper dives into specific tools, see the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">blog</a>.</p>
+
+    <div class="panel" style="margin-top:34px;">
+      <span class="panel__label">Frequently asked questions</span>
+      <details style="margin-top:10px;">
+        <summary>Is VoxCraft free to use?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Yes — the free tier works with no signup, within daily and monthly usage limits. Pro removes those limits on text-to-speech; Pro+ adds voice cloning and AI music generation. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);">pricing</a> for details.</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>Which languages does VoxCraft support?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">The Voice Studio supports 40+ languages, with particular attention paid to Urdu and Hindi voice quality. Check the voice list in <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a> for the current lineup.</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>Do I need to install anything?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">No — everything runs in your browser. There's nothing to download or install for any of the tools.</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>Who is VoxCraft built by?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">VoxCraft is an independently built and maintained platform, not a large company product. That means faster iteration on feedback, but also a smaller team — if something's broken or missing, <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">let us know</a>.</p>
+      </details>
+    </div>
   </div>
 </section>
 {% endblock %}

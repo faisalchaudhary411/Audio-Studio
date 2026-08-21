@@ -22,7 +22,7 @@
     </ul>
 
     <h2 style="font-family:var(--display);margin-top:36px;color:var(--text-hi);">For audio tools</h2>
-    <p>We evaluate a tool against the job it claims to perform. For example, a noise-removal tool is not judged only by whether the background becomes quieter; we also consider whether speech remains intelligible and whether aggressive processing introduces obvious artifacts.</p>
+    <p>We evaluate a tool against the job it claims to perform. For example, a <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi);">noise-removal tool</a> is not judged only by whether the background becomes quieter; we also consider whether speech remains intelligible and whether aggressive processing introduces obvious artifacts. A <a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi);">transcription tool</a> is judged on accuracy across different audio conditions, not just on a single clean studio recording.</p>
 
     <p>File limits, supported formats, processing behavior and known limitations are included in guides when they materially affect the result. We do not treat a tool as perfect simply because it produces an output file.</p>
 
@@ -31,12 +31,35 @@
 
     <p>When a result depends on a third-party service, model or licensing term, we aim to distinguish what VoxCraft observed from what the provider officially states. Readers should always check the current provider terms for their particular use.</p>
 
+    <h2 style="font-family:var(--display);margin-top:36px;color:var(--text-hi);">What we don't do</h2>
+    <ul>
+      <li>We don't claim a tool is "the best" in absolute terms — only that it performed a certain way under a stated test, for a stated use case.</li>
+      <li>We don't hide known limitations to make a recommendation look stronger than it is.</li>
+      <li>We don't treat AI model behavior as fixed — models and their outputs change over time, and a guide reflects what we observed at the time it was written or last updated.</li>
+    </ul>
+
     <div class="panel" style="margin-top:34px;">
       <span class="panel__label">Our principle</span>
       <p style="margin:8px 0 0;color:var(--text-mid);">Show the test, explain the criteria, disclose limitations, and let readers decide whether the result fits their own workflow.</p>
     </div>
 
-    <p style="margin-top:28px;">See the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">VoxCraft guides</a> for individual comparisons and tutorials.</p>
+    <div class="panel" style="margin-top:24px;">
+      <span class="panel__label">Frequently asked questions</span>
+      <details style="margin-top:10px;">
+        <summary>Do you accept payment for a favorable review or ranking?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">No. Guides published on VoxCraft reflect our own testing against the stated criteria above, not sponsorship.</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>How often is testing content updated?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Tools and models change over time, so guides are updated when a meaningful change would affect the original conclusion. Each post's date reflects when it was last written or updated.</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>Can I suggest a comparison or test?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Yes — <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">reach out</a> with what you'd like to see tested.</p>
+      </details>
+    </div>
+
+    <p style="margin-top:28px;">See the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">VoxCraft guides</a> for individual comparisons and tutorials, or explore the <a href="{{ url_for('tools_hub') }}" style="color:var(--brass-hi);">full tool directory</a>.</p>
   </div>
 </section>
 {% endblock %}

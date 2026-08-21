@@ -11,7 +11,7 @@
   </div>
 
   {% if categories %}
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
     <span class="voice-card__tag">All guides</span>
     {% for category in categories %}
     <span class="voice-card__tag">{{ category }}</span>
@@ -19,8 +19,24 @@
   </div>
   {% endif %}
 
+  {% if all_tags %}
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;align-items:center;">
+    <span style="color:var(--text-dim);font-size:0.78rem;font-family:var(--mono);">Filter by tag:</span>
+    <a href="{{ url_for('blog_list') }}" class="voice-card__tag" style="{% if not active_tag %}background:var(--brass);color:#1A1204;border-color:var(--brass);{% endif %}text-decoration:none;">All</a>
+    {% for tag in all_tags %}
+    <a href="{{ url_for('blog_list', tag=tag) }}" class="voice-card__tag" style="{% if active_tag == tag %}background:var(--brass);color:#1A1204;border-color:var(--brass);{% endif %}text-decoration:none;">{{ tag }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if active_tag %}
+  <p style="color:var(--text-dim);font-size:0.85rem;margin:-14px 0 20px;">
+    Showing guides tagged "<strong style="color:var(--text-hi);">{{ active_tag }}</strong>" — <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">clear filter</a>
+  </p>
+  {% endif %}
+
   {% if not posts %}
-    <p style="color:var(--text-dim);">No published guides yet — check back soon.</p>
+    <p style="color:var(--text-dim);">{% if active_tag %}No guides tagged "{{ active_tag }}" yet.{% else %}No published guides yet — check back soon.{% endif %}</p>
   {% else %}
   <div style="display:grid;gap:16px;">
     {% for post in posts %}
@@ -30,9 +46,16 @@
       {% if post.excerpt %}
       <p style="color:var(--text-mid);font-size:0.92rem;line-height:1.6;margin-bottom:10px;">{{ post.excerpt }}</p>
       {% endif %}
-      <div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);">
+      <div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);margin-bottom:8px;">
         By {{ post.author or 'VoxCraft Team' }} · {{ post.date }} · {{ post._reading_minutes }} min read
       </div>
+      {% if post.tags %}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        {% for tag in post.tags %}
+        <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 8px;">#{{ tag }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
     </a>
     {% endfor %}
   </div>
