@@ -17,11 +17,17 @@ EnvironmentFile=/home/deploy/voxcraft/.env
 # sharing is the safe ceiling for 2GB total RAM alongside OS + nginx.
 # --max-requests: recycles workers periodically to bound slow memory creep
 # from librosa/numba/audio processing over the process lifetime.
+# --timeout 660: must exceed Modal's own 600s worker timeout, or gunicorn
+# kills the worker mid-clone-job before Modal even finishes. Tradeoff on this
+# 2GB/2-worker box: a long clone request now ties up a worker for up to 11
+# minutes instead of 2, so concurrent clone requests will queue behind it
+# more easily. If clone volume grows, move to an async job-queue pattern
+# (submit + poll) instead of holding the HTTP connection open this long.
 ExecStart=/home/deploy/voxcraft/venv/bin/gunicorn app:app \
     --workers 2 \
     --threads 4 \
     --preload \
-    --timeout 120 \
+    --timeout 660 \
     --graceful-timeout 30 \
     --max-requests 200 \
     --max-requests-jitter 50 \
