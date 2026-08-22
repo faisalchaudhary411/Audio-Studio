@@ -427,13 +427,28 @@ def fallback_native_to_devanagari(word: str) -> str:
             continue
 
         if ch == "و":
+            next_ch = w[i + 1] if i + 1 < n else ""
+            # و + ا is the common causative/agentive pattern (کرواتے,
+            # دکھوانا, والی...) where و is consonant /v/, not the vowel /o/.
+            # Was falling into the vowel branch below, producing nonsense
+            # like کرواتے -> "करोअते" instead of "करवाते".
+            if next_ch == "ا":
+                result.append("वा")
+                prev_was_consonant = False
+                i += 2
+                continue
             # و after consonant → ो / ू / व ; at start → व / ओ
             if prev_was_consonant:
                 # Prefer ो for most cases (common in Urdu→Hindi)
                 result.append("ो")
+                prev_was_consonant = False
             else:
                 result.append("व")
-            prev_was_consonant = False
+                # BUG FIX: व is a real Devanagari consonant — this was
+                # unconditionally set to False here, so the very next
+                # character (often ا) always treated itself as word-start
+                # rather than "after a consonant", turning वाली into वअली.
+                prev_was_consonant = True
             i += 1
             continue
 
