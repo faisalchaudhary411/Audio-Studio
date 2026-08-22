@@ -35,6 +35,35 @@ import markdown as md_lib
 from voices import VOICES, FREE_VOICES, default_preview_text
 from tts_engine import tts_dispatch, apply_pronunciation_dict
 from clone_engine import start_clone_job, get_job
+
+# ---------------------------------------------------------------------------
+# Bounded in-process cache for base64-encoded clone audio.
+#
+# BUG FIX: api_clone_status() used to run base64.b64encode(job["audio"]) on
+# EVERY poll while status=="done", not just once. For a large clone job
+# (40+MB raw audio -> ~55MB base64), the frontend's normal polling loop, or
+# just a page refresh / duplicate tab, could trigger this repeatedly. On a
+# 2GB VPS running 2 gunicorn workers already at ~358MB baseline each, a
+# handful of near-simultaneous ~55MB in-memory encodes is a plausible OOM
+# trigger. This cache means each job's audio only gets base64-encoded once
+# per worker process, not once per poll. FIFO-capped so it can't grow
+# unbounded across many jobs; entries naturally go stale once
+# clone_engine's own sweep thread deletes old jobs from the DB.
+_CLONE_AUDIO_B64_CACHE = {}
+_CLONE_AUDIO_B64_CACHE_MAX = 8
+
+
+def _get_cached_clone_audio_b64(job_id: str, audio_bytes: bytes) -> str:
+    cached = _CLONE_AUDIO_B64_CACHE.get(job_id)
+    if cached is not None:
+        return cached
+    encoded = base64.b64encode(audio_bytes).decode("ascii")
+    if len(_CLONE_AUDIO_B64_CACHE) >= _CLONE_AUDIO_B64_CACHE_MAX:
+        # evict oldest (FIFO — dict preserves insertion order in py3.7+)
+        oldest_key = next(iter(_CLONE_AUDIO_B64_CACHE))
+        del _CLONE_AUDIO_B64_CACHE[oldest_key]
+    _CLONE_AUDIO_B64_CACHE[job_id] = encoded
+    return encoded
 import music_engine
 import audio_tools
 import persistence
@@ -1962,7 +1991,7 @@ def api_clone_status(job_id):
     if job["status"] == "done":
         return jsonify({
             "status": "done",
-            "audio_b64": base64.b64encode(job["audio"]).decode("ascii"),
+            "audio_b64": _get_cached_clone_audio_b64(job_id, job["audio"]),
             "chunks_generated": job.get("chunks_generated", 1),
             "duration_seconds": job.get("duration_seconds", 0.0)
         })
