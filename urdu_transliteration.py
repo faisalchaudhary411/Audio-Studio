@@ -8,6 +8,26 @@ import re
 # ── 1. Native Urdu Script (Perso-Arabic) Word Map ──────────────────────────────
 # High-coverage dictionary of common words (preferred over character rules)
 URDU_SCRIPT_WORD_MAP = {
+    # Added from OOV report — bypasses fallback for words it consistently mishandles.
+    "اٹھانے": "उठाने",
+    "غیر": "ग़ैर",
+    # NOTE: report proposed "ज़िहनी" (Zihni) but ذہنی derives from ذہن
+    # (zehn, "mind") — correct pronunciation is "zehni", matching ज़हनी
+    # already verified earlier against native pronunciation, not ज़िहनी.
+    "ذہنی": "ज़हनी",
+    "عادتیں": "आदतें",
+    "جسمانی": "जिस्मानी",
+    "کرواتے": "करवाते",
+    "بہتری": "बेहतरी",
+    "استعمال": "इस्तेमाल",
+    "نظم": "नज़्म",
+    "ضبط": "ज़ब्त",
+    # Phrase-level entries (require the phrase-matching lookup below —
+    # single-token-only lookup would map "انہوں" alone to "उन्होंने" and
+    # then ALSO translate the separate trailing "نے" token, duplicating
+    # "ने" -> "उन्होंने ने". Keeping these as two-word keys avoids that.
+    "انہوں نے": "उन्होंने",
+    "جنہوں نے": "जिन्होंने",
     # Function Words & Possessives
     "کی": "की", "کا": "का", "کے": "के", "کو": "को", "میں": "में", "سے": "से",
     "پر": "पर", "بھی": "भी", "کل": "कल", "یہ": "यह", "وہ": "वह", "تھا": "था",
@@ -650,17 +670,38 @@ def fallback_roman_to_devanagari(word: str) -> str:
 
 def transliterate_urdu_script_to_devanagari(text: str) -> str:
     tokens = re.split(r"(\s+|[.,!?۔؟،؛—\-\"'():;«»])", text)
-    result = []
-    for token in tokens:
-        clean_token = token.strip()
-        if not clean_token:
-            result.append(token)
+    n = len(tokens)
+    word_positions = [idx for idx, t in enumerate(tokens) if t.strip()]
+    result = list(tokens)
+
+    MAX_PHRASE_WORDS = 3  # matches longest existing multi-word dict entry
+    wi = 0
+    wp_len = len(word_positions)
+    while wi < wp_len:
+        matched = False
+        max_span = min(MAX_PHRASE_WORDS, wp_len - wi)
+        for wcount in range(max_span, 1, -1):
+            span_positions = word_positions[wi:wi + wcount]
+            phrase = " ".join(tokens[p].strip() for p in span_positions)
+            if phrase in URDU_SCRIPT_WORD_MAP:
+                first, last = span_positions[0], span_positions[-1]
+                result[first] = URDU_SCRIPT_WORD_MAP[phrase]
+                for p in range(first + 1, last + 1):
+                    result[p] = ""  # consumed word tokens + separators between them
+                wi += wcount
+                matched = True
+                break
+        if matched:
             continue
+
+        idx = word_positions[wi]
+        clean_token = tokens[idx].strip()
         if clean_token in URDU_SCRIPT_WORD_MAP:
-            result.append(URDU_SCRIPT_WORD_MAP[clean_token])
+            result[idx] = URDU_SCRIPT_WORD_MAP[clean_token]
         else:
-            # Try multi-word lookup? (simple single token for now)
-            result.append(fallback_native_to_devanagari(clean_token))
+            result[idx] = fallback_native_to_devanagari(clean_token)
+        wi += 1
+
     return "".join(result)
 
 
