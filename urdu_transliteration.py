@@ -463,6 +463,42 @@ def fallback_native_to_devanagari(word: str) -> str:
             i += 1
             continue
 
+        if ch == "ع":
+            # ain has no Devanagari equivalent — three distinct behaviours
+            # depending on position, previously collapsed into a single
+            # "always emit अ" rule that added a spurious extra syllable in
+            # the (very common) mid-word case, e.g. معمولی -> "मअमोली"
+            # instead of "ममोली", معیشت -> "मऐशत" instead of "मीशत".
+            next_ch = w[i + 1] if i + 1 < n else ""
+            if next_ch == "ا":
+                result.append("आ")
+                prev_was_consonant = False
+                i += 2
+                continue
+            if next_ch in "یے":
+                result.append("ई")
+                prev_was_consonant = False
+                i += 2
+                continue
+            if next_ch == "و":
+                result.append("ऊ")
+                prev_was_consonant = False
+                i += 2
+                continue
+            if prev_was_consonant:
+                # Mid-word, no following vowel letter: functions as a bare
+                # glottal separator with no real vowel of its own in casual
+                # Hindi-ized pronunciation — elide rather than invent a
+                # syllable. Leave prev_was_consonant as-is (pass-through).
+                i += 1
+                continue
+            # Word-initial (or after a vowel) with no diacritics to tell us
+            # the real vowel quality — best-effort default.
+            result.append("अ")
+            prev_was_consonant = False
+            i += 1
+            continue
+
         # Regular consonants via map
         if ch in URDU_CHAR_MAP:
             mapped = URDU_CHAR_MAP[ch]
