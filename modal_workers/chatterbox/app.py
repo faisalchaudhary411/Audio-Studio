@@ -177,6 +177,13 @@ class ChatterboxWorker:
         # Widened baseline to 8 chars/sec and multiplier back to 2.0x, so
         # this only intervenes on genuine multi-x pathological runaway, not
         # ordinary slow, deliberate speech.
+        #
+        # NOTE: this is now a LAST-RESORT safety net only, not the primary
+        # defense against runaway/garbled generation — see
+        # _is_pathologically_long() and _has_long_silence_gap(), which run
+        # BEFORE this and trigger a retry instead of a truncate-and-accept.
+        # A chunk that gets truncated here has already passed those checks,
+        # so this should rarely actually fire in practice now.
         expected_sec = chars / 8.0
         max_duration_sec = max(min_duration_sec, expected_sec * 2.0)
         max_duration_sec = min(max_duration_sec, 40.0)
@@ -184,6 +191,45 @@ class ChatterboxWorker:
         if wav.shape[-1] > max_samples:
             wav = wav[..., :max_samples]
         return wav
+
+    def _is_pathologically_long(self, wav, chunk_text: str, sr: int) -> bool:
+        """Flags raw (pre-truncation) output that's way beyond what any
+        legitimate careful reading of this chunk should need — a strong
+        signal of runaway/hallucinated generation, not just slow speech.
+        Tighter than _cap_runaway_generation's own ceiling on purpose: this
+        should catch bad output EARLY so it gets retried, rather than
+        truncated-and-accepted (which just chops a garbled chunk in half
+        instead of fixing it)."""
+        chars = max(len(chunk_text.strip()), 1)
+        expected_sec = chars / 8.0
+        sanity_max_sec = max(3.0, expected_sec * 2.2)
+        duration = wav.shape[-1] / sr
+        return duration > sanity_max_sec
+
+    def _has_long_silence_gap(self, wav, sr: int, max_gap_sec: float = 3.0, threshold: float = 0.01) -> bool:
+        """Detects a single contiguous near-silent stretch longer than
+        max_gap_sec anywhere INSIDE the chunk — e.g. the model going quiet
+        mid-utterance. The existing quality gate only checks mean energy
+        across the whole chunk, which a long internal silent gap can still
+        pass if the rest of the audio sounds normal."""
+        import torch
+        abs_wav = wav.abs().reshape(-1)
+        if abs_wav.numel() == 0:
+            return False
+        silent = (abs_wav <= threshold).to(torch.int32)
+        padded = torch.cat([
+            torch.zeros(1, dtype=torch.int32, device=silent.device),
+            silent,
+            torch.zeros(1, dtype=torch.int32, device=silent.device),
+        ])
+        diff = padded[1:] - padded[:-1]
+        starts = (diff == 1).nonzero(as_tuple=True)[0]
+        ends = (diff == -1).nonzero(as_tuple=True)[0]
+        if starts.numel() == 0:
+            return False
+        run_lengths = ends - starts
+        max_gap_samples = int(max_gap_sec * sr)
+        return bool((run_lengths.max() > max_gap_samples).item())
 
     def _concat_with_crossfade(self, waveforms: list, sr: int):
         import torch
@@ -322,6 +368,18 @@ class ChatterboxWorker:
                         candidate = candidate.unsqueeze(0)
                     elif candidate.dim() == 2 and candidate.shape[0] > 2:
                         candidate = candidate[0:1, :]
+
+                    # Check the RAW (pre-truncation) output for signs of a
+                    # pathological/runaway generation. Catching this here
+                    # and retrying is what actually fixes garbling — the old
+                    # approach of truncating a bad chunk just chopped it,
+                    # it didn't un-garble it.
+                    if self._is_pathologically_long(candidate, chunk_text, self.model.sr):
+                        last_error = "generation ran away (pathologically long output)"
+                        continue
+                    if self._has_long_silence_gap(candidate, self.model.sr):
+                        last_error = "generation contained a long internal silent gap"
+                        continue
 
                     candidate = self._cap_runaway_generation(candidate, chunk_text, self.model.sr)
 
