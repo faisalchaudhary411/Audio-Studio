@@ -168,14 +168,18 @@ class ChatterboxWorker:
     def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
         min_duration_sec = 1.6
         chars = max(len(chunk_text.strip()), 1)
-        expected_sec = chars / 10.0
-        # Was 2.4x — far too loose, allowed a 150-char chunk (~15s expected) to
-        # balloon to 36s. A single runaway chunk repeated across a multi-chunk
-        # clone job is what turns a 1.35-min request into a 10-min output.
-        max_duration_sec = max(min_duration_sec, expected_sec * 1.5)
-        # Hard absolute ceiling regardless of multiplier math, since MAX_CHUNK_CHARS
-        # is 150 and no legitimate chunk that size should ever need more than ~25s.
-        max_duration_sec = min(max_duration_sec, 25.0)
+        # Was chars/10.0 (assumes ~10 chars/sec) with a 1.5x multiplier and a
+        # 25s hard ceiling. Measured against real output, nearly EVERY chunk
+        # was landing at that ceiling — meaning it wasn't catching runaways,
+        # it was truncating normal careful articulation (the aspiration/
+        # gemination/retroflex detail this whole project is trying to
+        # preserve genuinely takes longer than a rushed 10 chars/sec).
+        # Widened baseline to 8 chars/sec and multiplier back to 2.0x, so
+        # this only intervenes on genuine multi-x pathological runaway, not
+        # ordinary slow, deliberate speech.
+        expected_sec = chars / 8.0
+        max_duration_sec = max(min_duration_sec, expected_sec * 2.0)
+        max_duration_sec = min(max_duration_sec, 40.0)
         max_samples = int(max_duration_sec * sr)
         if wav.shape[-1] > max_samples:
             wav = wav[..., :max_samples]
