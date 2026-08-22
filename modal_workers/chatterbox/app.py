@@ -46,7 +46,7 @@ class CloneResponse(BaseModel):
 CFG_WEIGHT = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.0"))  # try 0.3 as a test
 
 
-def postprocess_output_audio(input_path: str, output_path: str) -> bool:
+def postprocess_output_audio(input_path: str, output_path: str, sample_rate: int = 24000) -> bool:
     """Cleans the GENERATED clone output — mirrors preprocess_reference_audio()
     but runs on the model's output, not the reference clip.
     Fixes: low-frequency rumble (#7), volume inconsistency (#9), and light
@@ -62,6 +62,14 @@ def postprocess_output_audio(input_path: str, output_path: str) -> bool:
         "ffmpeg", "-y",
         "-i", input_path,
         "-af", filter_chain,
+        # BUG FIX: loudnorm silently upsamples its internal processing rate
+        # (observed 24kHz -> 192kHz) and leaves the OUTPUT at that rate
+        # unless explicitly pinned back down — an 8x file-size inflation
+        # with zero audible quality benefit. Confirmed by direct
+        # reproduction: same input, same filter chain, only difference is
+        # this -ar flag, output size dropped from 21.4MB to 2.6MB for an
+        # identical 57s clip.
+        "-ar", str(sample_rate),
         output_path,
     ]
     try:
@@ -369,19 +377,39 @@ class ChatterboxWorker:
                     elif candidate.dim() == 2 and candidate.shape[0] > 2:
                         candidate = candidate[0:1, :]
 
+                    raw_duration = candidate.shape[-1] / self.model.sr
+                    chars = max(len(chunk_text.strip()), 1)
+                    expected_sec = chars / 8.0
+                    print(
+                        f"[chunk {i+1}/{len(chunks)} attempt {attempt+1}] "
+                        f"chars={chars} expected~{expected_sec:.1f}s raw_duration={raw_duration:.1f}s "
+                        f"ratio={raw_duration/expected_sec:.2f}x"
+                    )
+
                     # Check the RAW (pre-truncation) output for signs of a
                     # pathological/runaway generation. Catching this here
                     # and retrying is what actually fixes garbling — the old
                     # approach of truncating a bad chunk just chopped it,
                     # it didn't un-garble it.
                     if self._is_pathologically_long(candidate, chunk_text, self.model.sr):
+                        print(f"[chunk {i+1}/{len(chunks)}] REJECTED — pathologically long, retrying")
                         last_error = "generation ran away (pathologically long output)"
                         continue
                     if self._has_long_silence_gap(candidate, self.model.sr):
+                        print(f"[chunk {i+1}/{len(chunks)}] REJECTED — long internal silence gap, retrying")
                         last_error = "generation contained a long internal silent gap"
                         continue
 
+                    pre_cap_duration = raw_duration
                     candidate = self._cap_runaway_generation(candidate, chunk_text, self.model.sr)
+                    post_cap_duration = candidate.shape[-1] / self.model.sr
+                    if post_cap_duration < pre_cap_duration - 0.05:
+                        print(
+                            f"[chunk {i+1}/{len(chunks)}] TRUNCATED by safety-net cap: "
+                            f"{pre_cap_duration:.1f}s -> {post_cap_duration:.1f}s "
+                            f"(this should be rare — if you're seeing this often, the "
+                            f"pathological-check threshold needs to come down, not the cap itself)"
+                        )
 
                     # Quality gate: reject near-silent or extremely short chunks
                     duration = candidate.shape[-1] / self.model.sr
@@ -390,7 +418,9 @@ class ChatterboxWorker:
 
                     if duration >= min_expected * 0.55 and energy > 0.006:
                         wav = candidate
+                        print(f"[chunk {i+1}/{len(chunks)}] ACCEPTED: duration={duration:.1f}s energy={energy:.4f}")
                         break
+                    print(f"[chunk {i+1}/{len(chunks)}] REJECTED by quality gate: duration={duration:.1f}s energy={energy:.4f}, retrying")
                     # otherwise retry once
 
                 if wav is None:
@@ -421,7 +451,7 @@ class ChatterboxWorker:
                 ta.save(raw_out_path, wav, self.model.sr, format="wav")
 
                 tmp_path_out = raw_out_path + "_post.wav"
-                if postprocess_output_audio(raw_out_path, tmp_path_out):
+                if postprocess_output_audio(raw_out_path, tmp_path_out, sample_rate=self.model.sr):
                     with open(tmp_path_out, "rb") as f:
                         final_bytes = f.read()
                 else:
