@@ -14,7 +14,12 @@ import modal_client
 import urdu_transliteration
 
 JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
-JOB_MAX_AGE_SECONDS = 600
+# Was 600s — exactly equal to Modal's own worker timeout (see
+# modal_workers/chatterbox/app.py), with zero margin for cold-start (20-60s)
+# on top. A legitimately slow job could get swept out of the DB right as it
+# finishes, so the frontend's polling loop finds nothing even though Modal
+# succeeded. Raised to give real headroom above the worst case.
+JOB_MAX_AGE_SECONDS = 1200
 
 _db_lock = threading.Lock()
 
