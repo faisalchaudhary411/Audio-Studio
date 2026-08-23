@@ -15,6 +15,16 @@
 <meta name="theme-color" content="#101820">
 <meta name="description" content="{% block meta_description %}VoxCraft — multilingual text-to-speech and practical online audio tools for creators.{% endblock %}">
 
+<!-- Tells Google which URL is the "real" one when a page is reachable
+     through more than one address — e.g. /blog?tag=urdu and /upgrade?plan=pro
+     are the same page as /blog and /upgrade respectively, just with a
+     query string. Without this, Search Console flags these as "Duplicate
+     without user-selected canonical" and may index the wrong variant or
+     none at all. Defaults to the current path with any query string
+     stripped (see inject_globals() in app.py); a specific page can
+     override by passing its own canonical_url into render_template(). -->
+<link rel="canonical" href="{{ canonical_url }}">
+
 <!-- Google Search Console: paste the code Google gives you into this content= value -->
 <meta name="google-site-verification" content="{{ google_site_verification_code|default('') }}">
 
