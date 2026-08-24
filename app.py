@@ -626,6 +626,18 @@ def pricing():
     return render_template("pricing.html", plans=plans)
 
 
+@app.route("/developers")
+def developers():
+    """Public marketing/landing page for the API product — the actual gap
+    that prompted this route: the API existed (POST /api/v1/tts, admin
+    key issuance, quota tracking) but nothing on the site told anyone it
+    was available. Deliberately no self-serve checkout here yet — the CTA
+    routes to /contact with the API Access topic pre-selected, matching
+    the current admin-issues-keys-after-manual-payment flow. If self-serve
+    signup gets built later, this page's CTA is the one line that changes."""
+    return render_template("developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST)
+
+
 # ---------------------------------------------------------------------------
 # Licensing: activate a key, submit a manual pro request
 # ---------------------------------------------------------------------------
@@ -882,6 +894,7 @@ def sitemap():
         ("/tools", "0.9", "weekly"),
         *[(f"/tools/{slug}", "0.75", "monthly") for slug in tool_pages.TOOL_PAGES],
         ("/pricing", "0.8", "monthly"),
+        ("/developers", "0.7", "monthly"),
         ("/blog", "0.7", "weekly"),
         ("/upgrade", "0.6", "monthly"),
         ("/activate", "0.5", "monthly"),
@@ -944,7 +957,12 @@ def terms():
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "GET":
-        return render_template("contact.html")
+        # Lets other pages deep-link into a pre-selected topic — e.g. the
+        # /developers page's "Request API access" button sends people here
+        # with ?topic=API%20Access already chosen, instead of making them
+        # find it in the dropdown themselves.
+        topic = request.args.get("topic", "").strip()
+        return render_template("contact.html", topic=topic if topic else None)
 
     # Honeypot: a hidden field real visitors never fill in. Bots that
     # blindly fill every input trip this and get silently dropped —
