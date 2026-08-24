@@ -1,70 +1,99 @@
-# VoxCraft — canonical URL fix (Search Console "Duplicate without user-selected canonical")
+# VoxCraft — developer API (POST /api/v1/tts) with metered API keys
 
-2 files, same repo structure. app.py is built on the correctly-merged
-file — CLONE_CHAR_LIMIT = 1400 preserved and confirmed below, re-tested
-against this exact file.
+Same repo structure. app.py built on the correctly-merged base —
+CLONE_CHAR_LIMIT = 1400 confirmed intact.
 
 ## Files
 - app.py (MODIFIED)
-- templates/base.html (MODIFIED)
+- persistence.py (MODIFIED — 2 new tables)
+- notifications.py (MODIFIED — new email function)
+- api_keys.py (NEW)
+- templates/admin/api_keys.html (NEW)
+- templates/admin/dashboard.html (MODIFIED — new card/link)
 
-## What caused the Search Console warning
+## What this is
 
-The site had zero canonical tags anywhere — checked every template,
-confirmed none existed. Without one, Google decides on its own which
-version of a page to index when the same content is reachable at more
-than one URL, and flags it as "Duplicate without user-selected canonical"
-when it can't confidently pick.
+A separate, metered, paid developer API — distinct from the browser app
+licenses in licensing.py. A customer pays through your existing
+Freemius/manual-PKR flow for a plan with a monthly character allowance,
+you issue them a key at /admin/api-keys, and they call:
 
-Two real duplicate-content pairs exist on the site right now, both
-self-inflicted from earlier phases:
+    curl -X POST https://voxcraft.site/api/v1/tts \
+      -H "Authorization: Bearer vox_live_..." \
+      -H "Content-Type: application/json" \
+      -d '{"text": "Hello world", "voice_id": "en-US-AvaNeural"}' \
+      --output speech.mp3
 
-- **/blog?tag=X** — every tag chip on every blog post and the blog list
-  page itself links to a tag-filtered URL (e.g. /blog?tag=urdu,
-  /blog?tag=tutorial). With ~15+ unique tags across the 10 posts, that's
-  15+ crawlable URLs nearly identical to plain /blog.
-- **/upgrade?plan=pro** vs **/upgrade?plan=pro_plus** — linked from the
-  Pricing page's "Get Pro"/"Get Pro+" buttons and the landing page's CTA.
-  Same page, just pre-selects which plan radio button is checked.
+GET /api/v1/voices (also key-authenticated) lists every valid voice_id so
+a developer doesn't need separate docs just to get started.
 
-## The fix
+## Why fixed-quota, not true metered billing
 
-One rule, applied sitewide via the existing context processor in app.py:
-canonical URL = the current request's absolute path, with any query
-string dropped. This single rule correctly resolves both cases above
-(and any future query-string variant of any page) without needing a
-special case for either — /blog?tag=urdu canonicalizes to /blog,
-/upgrade?plan=pro_plus canonicalizes to /upgrade, and every page with no
-query string canonicalizes to itself.
+Real usage-based billing (ElevenLabs' actual model — pay per character,
+automatically charged) needs a payment gateway built for metered
+subscriptions. Freemius (fixed-price) and manual PKR transfers aren't
+that. This gives customers a monthly character allowance instead — feels
+metered to them (they see a usage bar, get blocked at the cap), sells
+through infrastructure you already have. Self-serve signup can replace
+the manual admin-issues-the-key step later without touching how the API
+itself works.
 
-A `<link rel="canonical">` tag was added to base.html's `<head>`, pulling
-from this value — present on every page sitewide, no per-template changes
-needed anywhere else.
+## Security & correctness decisions worth knowing about
 
-The app already runs `ProxyFix` with `x_proto=1, x_host=1` (confirmed in
-app.py), so this correctly reports `https://voxcraft.site/...` even
-running behind Nginx, not an internal `http://127.0.0.1:.../...` — no
-additional proxy configuration needed.
+**Keys are hashed at rest (SHA-256), never stored raw.** Same principle
+as a password — a full database leak doesn't hand out working keys. The
+raw key is shown exactly once, at creation, in the admin panel's "copy it
+now" box, and emailed to the customer. If it's lost, a new key has to be
+issued; there's no "forgot my key" recovery, by design.
 
-## What to expect after deploying
+**Usage counting is genuinely safe under your 2-gunicorn-worker setup.**
+This mattered enough to build and prove separately before writing the API
+endpoint on top of it. Key metadata (customer info, plan, quota — rarely
+changes) lives in one table using the same simple pattern as your blog
+posts. The character-usage counter (written on literally every API call)
+lives in a SEPARATE table using the same atomic BEGIN IMMEDIATE
+transaction your license-key activation already relies on. I ran an
+actual concurrency stress test — 20 threads simultaneously bumping one
+key's counter — and confirmed the final total was exactly correct, not
+silently undercounted the way the old browser-usage tracking used to be
+before it was fixed (see usage_tracking.py's own docstring for that
+history).
 
-This doesn't retroactively fix already-indexed duplicate URLs — Google
-needs to recrawl and notice the new canonical tag. In Search Console:
-after deploying, you can use the URL Inspection tool on one of the
-affected URLs and request indexing to speed this up, but the warning
-itself should clear on its own over the following days/weeks as Google
-recrawls normally.
+**Quota is only deducted on successful generation.** A bad voice_id, a
+malformed request, or a TTS engine error costs the customer nothing —
+mirrors the existing _bump_monthly_chars() pattern for the free tier.
+
+**Per-request cap of 5,000 characters** (API_MAX_CHARS_PER_REQUEST in
+app.py) — mainly so one oversized request can't be the only thing
+standing between a customer and their entire month's quota in one shot.
+Easy to adjust if you want it higher/lower.
+
+## What's NOT built yet (intentionally out of scope for this round)
+- Self-serve signup/checkout for API plans (currently admin-issued after
+  manual payment confirmation, same as your existing Pro/Pro+ flow)
+- A public API documentation page (the quick-start curl example is in the
+  key-delivery email for now)
+- Support for other tools beyond TTS (transcription, voice cloning, etc.)
+  through the API — you specifically asked for TTS first
 
 ## Testing performed
-- Python AST syntax check against the exact final merged file.
-- Jinja2 parse check on base.html.
-- A real Flask app test (using the actual templates and the actual
-  context-processor logic) hitting 8 different paths — including both
-  real duplicate-content pairs with multiple query string variations —
-  and confirming the rendered `<link rel="canonical">` tag correctly
-  strips the query string in every case while leaving query-string-free
-  pages (like /tools/transcribe-audio-to-text) canonicalizing to
-  themselves.
-- Regression check: re-confirmed the pronunciation dictionary and all 22
-  BLOG_TOOL_LINKS entries from previous phases still work correctly in
-  this exact file.
+- Python AST syntax check on all 4 modified/new Python files, against the
+  exact final merged app.py.
+- Standalone api_keys.py module test against a real SQLite DB: key
+  creation, hash correctness, raw-key-not-persisted-anywhere verification,
+  lookup by correct/incorrect/malformed keys, quota pre-check math,
+  usage bump + resulting quota math, revoke/unrevoke/delete.
+- A dedicated concurrency stress test BEFORE building the API on top of
+  it: 20 threads simultaneously bumping one key's usage counter, confirmed
+  the final total was exactly correct (proving the transaction actually
+  prevents the race condition, not just trusting the pattern by
+  inspection) — this caught a real bug (a missing @contextlib.contextmanager
+  decorator) that a syntax check alone would never have caught.
+- Full HTTP-level test via Flask's real test client against the actual
+  /api/v1/tts and /api/v1/voices routes: missing auth (401), invalid key
+  (401), revoked key (403), missing text (400), invalid voice_id (400),
+  a valid request succeeding with correct audio bytes and correct
+  X-Quota-* headers, exceeding quota (429) with a clear error body, and
+  reactivation restoring access.
+- Rendered admin/api_keys.html with real data and confirmed the one-time
+  raw-key display box and the usage progress bar both show correct values.

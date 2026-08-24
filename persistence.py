@@ -133,6 +133,15 @@ def init_db():
                     position INTEGER NOT NULL,
                     data     TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    id       TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL,
+                    data     TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS api_key_usage (
+                    key_hash TEXT PRIMARY KEY,
+                    data     TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS traffic_hits (
                     date    TEXT NOT NULL,
                     ip_hash TEXT NOT NULL,
@@ -228,6 +237,21 @@ def load_pronunciation_dict() -> list:
 
 def save_pronunciation_dict(items: list) -> tuple:
     return _replace_ordered_table("pronunciation_dict", "id", items)
+
+
+# ---- developer API keys (separate paid API product — distinct from the
+#      device-bound app license system in licensing.py). Each record:
+#      {id, key_hash, key_prefix, customer_name, customer_email, plan,
+#       monthly_char_quota, chars_used, period, active, created,
+#       last_used}. The raw key is never stored — only its SHA-256 hash,
+#      same principle as a password: even a full database leak doesn't
+#      hand out working keys. ----
+def load_api_keys() -> list:
+    return _load_ordered_table("api_keys")
+
+
+def save_api_keys(items: list) -> tuple:
+    return _replace_ordered_table("api_keys", "id", items)
 
 
 # ---- traffic (lightweight daily visitor/pageview counter — NOT the same
@@ -406,6 +430,63 @@ def license_key_transaction(key: str):
             raise
         finally:
             conn.close()
+
+
+@contextlib.contextmanager
+def api_key_usage_transaction(key_hash: str):
+    """Atomic read-modify-write for ONE API key's usage counter — the same
+    BEGIN IMMEDIATE pattern as license_key_transaction() above, and for the
+    same reason: this app runs 2 gunicorn worker processes (see
+    usage_tracking.py's docstring for the full history of why the OLD
+    browser-usage tracking silently under-enforced limits under multi-
+    worker load before it was fixed). A developer hitting the API rapidly
+    could easily have two requests land on two different workers at
+    nearly the same instant — without a real transaction here, both could
+    read the same stale "chars_used so far this month" value, both bump it
+    independently, and the second write clobbers the first, silently
+    letting them exceed their quota. Deliberately a SEPARATE table from
+    api_keys (which holds rarely-changed metadata like plan/customer info
+    and uses the simpler whole-table ordered-list pattern, safe because
+    admin edits there are infrequent) — this table exists ONLY for the
+    counter that gets written on every single API call.
+
+    Usage:
+        with persistence.api_key_usage_transaction(key_hash) as holder:
+            usage = holder["usage"]   # {"period": "2026-08", "chars_used": N} or None
+            ...mutate usage in place, or reassign holder["usage"] = usage...
+    """
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT data FROM api_key_usage WHERE key_hash = ?", (key_hash,)).fetchone()
+            holder = {"usage": json.loads(row[0]) if row else None}
+            yield holder
+            if holder["usage"] is not None:
+                conn.execute(
+                    "INSERT INTO api_key_usage(key_hash, data) VALUES (?, ?) "
+                    "ON CONFLICT(key_hash) DO UPDATE SET data = excluded.data",
+                    (key_hash, json.dumps(holder["usage"], ensure_ascii=False)),
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+def peek_api_key_usage(key_hash: str) -> dict:
+    """Read-only, no transaction/lock — for displaying usage in the admin
+    panel, where a tiny staleness window is harmless (unlike the actual
+    quota check-and-bump during a real API call, which must use the
+    transaction above)."""
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT data FROM api_key_usage WHERE key_hash = ?", (key_hash,)).fetchone()
+        return json.loads(row[0]) if row else {}
+    finally:
+        conn.close()
 
 
 # ---- usage tracking (dict keyed by ip_hash) ----

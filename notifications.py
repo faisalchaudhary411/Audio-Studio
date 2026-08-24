@@ -268,3 +268,41 @@ def send_key_email(user_email: str, user_name: str, license_key: str) -> bool:
         return r.status_code in (200, 201)
     except Exception:
         return False
+
+
+def send_api_key_email(customer_email: str, customer_name: str, raw_key: str, plan: str, monthly_char_quota: int) -> bool:
+    """Delivers a newly-issued developer API key. Same Resend pattern as
+    send_key_email above. Called once, right after admin_api_keys creates
+    the key — this is the ONLY time the raw key is ever available to send,
+    since it's hashed before being stored (see api_keys.py)."""
+    resend_key = _secret("RESEND_API_KEY")
+    if not resend_key:
+        return False
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">Your VoxCraft API Key</div>
+    <div style="color:#1A1204;font-size:13px">Plan: {plan} — {monthly_char_quota:,} characters/month</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Hi <strong style="color:#fff">{customer_name}</strong>,</p>
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Your VoxCraft developer API key is below. Store it securely — for security, we can't show it to you again after this email; if it's lost, a new key needs to be issued.</p>
+    <div style="background:#101820;border-radius:8px;padding:14px;margin:16px 0;text-align:center;word-break:break-all;">
+      <div style="color:#E8A93C;font-size:14px;font-family:monospace;font-weight:700;">{raw_key}</div>
+    </div>
+    <p style="color:#888;font-size:12px;margin:16px 0 4px;">Quick start:</p>
+    <div style="background:#101820;border-radius:8px;padding:14px;color:#9cdcfe;font-size:12px;font-family:monospace;white-space:pre-wrap;">curl -X POST https://voxcraft.site/api/v1/tts \\
+  -H "Authorization: Bearer {raw_key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{{"text": "Hello world", "voice_id": "en-US-AvaNeural"}}' \\
+  --output speech.mp3</div>
+  </div>
+</div></body></html>"""
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [customer_email],
+                                 "subject": "Your VoxCraft API Key", "html": html}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False

@@ -41,6 +41,7 @@ import persistence
 import tool_pages
 import licensing
 import usage_tracking
+import api_keys
 import pro_requests
 import notifications
 from werkzeug.utils import secure_filename
@@ -1361,6 +1362,54 @@ def admin_pronunciation():
     return render_template("admin/pronunciation.html", entries=entries, edit_entry=edit_entry)
 
 
+@app.route("/admin/api-keys", methods=["GET", "POST"])
+@admin_required
+def admin_api_keys():
+    """Issue/revoke developer API keys (see api_keys.py for the full
+    design). Deliberately admin-issued rather than self-serve for now —
+    the customer pays through the existing manual/Freemius flow, then the
+    admin creates the key here, which both persists it (hashed) and emails
+    the raw key to the customer in one action. A self-serve signup+billing
+    flow can replace the manual creation step later without touching
+    api_keys.py's core mechanics."""
+    keys = persistence.load_api_keys()
+    just_created = None
+
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "create":
+            name = request.form.get("customer_name", "").strip()
+            email = request.form.get("customer_email", "").strip()
+            plan = request.form.get("plan", "").strip() or "api_starter"
+            try:
+                quota = int(request.form.get("monthly_char_quota", "200000"))
+            except ValueError:
+                quota = 200000
+            if name and email and quota > 0:
+                result = api_keys.create_api_key(name, email, plan, quota)
+                just_created = result  # {"raw_key": ..., "record": ...} — shown ONCE on this response only
+                sent = notifications.send_api_key_email(email, name, result["raw_key"], plan, quota)
+                if not sent:
+                    app.logger.warning(f"API key created for {email} but email delivery failed — raw key must be copied from this page now, it cannot be retrieved again.")
+                keys = persistence.load_api_keys()
+        elif action == "revoke":
+            api_keys.revoke_key(request.form.get("key_id"))
+            keys = persistence.load_api_keys()
+        elif action == "unrevoke":
+            api_keys.unrevoke_key(request.form.get("key_id"))
+            keys = persistence.load_api_keys()
+        elif action == "delete":
+            api_keys.delete_key(request.form.get("key_id"))
+            keys = persistence.load_api_keys()
+
+    # Attach live usage to each key for display — read-only peek, no lock
+    # needed here (see peek_api_key_usage's docstring).
+    for k in keys:
+        k["usage"] = api_keys.get_usage(k["key_hash"])
+
+    return render_template("admin/api_keys.html", keys=keys, just_created=just_created)
+
+
 @app.route("/api/announcements")
 def api_announcements():
     """Public, unauthenticated — the bell dropdown and top banner fetch
@@ -1888,6 +1937,108 @@ def api_batch():
         "zip_filename": f"tts-batch-{timestamp_base}.zip",
         "errors": errors,
     })
+
+
+# ---------------------------------------------------------------------------
+# Public developer API (/api/v1/...) — the paid, metered API product.
+# Distinct from every /api/... route above: those are called by VoxCraft's
+# own frontend JS using session/CSRF auth; these are called by external
+# developers' own code using a Bearer API key. See api_keys.py for the
+# full design rationale (fixed monthly quota rather than true metered
+# billing, hashed-at-rest keys, the concurrency-safe usage counter).
+# ---------------------------------------------------------------------------
+API_MAX_CHARS_PER_REQUEST = 5000  # generous single-request cap — mainly to stop one oversized request from being the ONLY thing standing between a customer and their whole month's quota in one shot
+
+
+def _api_v1_authenticate():
+    """Returns (record, error_response_or_None). Shared by every /api/v1/
+    route so auth/active-check logic lives in exactly one place."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None, (jsonify({"error": "Missing or malformed Authorization header. Expected: Bearer <api_key>"}), 401)
+    raw_key = auth_header[len("Bearer "):].strip()
+    record = api_keys.find_key_record(raw_key)
+    if not record:
+        return None, (jsonify({"error": "Invalid API key."}), 401)
+    if not record.get("active", True):
+        return None, (jsonify({"error": "This API key has been revoked."}), 403)
+    return record, None
+
+
+@app.route("/api/v1/voices", methods=["GET"])
+def api_v1_voices():
+    """Lets a developer discover valid voice_id values without needing to
+    read separate docs first — small addition, meaningfully better
+    first-run experience. Requires a valid key (even though the data
+    itself isn't sensitive) so an unauthenticated key-tester can't be used
+    as a free discovery/scraping endpoint."""
+    record, err = _api_v1_authenticate()
+    if err:
+        return err
+    return jsonify({
+        "voices": [
+            {"language": lang, "name": name, "voice_id": vid}
+            for lang, voice_map in VOICES.items()
+            for name, vid in voice_map.items()
+        ]
+    })
+
+
+@app.route("/api/v1/tts", methods=["POST"])
+def api_v1_tts():
+    """POST { "text": "...", "voice_id": "en-US-AvaNeural", "rate": "+0%" }
+    Header: Authorization: Bearer <api_key>
+    Returns: audio/mpeg binary on success, JSON error otherwise.
+
+    Deducts from the key's monthly character quota only on SUCCESSFUL
+    generation — mirrors the browser-side _bump_monthly_chars() pattern,
+    for the same reason: a customer shouldn't pay quota for a request
+    that failed on VoxCraft's end (a bad voice_id, an engine error)."""
+    record, err = _api_v1_authenticate()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    voice_id = (data.get("voice_id") or "").strip()
+    rate = (data.get("rate") or "+0%").strip()
+
+    if not text:
+        return jsonify({"error": "'text' is required."}), 400
+    if len(text) > API_MAX_CHARS_PER_REQUEST:
+        return jsonify({"error": f"'text' exceeds the {API_MAX_CHARS_PER_REQUEST}-character limit per request. Split into multiple calls."}), 400
+    if not voice_id:
+        return jsonify({"error": "'voice_id' is required. See GET /api/v1/voices for valid values."}), 400
+
+    valid_voice_ids = {vid for voice_map in VOICES.values() for vid in voice_map.values()}
+    if voice_id not in valid_voice_ids:
+        return jsonify({"error": f"Unknown voice_id '{voice_id}'. See GET /api/v1/voices for valid values."}), 400
+
+    if api_keys.would_exceed_quota(record, len(text)):
+        usage = api_keys.get_usage(record["key_hash"])
+        return jsonify({
+            "error": "Monthly character quota exceeded for this API key.",
+            "quota": record["monthly_char_quota"],
+            "used_this_period": usage["chars_used"],
+        }), 429
+
+    processed_text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
+    try:
+        audio = tts_dispatch(processed_text, voice_id, rate=rate)
+    except Exception as e:
+        return jsonify({"error": f"Generation failed: {str(e)}"}), 500
+
+    api_keys.bump_usage(record["key_hash"], len(text))
+    usage_after = api_keys.get_usage(record["key_hash"])
+
+    resp = send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="speech.mp3")
+    # Standard-shaped rate-limit headers — not enforced here (quota is
+    # already enforced above), just informational so a developer's own
+    # client code can proactively back off before hitting 429.
+    resp.headers["X-Quota-Limit"] = str(record["monthly_char_quota"])
+    resp.headers["X-Quota-Used"] = str(usage_after["chars_used"])
+    resp.headers["X-Quota-Remaining"] = str(max(0, record["monthly_char_quota"] - usage_after["chars_used"]))
+    return resp
 
 
 @app.route("/api/clone/upload", methods=["POST"])
