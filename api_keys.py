@@ -56,11 +56,17 @@ def generate_raw_key() -> str:
     return KEY_PREFIX + secrets.token_urlsafe(24)
 
 
-def create_api_key(customer_name: str, customer_email: str, plan: str, monthly_char_quota: int) -> dict:
+def create_api_key(customer_name: str, customer_email: str, plan: str, monthly_char_quota: int,
+                    freemius_license_id: str = None) -> dict:
     """Creates the key record and returns {"raw_key": ..., "record": {...}}.
     raw_key is ONLY available here, at creation — store it now (the admin
     panel shows it once, in a copy-friendly box) because it can never be
-    retrieved again, only re-hashed-and-compared against a new guess."""
+    retrieved again, only re-hashed-and-compared against a new guess.
+
+    freemius_license_id links this key back to a paid Freemius subscription
+    when the key was auto-issued via /fs-callback/api rather than created
+    manually in admin — lets the webhook find and revoke/restore the right
+    key on cancellation/renewal, same idea as licensing.py's app licenses."""
     raw_key = generate_raw_key()
     key_hash = hash_key(raw_key)
     record = {
@@ -73,11 +79,54 @@ def create_api_key(customer_name: str, customer_email: str, plan: str, monthly_c
         "monthly_char_quota": monthly_char_quota,
         "active": True,
         "created": dt.datetime.now().strftime("%Y-%m-%d"),
+        "freemius_license_id": freemius_license_id or "",
     }
     keys = persistence.load_api_keys()
     keys.insert(0, record)
     persistence.save_api_keys(keys)
     return {"raw_key": raw_key, "record": record}
+
+
+def find_key_by_email(customer_email: str, plan: str = None):
+    """Used by the free self-serve signup to avoid silently minting a new
+    key (and burning a fresh free quota) every time the same person
+    re-submits the form — reuses/reports the existing one instead."""
+    email = (customer_email or "").strip().lower()
+    for record in persistence.load_api_keys():
+        if record.get("customer_email", "").strip().lower() == email:
+            if plan is None or record.get("plan") == plan:
+                return record
+    return None
+
+
+def find_key_by_freemius_id(freemius_license_id: str):
+    if not freemius_license_id:
+        return None
+    for record in persistence.load_api_keys():
+        if record.get("freemius_license_id") == freemius_license_id:
+            return record
+    return None
+
+
+def sync_key_from_freemius_event(freemius_license_id: str, event_type: str) -> dict:
+    """Mirrors licensing.sync_license_from_freemius_event for API keys —
+    called from the same /webhook/freemius handler so a cancelled or
+    expired paid API subscription stops working automatically instead of
+    quietly staying active forever, and a recovered renewal (dunning
+    retry succeeds) un-revokes it again. A no-op, not an error, when the
+    event is for a browser Pro license rather than an API key (most
+    webhook events will be) — the two products share one Freemius
+    product/webhook but are looked up independently."""
+    record = find_key_by_freemius_id(freemius_license_id)
+    if not record:
+        return {"success": False, "reason": "not_an_api_key"}
+    if event_type == "license.extended":
+        unrevoke_key(record["id"])
+        return {"success": True, "action": "unrevoked", "key_id": record["id"]}
+    if event_type in ("license.cancelled", "license.expired"):
+        revoke_key(record["id"])
+        return {"success": True, "action": "revoked", "key_id": record["id"]}
+    return {"success": False, "reason": "ignored_event"}
 
 
 def find_key_record(raw_key: str):

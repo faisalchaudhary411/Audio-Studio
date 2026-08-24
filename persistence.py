@@ -76,6 +76,16 @@ DEFAULT_LIMITS = {
     "PRO_FEATURES": "",
     "AUTO_APPROVE_MANUAL": True,
     "MANUAL_GRACE_HOURS": 72,
+    # ---- Developer API self-serve tiers (auto flow: free = instant
+    # signup, no payment; starter/pro = Freemius checkout, key auto-issued
+    # on successful payment via fs-callback/api + webhook/freemius). ----
+    "API_FREE_QUOTA": 10000,
+    "API_STARTER_QUOTA": 200000,
+    "API_STARTER_PRICE_USD_LABEL": "$9",
+    "CHECKOUT_URL_API_STARTER": "",
+    "API_PRO_QUOTA": 1000000,
+    "API_PRO_PRICE_USD_LABEL": "$29",
+    "CHECKOUT_URL_API_PRO": "",
 }
 
 

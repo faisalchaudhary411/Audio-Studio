@@ -30,6 +30,16 @@ FREEMIUS_SECRET_KEY = os.environ.get("FREEMIUS_SECRET_KEY", "").strip()
 # to "pro", never to "pro_plus", so a misconfiguration fails toward the
 # cheaper tier rather than accidentally giving away the expensive one.
 FREEMIUS_PLAN_PRO_PLUS_ID = os.environ.get("FREEMIUS_PLAN_PRO_PLUS_ID", "").strip()
+# Same idea, for the two paid Developer API plans (separate product line
+# from the Pro/Pro+ browser app licenses above). Set these once you've
+# created the API Starter / API Pro pricing plans in Freemius and copied
+# their plan IDs. Unset or non-matching plan_id → not recognized as an API
+# purchase at all (verify_freemius_api_license returns valid=False) rather
+# than silently defaulting to one of the tiers, since — unlike Pro/Pro+
+# where "wrong tier" just means the cheaper of two paid options — guessing
+# wrong here could hand out a mismatched character quota.
+FREEMIUS_PLAN_API_STARTER_ID = os.environ.get("FREEMIUS_PLAN_API_STARTER_ID", "").strip()
+FREEMIUS_PLAN_API_PRO_ID = os.environ.get("FREEMIUS_PLAN_API_PRO_ID", "").strip()
 
 
 def _keys() -> dict:
@@ -484,6 +494,62 @@ def verify_freemius_license(license_key: str) -> dict:
             "customer_name": data.get("user_name", "") or "Pro User",
             "expires_at": expiration or "",
             "plan": plan,
+            "error": None if is_valid else ("License cancelled" if is_cancelled else "License expired"),
+        }
+    except Exception as e:
+        return {"success": False, "valid": False, "error": str(e)}
+
+
+def verify_freemius_api_license(license_key: str, api_starter_quota: int, api_pro_quota: int) -> dict:
+    """Same Freemius license-verify call as verify_freemius_license, but for
+    the Developer API's two paid plans instead of the browser app's Pro/
+    Pro+. Kept as a separate function rather than a shared helper with a
+    flag, because the failure mode differs on purpose: an unrecognized
+    plan_id here means "this isn't an API purchase" (valid=False), not
+    "default to the cheaper tier" — a wrong quota is worse to hand out
+    silently than a wrong app-license tier.
+
+    Quotas are passed in (from persistence.load_limits(), admin-editable)
+    rather than hardcoded, so raising API_STARTER_QUOTA/API_PRO_QUOTA in
+    admin takes effect for new keys without a code change."""
+    if not FREEMIUS_API_TOKEN or not FREEMIUS_PRODUCT_ID:
+        return {"success": False, "valid": False, "error": "Freemius not configured on this deployment."}
+    if not license_key:
+        return {"success": False, "valid": False, "error": "No license key provided."}
+    try:
+        r = requests.get(
+            f"https://api.freemius.com/v1/products/{FREEMIUS_PRODUCT_ID}/licenses/{license_key}.json",
+            headers={"Authorization": f"Bearer {FREEMIUS_API_TOKEN}"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            return {"success": False, "valid": False, "error": f"HTTP {r.status_code}"}
+        data = r.json()
+        is_cancelled = bool(data.get("is_cancelled", False))
+        expiration = data.get("expiration")
+        is_expired = False
+        if expiration:
+            try:
+                is_expired = dt.datetime.strptime(expiration, "%Y-%m-%d %H:%M:%S") < dt.datetime.now()
+            except Exception:
+                is_expired = False
+
+        plan_id = str(data.get("plan_id", ""))
+        if FREEMIUS_PLAN_API_STARTER_ID and plan_id == FREEMIUS_PLAN_API_STARTER_ID:
+            plan, quota = "api_starter", api_starter_quota
+        elif FREEMIUS_PLAN_API_PRO_ID and plan_id == FREEMIUS_PLAN_API_PRO_ID:
+            plan, quota = "api_pro", api_pro_quota
+        else:
+            return {"success": True, "valid": False,
+                    "error": "This license isn't for a Developer API plan."}
+
+        is_valid = (not is_cancelled) and (not is_expired)
+        return {
+            "success": True, "valid": is_valid,
+            "freemius_license_id": str(data.get("id", "")),
+            "customer_email": data.get("user_email", "") or data.get("email", ""),
+            "customer_name": data.get("user_name", "") or "API Customer",
+            "plan": plan, "quota": quota,
             "error": None if is_valid else ("License cancelled" if is_cancelled else "License expired"),
         }
     except Exception as e:

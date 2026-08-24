@@ -628,14 +628,69 @@ def pricing():
 
 @app.route("/developers")
 def developers():
-    """Public marketing/landing page for the API product — the actual gap
-    that prompted this route: the API existed (POST /api/v1/tts, admin
-    key issuance, quota tracking) but nothing on the site told anyone it
-    was available. Deliberately no self-serve checkout here yet — the CTA
-    routes to /contact with the API Access topic pre-selected, matching
-    the current admin-issues-keys-after-manual-payment flow. If self-serve
-    signup gets built later, this page's CTA is the one line that changes."""
-    return render_template("developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST)
+    """Public marketing/landing page for the API product, now fully
+    self-serve on both ends: Free signs up instantly on this page (see
+    developers_signup below), Starter/Pro send the customer to their own
+    Freemius checkout link and the key is auto-issued the moment payment
+    succeeds (see fs_callback_api + the freemius webhook) — no admin step
+    in either path anymore. /admin/api-keys still exists for manual
+    issuance/overrides, it's just no longer required for a customer to get
+    a key."""
+    lim = persistence.load_limits()
+    return render_template(
+        "developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST,
+        api_free_quota=lim.get("API_FREE_QUOTA", 10000),
+        api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
+        api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
+        checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
+        api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
+        api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
+        checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
+    )
+
+
+@app.route("/developers/signup", methods=["POST"])
+def developers_signup():
+    """Free-tier self-serve signup — the only step in the whole API flow
+    that still needs no payment at all. Instant key, emailed immediately,
+    shown once inline on this page as a fallback if the email doesn't
+    land. Deduped by email so re-submitting the form (or a curious repeat
+    visitor) doesn't mint a fresh free-quota key every time — the existing
+    one just isn't shown again, since the raw key can't be retrieved once
+    it's hashed."""
+    name = (request.form.get("customer_name") or "").strip()
+    email = (request.form.get("customer_email") or "").strip()
+    lim = persistence.load_limits()
+    quota = int(lim.get("API_FREE_QUOTA", 10000))
+
+    if not name or not email or "@" not in email:
+        return render_template("developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST,
+                                api_free_quota=quota,
+                                api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
+                                api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
+                                checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
+                                api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
+                                api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
+                                checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
+                                signup_error="Enter a name and a valid email.")
+
+    existing = api_keys.find_key_by_email(email, plan="api_free")
+    if existing:
+        signup_result = {"already_had_key": True, "customer_email": email}
+    else:
+        result = api_keys.create_api_key(name, email, "api_free", quota)
+        notifications.send_api_key_email(email, name, result["raw_key"], "api_free", quota)
+        signup_result = {"already_had_key": False, "raw_key": result["raw_key"], "customer_email": email}
+
+    return render_template("developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST,
+                            api_free_quota=quota,
+                            api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
+                            api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
+                            checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
+                            api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
+                            api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
+                            checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
+                            signup_result=signup_result)
 
 
 # ---------------------------------------------------------------------------
@@ -1125,6 +1180,13 @@ def admin_limits():
             "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
             "AUTO_APPROVE_MANUAL": request.form.get("AUTO_APPROVE_MANUAL") == "on",
             "MANUAL_GRACE_HOURS": int(request.form.get("MANUAL_GRACE_HOURS", 72)),
+            "API_FREE_QUOTA": int(request.form.get("API_FREE_QUOTA", 10000)),
+            "API_STARTER_QUOTA": int(request.form.get("API_STARTER_QUOTA", 200000)),
+            "API_STARTER_PRICE_USD_LABEL": request.form.get("API_STARTER_PRICE_USD_LABEL", "$9"),
+            "CHECKOUT_URL_API_STARTER": request.form.get("CHECKOUT_URL_API_STARTER", ""),
+            "API_PRO_QUOTA": int(request.form.get("API_PRO_QUOTA", 1000000)),
+            "API_PRO_PRICE_USD_LABEL": request.form.get("API_PRO_PRICE_USD_LABEL", "$29"),
+            "CHECKOUT_URL_API_PRO": request.form.get("CHECKOUT_URL_API_PRO", ""),
         }
         ok, err = persistence.save_limits(limits)
         _limits_cache["data"] = None  # force refresh so the change is visible immediately, not after LIMITS_CACHE_TTL
@@ -1523,8 +1585,16 @@ def freemius_webhook():
     if event_type not in ("license.extended", "license.cancelled", "license.expired"):
         return jsonify({"success": True, "ignored": event_type}), 200
 
-    result = licensing.sync_license_from_freemius_event(freemius_license_id, event_type, new_expiration)
-    return jsonify(result), (200 if result.get("success") else 404)
+    # Try both product lines: this one freemius_license_id will only ever
+    # match a record in ONE of them (browser Pro/Pro+ license vs. Developer
+    # API key), so the other call is always a harmless not_an_api_key /
+    # no-op — cheaper than branching on plan_id here to guess which one,
+    # and keeps this webhook the single place both products stay in sync
+    # on cancellation/renewal without any admin action.
+    app_result = licensing.sync_license_from_freemius_event(freemius_license_id, event_type, new_expiration)
+    api_result = api_keys.sync_key_from_freemius_event(freemius_license_id, event_type)
+    success = app_result.get("success") or api_result.get("success")
+    return jsonify({"app_license": app_result, "api_key": api_result}), (200 if success else 404)
 
 
 @app.route("/fs-callback")
@@ -1583,6 +1653,63 @@ def fs_callback_activate():
         return redirect(url_for("studio"))
     return render_template("fs_callback.html", success=True, license_key=key,
                             activate_error=result.get("error", "Activation failed."))
+
+
+@app.route("/fs-callback/api")
+def fs_callback_api():
+    """The Developer API's equivalent of fs_callback — where a customer's
+    browser lands after paying for API Starter or API Pro through Freemius.
+    Verifies the license, mints (or reuses, if they refresh this page) an
+    API key, emails it, and shows it once inline. This is the piece that
+    makes the paid side of the API actually self-serve: previously a
+    payment here still required Faisal to manually create the key in
+    /admin/api-keys afterward — now that step is gone for the Starter/Pro
+    tiers specifically (Custom/negotiated plans still go through admin).
+
+    Requires a SECOND Freemius checkout link setup step, same as Pro+: in
+    Freemius, the API Starter and API Pro plans each need their own
+    checkout link configured to redirect here (?license_id=X&email=Y) after
+    purchase, same as /fs-callback is for the app's Pro/Pro+ plans."""
+    fs_license_id = request.args.get("license_id", "")
+    fs_email = request.args.get("email", "")
+
+    if not fs_license_id:
+        return render_template("fs_callback_api.html", error="no_license_id")
+
+    lim = persistence.load_limits()
+    verify_result = licensing.verify_freemius_api_license(
+        fs_license_id,
+        api_starter_quota=int(lim.get("API_STARTER_QUOTA", 200000)),
+        api_pro_quota=int(lim.get("API_PRO_QUOTA", 1000000)),
+    )
+
+    if not verify_result.get("valid"):
+        return render_template("fs_callback_api.html", error="not_verified",
+                                license_id=fs_license_id,
+                                verify_error=verify_result.get("error", "unknown"))
+
+    # Idempotent: if this Freemius license already minted a key (e.g. the
+    # customer refreshed this page), don't mint a second one — the raw key
+    # can't be shown again, so just confirm it was already sent.
+    existing = api_keys.find_key_by_freemius_id(fs_license_id)
+    if existing:
+        return render_template("fs_callback_api.html", success=True, already_issued=True,
+                                customer_email=existing.get("customer_email", fs_email),
+                                plan=existing.get("plan"), quota=existing.get("monthly_char_quota"))
+
+    plan = verify_result["plan"]
+    quota = verify_result["quota"]
+    customer_email = verify_result.get("customer_email") or fs_email
+    customer_name = verify_result.get("customer_name") or "API Customer"
+
+    result = api_keys.create_api_key(customer_name, customer_email, plan, quota,
+                                      freemius_license_id=fs_license_id)
+    sent = notifications.send_api_key_email(customer_email, customer_name, result["raw_key"], plan, quota)
+    if not sent:
+        app.logger.warning(f"Auto-issued API key for {customer_email} but email delivery failed.")
+
+    return render_template("fs_callback_api.html", success=True, raw_key=result["raw_key"],
+                            plan=plan, quota=quota, customer_email=customer_email)
 
 
 @app.route("/tools")
