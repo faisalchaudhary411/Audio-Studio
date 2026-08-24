@@ -16,7 +16,23 @@
           <strong style="font-family:var(--display);font-size:1.1rem;">{{ r.name }}</strong>
           <div style="color:var(--text-dim);font-size:0.85rem;">{{ r.email }} · {{ r.phone or 'no phone' }}</div>
           <div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);margin-top:4px;">{{ r.id }} · {{ r.date }}</div>
+          {% if r.plan_requested %}<div style="color:var(--text-dim);font-size:0.78rem;margin-top:2px;">Plan: {{ 'Pro+' if r.plan_requested == 'pro_plus' else 'Pro' }} · expect ~PKR {{ pro_plus_price_pkr if r.plan_requested == 'pro_plus' else pro_price_pkr }}</div>{% endif %}
           {% if r.payment_method %}<div style="margin-top:6px;"><span class="voice-card__tag">{{ r.payment_method }}</span> {% if r.txn_id %}<span style="color:var(--text-dim);font-size:0.8rem;">ref: {{ r.txn_id }}</span>{% endif %}</div>{% endif %}
+          {% if r.duplicate_txn or r.duplicate_screenshot %}
+          <div style="margin-top:8px;background:rgba(232,136,136,0.1);border:1px solid rgba(232,136,136,0.3);border-radius:8px;padding:8px 10px;">
+            {% if r.duplicate_txn %}<div style="color:#e88;font-size:0.78rem;">⚠️ Same transaction ID appears on another request</div>{% endif %}
+            {% if r.duplicate_screenshot %}<div style="color:#e88;font-size:0.78rem;">⚠️ Same screenshot image appears on another request</div>{% endif %}
+          </div>
+          {% endif %}
+          {% if r.ocr_available %}
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:0.72rem;font-family:var(--mono);padding:3px 8px;border-radius:6px;background:{{ 'rgba(120,200,160,0.12);color:var(--jade-hi)' if r.ocr_txn_match else 'rgba(232,136,136,0.12);color:#e88' }};">{{ '✓' if r.ocr_txn_match else '✗' }} txn ID in image</span>
+            <span style="font-size:0.72rem;font-family:var(--mono);padding:3px 8px;border-radius:6px;background:{{ 'rgba(120,200,160,0.12);color:var(--jade-hi)' if r.ocr_amount_match else 'rgba(232,169,60,0.12);color:var(--brass-hi)' }};">{{ '✓' if r.ocr_amount_match else '?' }} amount in image</span>
+          </div>
+          {% endif %}
+          {% if r.screenshot_b64 %}
+          <img src="data:image/*;base64,{{ r.screenshot_b64 }}" alt="Payment screenshot" style="max-width:110px;border-radius:6px;margin-top:8px;cursor:pointer;display:block;" onclick="this.style.maxWidth = this.style.maxWidth==='110px' ? '420px' : '110px';">
+          {% endif %}
         </div>
         <div style="text-align:right;">
           <span style="font-family:var(--mono);font-size:0.78rem;color:{% if r.status == 'approved' %}var(--jade-hi){% elif r.status == 'rejected' %}#e88{% else %}var(--brass-hi){% endif %};">{{ r.status }}</span>
