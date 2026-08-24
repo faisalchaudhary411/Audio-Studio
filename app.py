@@ -876,6 +876,8 @@ BLOG_TOOL_LINKS = {
     "video to audio": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
     "video extract": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
     "music": ("tool_page", {"slug": "ai-music-generator"}, "Open Music Generator"),
+    "api": ("developers", {}, "Explore the Developer API"),
+    "developer-api": ("developers", {}, "Explore the Developer API"),
 }
 
 
