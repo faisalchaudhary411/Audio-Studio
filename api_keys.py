@@ -99,6 +99,34 @@ def find_key_by_email(customer_email: str, plan: str = None):
     return None
 
 
+def find_keys_by_email(customer_email: str) -> list:
+    """All keys on file for this email (active or revoked), newest first —
+    used by the /account dashboard, unlike find_key_by_email above which
+    only needs the first match for signup dedup. A customer normally has
+    one, but rotate_key() below leaves the old one revoked-not-deleted, so
+    someone who's rotated has a short history here rather than an active
+    key silently disappearing from their own view."""
+    email = (customer_email or "").strip().lower()
+    return [r for r in persistence.load_api_keys()
+            if r.get("customer_email", "").strip().lower() == email]
+
+
+def rotate_key(key_id: str) -> dict:
+    """Customer-initiated (from /account) or admin-initiated key rotation:
+    revokes the old key and mints a fresh one with the same customer/plan/
+    quota, so a compromised or lost key can be replaced without emailing
+    Faisal. Returns {} if key_id doesn't exist, else {"raw_key":...,
+    "record": {...}} same shape as create_api_key — this is also a raw-key
+    moment, shown/emailed once, same rule as creation."""
+    keys = persistence.load_api_keys()
+    old = next((k for k in keys if str(k["id"]) == str(key_id)), None)
+    if not old:
+        return {}
+    revoke_key(key_id)
+    return create_api_key(old["customer_name"], old["customer_email"],
+                           old["plan"], old["monthly_char_quota"])
+
+
 def find_key_by_freemius_id(freemius_license_id: str):
     if not freemius_license_id:
         return None

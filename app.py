@@ -42,6 +42,7 @@ import tool_pages
 import licensing
 import usage_tracking
 import api_keys
+import accounts
 import pro_requests
 import notifications
 from werkzeug.utils import secure_filename
@@ -427,6 +428,7 @@ def inject_globals():
         "plan_ctx": get_plan(),
         "license_name_ctx": get_license_name(),
         "has_clone_music_ctx": has_clone_and_music(),
+        "account_email_ctx": session.get("account_email", ""),
         "canonical_url": canonical_url,
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
@@ -1237,6 +1239,8 @@ def admin_requests():
                 new_key = licensing.create_subscription_key(target.get("name", "Pro User"), target.get("email", ""),
                                                               plan=plan)
                 pro_requests.approve_request(req_id, new_key)
+                _provision_paid_account(target.get("email", ""), target.get("name", "Pro User"),
+                                         "VoxCraft Pro+" if plan == "pro_plus" else "VoxCraft Pro")
         elif action == "reject":
             pro_requests.reject_request(req_id)
         return redirect(url_for("admin_requests"))
@@ -1599,6 +1603,24 @@ def freemius_webhook():
     return jsonify({"app_license": app_result, "api_key": api_result}), (200 if success else 404)
 
 
+def _provision_paid_account(email: str, name: str, product_label: str):
+    """Shared by fs_callback, fs_callback_api, and the manual /upgrade
+    admin approval below — the three places a customer becomes a paying
+    customer. Creates the account if one doesn't exist yet (idempotent —
+    a renewal or a second purchase just returns the existing account
+    untouched) and, ONLY for a brand-new account, emails a 'set your
+    password' link. Never called from the free tier (self-serve API
+    signup, free voices) by design — those stay accountless."""
+    email = (email or "").strip()
+    if not email or "@" not in email:
+        return
+    record, is_new = accounts.find_or_create_user(email, name)
+    if is_new:
+        token = accounts.issue_token(email, "set")
+        set_url = request.url_root.rstrip("/") + url_for("set_password", token=token)
+        notifications.send_account_setup_email(email, record.get("name", name), set_url, product_label)
+
+
 @app.route("/fs-callback")
 def fs_callback():
     """Freemius redirects the customer's browser here after a successful
@@ -1635,12 +1657,19 @@ def fs_callback():
     else:
         limits = persistence.load_limits()
         license_key = licensing.create_subscription_key(
-            customer_name=verify_result.get("user_name") or "Pro User",
-            customer_email=verify_result.get("user_email") or fs_email,
+            customer_name=verify_result.get("customer_name") or "Pro User",
+            customer_email=verify_result.get("customer_email") or fs_email,
             subscription_type="monthly",
             freemius_license_id=fs_license_id,
             amount_paid=limits.get("PRO_PRICE_PKR", 0),
+            plan=verify_result.get("plan", "pro"),
         )
+
+    _provision_paid_account(
+        verify_result.get("customer_email") or fs_email,
+        verify_result.get("customer_name") or "Pro User",
+        "VoxCraft Pro+" if verify_result.get("plan") == "pro_plus" else "VoxCraft Pro",
+    )
 
     return render_template("fs_callback.html", success=True, license_key=license_key)
 
@@ -1695,6 +1724,8 @@ def fs_callback_api():
     # can't be shown again, so just confirm it was already sent.
     existing = api_keys.find_key_by_freemius_id(fs_license_id)
     if existing:
+        _provision_paid_account(existing.get("customer_email", fs_email), existing.get("customer_name", "API Customer"),
+                                 f"VoxCraft Developer API — {existing.get('plan', 'api')}")
         return render_template("fs_callback_api.html", success=True, already_issued=True,
                                 customer_email=existing.get("customer_email", fs_email),
                                 plan=existing.get("plan"), quota=existing.get("monthly_char_quota"))
@@ -1710,8 +1741,192 @@ def fs_callback_api():
     if not sent:
         app.logger.warning(f"Auto-issued API key for {customer_email} but email delivery failed.")
 
+    _provision_paid_account(customer_email, customer_name, f"VoxCraft Developer API — {plan}")
+
     return render_template("fs_callback_api.html", success=True, raw_key=result["raw_key"],
                             plan=plan, quota=quota, customer_email=customer_email)
+
+
+CUSTOMER_LOGIN_MAX_ATTEMPTS = 8
+CUSTOMER_LOGIN_WINDOW_MINUTES = 15
+CUSTOMER_LOGIN_LOCKOUT_MINUTES = 15
+
+
+def account_required(view_func):
+    from functools import wraps
+
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not session.get("account_email"):
+            return redirect(url_for("account_login", next=request.path))
+        return view_func(*args, **kwargs)
+
+    return wrapper
+
+
+@app.route("/login", methods=["GET", "POST"])
+def account_login():
+    """Paid-customer login — separate from /admin/login above, and
+    deliberately not the source of truth for Pro/API access (see
+    accounts.py's docstring): this just looks up and hands back whatever
+    key(s) licensing.py/api_keys.py already have on file for the email.
+    No 'sign up' link here on purpose — accounts only exist because a
+    payment created one (see _provision_paid_account)."""
+    if request.method == "GET":
+        return render_template("account_login.html")
+
+    ip_hash = "login:" + usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
+    now = dt.datetime.now()
+    record = persistence.get_login_attempts(ip_hash)
+
+    locked_until_str = record.get("locked_until")
+    if locked_until_str:
+        locked_until = dt.datetime.strptime(locked_until_str, "%Y-%m-%d %H:%M:%S")
+        if now < locked_until:
+            remaining_min = max(1, int((locked_until - now).total_seconds() // 60) + 1)
+            return render_template("account_login.html",
+                                    error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
+
+    email = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+    user = accounts.verify_login(email, password)
+
+    if user:
+        persistence.clear_login_attempts(ip_hash)
+        session["account_email"] = user["email"]
+        next_url = request.args.get("next") or url_for("account_dashboard")
+        return redirect(next_url)
+
+    first_attempt_str = record.get("first_attempt")
+    if first_attempt_str:
+        first_attempt = dt.datetime.strptime(first_attempt_str, "%Y-%m-%d %H:%M:%S")
+        if (now - first_attempt).total_seconds() > CUSTOMER_LOGIN_WINDOW_MINUTES * 60:
+            record = {}
+    count = record.get("count", 0) + 1
+    new_record = {"count": count, "first_attempt": record.get("first_attempt", now.strftime("%Y-%m-%d %H:%M:%S"))}
+    if count >= CUSTOMER_LOGIN_MAX_ATTEMPTS:
+        new_record["locked_until"] = (now + dt.timedelta(minutes=CUSTOMER_LOGIN_LOCKOUT_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
+    persistence.set_login_attempts(ip_hash, new_record)
+
+    if count >= CUSTOMER_LOGIN_MAX_ATTEMPTS:
+        return render_template("account_login.html",
+                                error=f"Too many failed attempts. Try again in {CUSTOMER_LOGIN_LOCKOUT_MINUTES} minutes.")
+    # Deliberately identical whether the email doesn't exist, has no
+    # password set yet, or the password is wrong — so this can't be used
+    # to check which emails are customers.
+    return render_template("account_login.html", error="Incorrect email or password.")
+
+
+@app.route("/logout")
+def account_logout():
+    session.pop("account_email", None)
+    return redirect(url_for("landing"))
+
+
+@app.route("/account")
+@account_required
+def account_dashboard():
+    email = session["account_email"]
+    user = accounts.find_user(email)
+    license_key = licensing.find_key_by_email(email)
+    license_info = licensing.check_vox_license(license_key) if license_key else {"valid": False}
+    api_key_records = api_keys.find_keys_by_email(email)
+    return render_template("account.html", user=user, license_key=license_key,
+                            license_info=license_info, api_key_records=api_key_records)
+
+
+@app.route("/account/rotate-api-key", methods=["POST"])
+@account_required
+def account_rotate_api_key():
+    """Customer-initiated key rotation from their own dashboard — old key
+    stops working immediately, new one is emailed the same way a freshly
+    issued key is. Only allowed on a key that's actually theirs, checked
+    by email match rather than trusting the posted key_id blindly."""
+    email = session["account_email"]
+    key_id = request.form.get("key_id", "")
+    owned = [k for k in api_keys.find_keys_by_email(email) if str(k["id"]) == key_id]
+    if not owned:
+        return redirect(url_for("account_dashboard"))
+    result = api_keys.rotate_key(key_id)
+    if result:
+        notifications.send_api_key_email(email, owned[0].get("customer_name", "Customer"),
+                                          result["raw_key"], result["record"]["plan"],
+                                          result["record"]["monthly_char_quota"])
+    return redirect(url_for("account_dashboard"))
+
+
+@app.route("/set-password/<token>", methods=["GET", "POST"])
+def set_password(token):
+    """Handles the initial 'welcome, set your password' link sent by
+    _provision_paid_account. GET only PEEKS at the token (doesn't mark it
+    used) — email clients and security scanners routinely pre-fetch links
+    via GET, and a single-use token consumed by that automated fetch
+    would lock the real customer out before they ever clicked it. Only
+    the actual POST (submitting the password) consumes it, mirroring
+    reset_password below."""
+    if request.method == "GET":
+        record = persistence.get_password_token(token)
+        if not record or record.get("used") or record.get("purpose") != "set":
+            return render_template("set_password.html", error="This link is invalid or has expired.", mode="set")
+        try:
+            expired = dt.datetime.fromisoformat(record["expires_at"]) < dt.datetime.now()
+        except Exception:
+            expired = True
+        if expired:
+            return render_template("set_password.html", error="This link is invalid or has expired.", mode="set")
+        return render_template("set_password.html", email=record["email"], mode="set", token=token)
+
+    token_info = accounts.consume_token(token)
+    if not token_info or token_info.get("purpose") != "set":
+        return render_template("set_password.html", error="This link is invalid or has expired.", mode="set")
+    password = request.form.get("password", "")
+    if len(password) < 8:
+        return render_template("set_password.html", email=token_info["email"], mode="set", token=token,
+                                error="Password must be at least 8 characters.")
+    accounts.set_password(token_info["email"], password)
+    session["account_email"] = token_info["email"]
+    return redirect(url_for("account_dashboard"))
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "GET":
+        return render_template("forgot_password.html")
+    email = request.form.get("email", "").strip().lower()
+    user = accounts.find_user(email)
+    if user:
+        token = accounts.issue_token(email, "reset")
+        reset_url = request.url_root.rstrip("/") + url_for("reset_password", token=token)
+        notifications.send_password_reset_email(email, user.get("name", "Customer"), reset_url)
+    # Same message whether or not the email has an account — avoids
+    # confirming to an outside guesser which emails are paying customers.
+    return render_template("forgot_password.html", submitted=True)
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    if request.method == "GET":
+        record = persistence.get_password_token(token)
+        if not record or record.get("used") or record.get("purpose") != "reset":
+            return render_template("set_password.html", error="This link is invalid or has expired.", mode="reset")
+        try:
+            expired = dt.datetime.fromisoformat(record["expires_at"]) < dt.datetime.now()
+        except Exception:
+            expired = True
+        if expired:
+            return render_template("set_password.html", error="This link is invalid or has expired.", mode="reset")
+        return render_template("set_password.html", email=record["email"], mode="reset", token=token)
+
+    token_info = accounts.consume_token(token)
+    if not token_info or token_info.get("purpose") != "reset":
+        return render_template("set_password.html", error="This link is invalid or has expired.", mode="reset")
+    password = request.form.get("password", "")
+    if len(password) < 8:
+        return render_template("set_password.html", email=token_info["email"], mode="reset", token=token,
+                                error="Password must be at least 8 characters.")
+    accounts.set_password(token_info["email"], password)
+    session["account_email"] = token_info["email"]
+    return redirect(url_for("account_dashboard"))
 
 
 @app.route("/tools")

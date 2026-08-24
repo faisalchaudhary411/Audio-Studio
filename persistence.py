@@ -158,6 +158,14 @@ def init_db():
                     hits    INTEGER NOT NULL DEFAULT 1,
                     PRIMARY KEY (date, ip_hash)
                 );
+                CREATE TABLE IF NOT EXISTS users (
+                    email TEXT PRIMARY KEY,
+                    data  TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS password_tokens (
+                    token TEXT PRIMARY KEY,
+                    data  TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -657,6 +665,67 @@ def clear_login_attempts(ip_hash: str):
         conn = _connect()
         try:
             conn.execute("DELETE FROM login_attempts WHERE ip_hash = ?", (ip_hash,))
+            conn.commit()
+        finally:
+            conn.close()
+
+
+# ---- accounts (paid customers only — see accounts.py). Same single-row
+# get/set/delete shape as login_attempts above: accounts are looked up one
+# email at a time (login, payment-time auto-creation), never as a bulk
+# admin list, so there's no whole-table load/save pair here like blogs or
+# license_keys have. ----
+def get_user(email: str) -> dict:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT data FROM users WHERE email = ?", (email.strip().lower(),)).fetchone()
+        return json.loads(row[0]) if row else {}
+    finally:
+        conn.close()
+
+
+def set_user(email: str, record: dict):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO users(email, data) VALUES (?, ?) "
+                "ON CONFLICT(email) DO UPDATE SET data = excluded.data",
+                (email.strip().lower(), json.dumps(record, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def get_password_token(token: str) -> dict:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT data FROM password_tokens WHERE token = ?", (token,)).fetchone()
+        return json.loads(row[0]) if row else {}
+    finally:
+        conn.close()
+
+
+def set_password_token(token: str, record: dict):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO password_tokens(token, data) VALUES (?, ?) "
+                "ON CONFLICT(token) DO UPDATE SET data = excluded.data",
+                (token, json.dumps(record, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def delete_password_token(token: str):
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("DELETE FROM password_tokens WHERE token = ?", (token,))
             conn.commit()
         finally:
             conn.close()

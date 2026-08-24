@@ -306,3 +306,62 @@ def send_api_key_email(customer_email: str, customer_name: str, raw_key: str, pl
         return r.status_code in (200, 201)
     except Exception:
         return False
+
+
+def send_account_setup_email(customer_email: str, customer_name: str, set_password_url: str, product_label: str) -> bool:
+    """Sent once, right after accounts.find_or_create_user() creates a
+    brand-new account at payment time (Freemius callback or a manual
+    /upgrade approval) — never for a renewal or plan change, since those
+    reuse the existing account untouched. product_label is a short phrase
+    like "VoxCraft Pro" or "Developer API — Starter" so the email reads
+    naturally regardless of which paid product triggered it."""
+    resend_key = _secret("RESEND_API_KEY")
+    if not resend_key:
+        return False
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px">
+  <div style="background:#E8A93C;border-radius:12px;padding:20px;text-align:center;margin-bottom:20px">
+    <div style="color:#1A1204;font-size:18px;font-weight:800">Welcome to {product_label}</div>
+  </div>
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Hi <strong style="color:#fff">{customer_name}</strong>,</p>
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Thanks for subscribing to {product_label}. Set a password for your VoxCraft account below — once it's set, you can log in any time to see your license key / API key and usage, from any device.</p>
+    <div style="text-align:center;margin:20px 0;">
+      <a href="{set_password_url}" style="display:inline-block;background:#E8A93C;color:#1A1204;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Set your password</a>
+    </div>
+    <p style="color:#888;font-size:12px;margin:16px 0 0;">This link works for 72 hours. If it expires, use "Forgot password" on the login page.</p>
+  </div>
+</div></body></html>"""
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [customer_email],
+                                 "subject": f"Welcome to {product_label} — set your password", "html": html}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def send_password_reset_email(customer_email: str, customer_name: str, reset_url: str) -> bool:
+    resend_key = _secret("RESEND_API_KEY")
+    if not resend_key:
+        return False
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px">
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Hi <strong style="color:#fff">{customer_name}</strong>,</p>
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">A password reset was requested for your VoxCraft account. If this was you, set a new password below.</p>
+    <div style="text-align:center;margin:20px 0;">
+      <a href="{reset_url}" style="display:inline-block;background:#E8A93C;color:#1A1204;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Reset password</a>
+    </div>
+    <p style="color:#888;font-size:12px;margin:16px 0 0;">This link works for 1 hour. If you didn't request this, you can safely ignore this email.</p>
+  </div>
+</div></body></html>"""
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [customer_email],
+                                 "subject": "Reset your VoxCraft password", "html": html}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False

@@ -407,6 +407,28 @@ def find_key_by_freemius_id(freemius_license_id: str) -> str:
     return ""
 
 
+def find_key_by_email(customer_email: str) -> str:
+    """Used by the account login/dashboard (accounts.py + the /account
+    route) to look up a customer's Pro license key by the email their
+    account is under — the account itself never stores the key, this is
+    always a live lookup, so a key created/rotated elsewhere is always
+    reflected. Not_expired/not-revoked isn't checked here on purpose:
+    checking validity is check_vox_license()'s job (already called
+    wherever this return value is used), this just finds the candidate
+    key. Prefers the most recently created match if a customer somehow
+    has more than one key on file for the same email."""
+    email = (customer_email or "").strip().lower()
+    if not email:
+        return ""
+    best_key, best_created = "", ""
+    for key, info in _keys().items():
+        if (info.get("customer_email") or "").strip().lower() == email:
+            created = info.get("created", "")
+            if created >= best_created:
+                best_key, best_created = key, created
+    return best_key
+
+
 def activate_via_freemius(freemius_key: str, request) -> dict:
     """Verify a key against Freemius, then wrap it in one of our own internal
     keys so it flows through the same activate/check/device-binding/admin
