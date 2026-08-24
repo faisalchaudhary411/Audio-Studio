@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}API Key — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:560px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Developer API</span>
+    <h2 class="section__title">💳 Payment Status</h2>
+  </div>
+
+  <div class="panel">
+    {% if error == "no_license_id" %}
+      <p style="color:#e88;">No license ID found in the URL. If you just paid, try the link from your Freemius receipt email instead.</p>
+      <a href="{{ url_for('developers') }}" class="btn btn--ghost btn--block" style="margin-top:14px;">← Back to Developer API</a>
+
+    {% elif error == "not_verified" %}
+      <div style="background:rgba(232,93,93,0.08);border:1px solid rgba(232,93,93,0.25);border-radius:12px;padding:14px;">
+        <div style="color:#e88;font-weight:600;font-size:0.9rem;margin-bottom:6px;">⚠️ Payment not confirmed yet</div>
+        <p style="color:var(--text-mid);font-size:0.85rem;line-height:1.6;">
+          If you completed the payment, it can take a few minutes to process. Error: <code style="color:var(--text-dim);">{{ verify_error }}</code>
+        </p>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <a href="{{ url_for('fs_callback_api') }}?license_id={{ license_id }}" class="btn btn--ghost" style="flex:1;">🔄 Check Again</a>
+        <a href="{{ url_for('developers') }}" class="btn btn--ghost" style="flex:1;">← Back</a>
+      </div>
+
+    {% elif success %}
+      <p style="color:var(--jade-hi);font-weight:600;">✅ Payment verified successfully!</p>
+
+      {% if already_issued %}
+        <div style="background:rgba(232,169,60,0.08);border:1px solid rgba(232,169,60,0.25);border-radius:12px;padding:14px;margin-top:14px;">
+          <div style="color:var(--brass-hi);font-weight:600;font-size:0.9rem;margin-bottom:8px;">🔑 Key already issued</div>
+          <p style="color:var(--text-mid);font-size:0.85rem;line-height:1.6;">This subscription already has a key — it was emailed to <strong style="color:var(--text-hi);">{{ customer_email }}</strong>. For security it can't be shown again here; check your inbox (and spam folder).</p>
+        </div>
+      {% else %}
+        <div style="background:rgba(232,169,60,0.08);border:1px solid rgba(232,169,60,0.25);border-radius:12px;padding:14px;margin-top:14px;">
+          <div style="color:var(--brass-hi);font-weight:600;font-size:0.9rem;margin-bottom:8px;">🎉 Your API key is ready</div>
+          <code style="color:var(--brass-hi);font-size:0.95rem;font-family:var(--mono);word-break:break-all;">{{ raw_key }}</code>
+          <p style="color:var(--text-dim);font-size:0.78rem;margin-top:10px;">Plan: {{ plan }} · {{ '{:,}'.format(quota) }} characters/month. Also emailed to {{ customer_email }} — store it now, it won't be shown again.</p>
+        </div>
+      {% endif %}
+
+      <a href="{{ url_for('developers') }}" class="btn btn--ghost btn--block" style="margin-top:16px;">← Back to Developer API docs</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
