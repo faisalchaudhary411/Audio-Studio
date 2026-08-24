@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}My Account — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:720px;">
+  <div class="section__head">
+    <span class="section__eyebrow">My Account</span>
+    <h1 class="section__title">{{ user.name or 'Your account' }}</h1>
+    <p class="section__sub">{{ user.email }}</p>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">App license</span>
+    {% if license_info.valid %}
+      <p style="color:var(--jade-hi);font-weight:600;margin:8px 0 12px;">
+        Active — {{ 'Pro+' if license_info.plan == 'pro_plus' else 'Pro' }}
+      </p>
+      <div style="background:var(--ink);border-radius:8px;padding:14px;font-family:var(--mono);font-size:0.85rem;color:var(--brass-hi);word-break:break-all;">{{ license_key }}</div>
+      <p style="color:var(--text-dim);font-size:0.78rem;margin-top:10px;">Enter this on the <a href="{{ url_for('activate') }}" style="color:var(--brass-hi);">Activate</a> page on any device to unlock Pro there.</p>
+    {% else %}
+      <p style="color:var(--text-dim);font-size:0.85rem;margin:8px 0 0;">No active app subscription on this account. <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);">See plans</a>.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <span class="panel__label">Developer API keys</span>
+    {% if api_key_records %}
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:14px;">
+        {% for k in api_key_records %}
+        <div style="border:1px solid var(--line);border-radius:10px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+            <span style="font-family:var(--mono);color:var(--text-hi);font-size:0.88rem;">{{ k.key_prefix }}…</span>
+            <span style="font-size:0.78rem;color:{{ 'var(--jade-hi)' if k.active else 'var(--text-dim)' }};">{{ 'Active' if k.active else 'Revoked' }}</span>
+          </div>
+          <p style="color:var(--text-dim);font-size:0.8rem;margin:8px 0 0;">Plan: {{ k.plan }} · {{ '{:,}'.format(k.monthly_char_quota) }} chars/month · created {{ k.created }}</p>
+          {% if k.active %}
+          <form method="post" action="{{ url_for('account_rotate_api_key') }}" style="margin-top:10px;" onsubmit="return confirm('This immediately disables the current key and emails you a new one. Continue?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="key_id" value="{{ k.id }}">
+            <button type="submit" class="btn btn--ghost btn--sm">Rotate key</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="color:var(--text-dim);font-size:0.85rem;margin:8px 0 0;">No Developer API key on this account yet. <a href="{{ url_for('developers') }}" style="color:var(--brass-hi);">Get one</a>.</p>
+    {% endif %}
+  </div>
+
+  <p style="text-align:center;margin-top:24px;">
+    <a href="{{ url_for('account_logout') }}" style="color:var(--text-dim);font-size:0.85rem;">Log out</a>
+  </p>
+</section>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Log In — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:420px;">
+  <div class="panel" style="padding:32px 28px;">
+    <div style="text-align:center;margin-bottom:22px;">
+      <span class="panel__label" style="display:block;">My Account</span>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-top:4px;">Log in to see your license key, API key, and usage.</p>
+    </div>
+
+    {% if error %}
+    <div style="background:rgba(232,136,136,0.08);border:1px solid rgba(232,136,136,0.25);border-radius:10px;padding:10px 14px;margin-bottom:16px;">
+      <p style="color:#e88;font-size:0.85rem;margin:0;">{{ error }}</p>
+    </div>
+    {% endif %}
+
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Email</label>
+      <input type="email" name="email" placeholder="you@example.com" class="script-input" style="min-height:auto;padding:12px;margin-bottom:16px;" required autofocus>
+
+      <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Password</label>
+      <input type="password" name="password" placeholder="••••••••" class="script-input" style="min-height:auto;padding:12px;" required>
+
+      <button type="submit" class="btn btn--brass btn--block" style="margin-top:22px;">Log in</button>
+    </form>
+    <p style="text-align:center;margin-top:16px;font-size:0.8rem;">
+      <a href="{{ url_for('forgot_password') }}" style="color:var(--brass-hi);">Forgot password?</a>
+    </p>
+    <p style="text-align:center;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">
+      Accounts are created automatically when you subscribe to Pro, Pro+, or a paid Developer API plan — check your email after purchase for a "set your password" link.
+    </p>
+  </div>
+</section>
+{% endblock %}

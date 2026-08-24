@@ -68,6 +68,11 @@
     <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">Get Pro</a>
     <a href="{{ url_for('activate') }}">Activate</a>
     {% endif %}
+    {% if account_email_ctx %}
+    <a href="{{ url_for('account_dashboard') }}" title="{{ account_email_ctx }}">My Account</a>
+    {% else %}
+    <a href="{{ url_for('account_login') }}">Log In</a>
+    {% endif %}
   </nav>
   <div class="nav__actions">
     <div class="notif-bell-wrap">
