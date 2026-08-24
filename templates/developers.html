@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}VoxCraft API — Text-to-Speech for Developers{% endblock %}
+{% block meta_description %}Add multilingual text-to-speech to your own app with a simple REST API. Fixed monthly character plans, 40+ languages, no complex billing setup.{% endblock %}
+
+{% block content %}
+<div class="section" style="padding-bottom:0;">
+  <div class="section__head">
+    <span class="section__eyebrow">Developer API</span>
+    <h1 class="section__title">Add voice to your own app</h1>
+    <p class="section__sub">A simple REST API for VoxCraft's text-to-speech engine — one endpoint, 40+ languages, no account dashboard to configure.</p>
+  </div>
+  <div style="text-align:center;margin:20px 0 8px;">
+    <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--brass">Request API access</a>
+  </div>
+</div>
+
+<section class="section" style="max-width:820px;">
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin-bottom:14px;font-size:1.2rem;">How it works</h2>
+  <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
+    Send text and a voice ID to one endpoint, get an MP3 back. No SDK to install, no webhook setup, no OAuth flow — a single API key in an <code>Authorization</code> header is all it takes.
+  </p>
+
+  <div class="panel" style="margin:20px 0;">
+    <span class="panel__label">Example request</span>
+    <pre style="background:var(--ink);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:0.82rem;color:#9cdcfe;margin-top:10px;white-space:pre-wrap;">curl -X POST https://voxcraft.site/api/v1/tts \
+  -H "Authorization: Bearer vox_live_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello world", "voice_id": "en-US-AvaNeural"}' \
+  --output speech.mp3</pre>
+  </div>
+
+  <div class="panel" style="margin:20px 0;">
+    <span class="panel__label">Response</span>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin:8px 0 10px;">Raw <code>audio/mpeg</code> bytes on success, with your remaining quota in the response headers:</p>
+    <pre style="background:var(--ink);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:0.82rem;color:#9cdcfe;margin-top:6px;">X-Quota-Limit: 200000
+X-Quota-Used: 1450
+X-Quota-Remaining: 198550</pre>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-top:10px;">On error, a JSON body explains what went wrong (invalid key, bad voice_id, quota exceeded, etc.) with the appropriate HTTP status code.</p>
+  </div>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Discover available voices</h2>
+  <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
+    <code>GET /api/v1/voices</code> (same Bearer auth) returns every valid <code>voice_id</code> across all 40+ supported languages, so you can build a voice picker without hardcoding a list or reading separate docs.
+  </p>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Limits, plainly stated</h2>
+  <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
+    <li>Each plan includes a fixed number of characters per month — not real-time pay-per-character billing. You know your monthly cost upfront; no surprise overage charges.</li>
+    <li>Up to {{ '{:,}'.format(api_max_chars) }} characters per single request — split longer text across multiple calls.</li>
+    <li>Quota resets at the start of each calendar month.</li>
+    <li>Only successful generations count against your quota — a failed or rejected request costs nothing.</li>
+  </ul>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Plans</h2>
+  <p style="color:var(--text-mid);line-height:1.8;margin-bottom:16px;">
+    Plans are set up per customer based on your expected volume — <a href="{{ url_for('contact', topic='API Access') }}" style="color:var(--brass-hi);">get in touch</a> and we'll size a monthly character allowance to what you actually need, rather than forcing you into a fixed tier that's too small or paying for headroom you won't use.
+  </p>
+
+  <div class="panel" style="margin-top:24px;">
+    <span class="panel__label">Frequently asked questions</span>
+    <details style="margin-top:10px;">
+      <summary>How do I get an API key?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;"><a href="{{ url_for('contact', topic='API Access') }}" style="color:var(--brass-hi);">Contact us</a> with your expected usage. We'll set up a plan and email you a key once payment is confirmed.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>What languages are supported?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">The same 40+ languages available in <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a>, including particular attention to Urdu and Hindi voice quality. Call <code>GET /api/v1/voices</code> for the exact current list.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Can I use the API for commercial products?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Yes — audio generated through the API is yours to use in your own commercial application.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>What happens if I exceed my monthly quota?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Requests return a 429 error with your current usage until the quota resets next month, or until your plan is upgraded — <a href="{{ url_for('contact', topic='API Access') }}" style="color:var(--brass-hi);">reach out</a> if you need more headroom before your reset date.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Is voice cloning or transcription available through the API?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Not yet — the API currently covers text-to-speech only. If you need programmatic access to other tools, mention it when you reach out.</p>
+    </details>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "How do I get an API key?", "acceptedAnswer": {"@type": "Answer", "text": "Contact VoxCraft with your expected usage. A plan is set up and a key emailed once payment is confirmed."}},
+    {"@type": "Question", "name": "What languages are supported?", "acceptedAnswer": {"@type": "Answer", "text": "The same 40+ languages available in Voice Studio. GET /api/v1/voices returns the exact current list."}},
+    {"@type": "Question", "name": "Can I use the API for commercial products?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, audio generated through the API can be used in commercial applications."}},
+    {"@type": "Question", "name": "What happens if I exceed my monthly quota?", "acceptedAnswer": {"@type": "Answer", "text": "Requests return a 429 error until the quota resets next month or the plan is upgraded."}},
+    {"@type": "Question", "name": "Is voice cloning or transcription available through the API?", "acceptedAnswer": {"@type": "Answer", "text": "Not yet, the API currently covers text-to-speech only."}}
+  ]
+}
+</script>
+{% endblock %}
