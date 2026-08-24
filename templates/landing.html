@@ -245,9 +245,14 @@
 {% endif %}
 
 <section class="final-cta">
-  <h2 class="section__title">Start creating — free</h2>
-  <a href="{{ url_for('studio') }}" class="btn btn--brass" style="margin-top:20px;display:inline-flex;">Start creating — free</a>
-  <p>No signup. No card. Your first voiceover in about 10 seconds.</p>
+  <div class="final-cta__glow" aria-hidden="true"></div>
+  <span class="final-cta__eyebrow">Free to start · No card needed</span>
+  <h2 class="final-cta__title">Your voice, cloned in seconds</h2>
+  <p class="final-cta__sub">No signup. No card. Your first voiceover in about 10 seconds.</p>
+  <div class="final-cta__actions">
+    <a href="{{ url_for('studio') }}" class="btn btn--brass btn--lg">Start creating — free</a>
+    <a href="{{ url_for('pricing') }}" class="btn btn--ghost btn--lg">See pricing</a>
+  </div>
 </section>
 
 {% endblock %}

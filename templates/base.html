@@ -99,23 +99,43 @@
 </main>
 
 <footer class="footer">
-  <div class="footer__row">
-    <span class="footer__brand">VoxCraft</span>
-    <span class="footer__links">
+  <div class="footer__top">
+    <div class="footer__brand-col">
+      <a href="{{ url_for('landing') }}" class="footer__brand">
+        <span class="nav__mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="20" height="20"><path d="M4 16h3l3-9 4 18 4-13 3 4h11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        VoxCraft
+      </a>
+      <p class="footer__tagline">Studio-grade Urdu &amp; multilingual voice cloning, text-to-speech and AI music — no signup required to start.</p>
+    </div>
+    <div class="footer__col">
+      <span class="footer__col-title">Product</span>
       <a href="{{ url_for('studio') }}">Voice Studio</a>
       <a href="{{ url_for('voice_cloning') }}">Voice Cloning</a>
       <a href="{{ url_for('tools_hub') }}">Tools</a>
-      <a href="{{ url_for('blog_list') }}">Blog</a>
       <a href="{{ url_for('pricing') }}">Pricing</a>
+    </div>
+    <div class="footer__col">
+      <span class="footer__col-title">Resources</span>
+      <a href="{{ url_for('blog_list') }}">Blog</a>
       <a href="{{ url_for('developers') }}">Developer API</a>
-      <a href="{{ url_for('about') }}">About</a>
       <a href="{{ url_for('how_we_test') }}">How We Test</a>
+    </div>
+    <div class="footer__col">
+      <span class="footer__col-title">Company</span>
+      <a href="{{ url_for('about') }}">About</a>
       <a href="{{ url_for('contact') }}">Contact</a>
+      <a href="{{ url_for('activate') }}">Activate</a>
+    </div>
+    <div class="footer__col">
+      <span class="footer__col-title">Legal</span>
       <a href="{{ url_for('privacy') }}">Privacy</a>
       <a href="{{ url_for('terms') }}">Terms</a>
-      <a href="{{ url_for('activate') }}">Activate</a>
-    </span>
-    <span class="footer__copy">&copy; 2026 — text to voice, crafted.</span>
+    </div>
+  </div>
+  <div class="footer__bottom">
+    <span class="footer__copy">&copy; 2026 VoxCraft — text to voice, crafted.</span>
   </div>
 </footer>
 
