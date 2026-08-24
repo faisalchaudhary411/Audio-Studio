@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Admin — API Keys{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Developer API Keys</h2>
+    <p class="section__sub">Issue keys for the paid developer API (POST /api/v1/tts). Each key has a fixed monthly character allowance, tied to the plan the customer paid for.</p>
+  </div>
+
+  {% if just_created %}
+  <div class="panel" style="margin-bottom:20px;background:rgba(120,200,160,0.08);border-color:var(--jade);">
+    <span class="panel__label" style="color:var(--jade-hi);">Key created — copy it now</span>
+    <p style="color:var(--text-mid);font-size:0.85rem;margin:8px 0 12px;">This is the only time the raw key will ever be shown. It's already been emailed to {{ just_created.record.customer_email }} — but if that delivery failed, copy it from here now.</p>
+    <div style="background:var(--ink);border-radius:8px;padding:14px;font-family:var(--mono);font-size:0.85rem;color:var(--brass-hi);word-break:break-all;">{{ just_created.raw_key }}</div>
+  </div>
+  {% endif %}
+
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">Issue a new key</span>
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="create">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <input type="text" name="customer_name" placeholder="Customer name" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" required>
+        <input type="email" name="customer_email" placeholder="Customer email" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" required>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <select name="plan" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;">
+          <option value="api_starter">API Starter</option>
+          <option value="api_pro">API Pro</option>
+          <option value="api_custom">Custom</option>
+        </select>
+        <input type="number" name="monthly_char_quota" placeholder="Monthly character quota" value="200000" min="1" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" required>
+      </div>
+      <button type="submit" class="btn btn--brass">Create &amp; email key</button>
+    </form>
+  </div>
+
+  <div style="display:grid;gap:10px;">
+    {% for k in keys %}
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap;">
+        <div>
+          <strong>{{ k.customer_name }}</strong>
+          <span style="color:var(--text-dim);"> · {{ k.customer_email }}</span>
+          <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin-top:4px;">{{ k.key_prefix }}… · {{ k.plan }} · created {{ k.created }}</div>
+        </div>
+        <span class="voice-card__tag" style="{% if not k.active %}border-color:#e88;color:#e88;{% endif %}">{{ 'Active' if k.active else 'Revoked' }}</span>
+      </div>
+
+      <div style="margin-top:12px;">
+        {% set pct = (k.usage.chars_used / k.monthly_char_quota * 100) if k.monthly_char_quota else 0 %}
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">
+          <span>{{ '{:,}'.format(k.usage.chars_used) }} / {{ '{:,}'.format(k.monthly_char_quota) }} characters this month</span>
+          <span>{{ pct | round(1) }}%</span>
+        </div>
+        <div style="background:var(--ink);border-radius:999px;height:6px;overflow:hidden;">
+          <div style="background:{{ 'var(--brass)' if pct < 90 else '#e88' }};height:100%;width:{{ [pct, 100] | min }}%;"></div>
+        </div>
+        {% if k.usage.last_used %}
+        <p style="color:var(--text-dim);font-size:0.75rem;margin-top:6px;">Last used: {{ k.usage.last_used }}</p>
+        {% endif %}
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ k.id }}">
+          {% if k.active %}
+          <button type="submit" name="action" value="revoke" class="btn btn--ghost btn--sm" onclick="return confirm('Revoke this key? It will stop working immediately.')">Revoke</button>
+          {% else %}
+          <button type="submit" name="action" value="unrevoke" class="btn btn--ghost btn--sm">Reactivate</button>
+          {% endif %}
+        </form>
+        <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ k.id }}">
+          <button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Permanently delete this key record? This cannot be undone.')">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <p style="color:var(--text-dim);">No API keys issued yet.</p>
+    {% endfor %}
+  </div>
+  <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
+</section>
+{% endblock %}
