@@ -59,6 +59,7 @@
     <a href="{{ url_for('pricing') }}">Pricing</a>
     <a href="{{ url_for('blog_list') }}">Blog</a>
     <a href="{{ url_for('landing') }}#voices">Voices</a>
+    <a href="{{ url_for('developers') }}">Developer API</a>
     {% if plan_ctx == 'pro_plus' %}
     <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro+">{{ license_name_ctx|truncate(14, True, '') }} · Pro+ ✓</a>
     {% elif plan_ctx == 'pro' %}
