@@ -744,13 +744,24 @@ def upgrade():
     phone = (request.form.get("phone") or "").strip()
     payment_method = (request.form.get("payment_method") or "").strip()
     txn_id = (request.form.get("txn_id") or "").strip()
-    if not name or not email:
-        return render_template("upgrade.html", error="Name and email are required.", checkout_url=checkout_url,
+
+    def _upgrade_error(msg):
+        return render_template("upgrade.html", error=msg, checkout_url=checkout_url,
                                 checkout_url_pro_plus=checkout_url_pro_plus, requested_plan=requested_plan,
                                 pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
                                 pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
                                 pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
                                 pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
+
+    if not name or not email:
+        return _upgrade_error("Name and email are required.")
+    # HARDENING: was only checked client-side (the form's `required`
+    # attribute) — trivial to bypass with a direct POST, which is exactly
+    # what someone trying to submit garbage/duplicate claims would do.
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return _upgrade_error("Enter a valid email — your license key gets sent there.")
+    if not txn_id or len(txn_id) < 6:
+        return _upgrade_error("Enter the transaction/reference ID from your payment confirmation (at least 6 characters).")
 
     screenshot_b64 = ""
     file = request.files.get("screenshot")
@@ -1245,7 +1256,10 @@ def admin_requests():
             pro_requests.reject_request(req_id)
         return redirect(url_for("admin_requests"))
     reqs = persistence.load_requests()
-    return render_template("admin/requests.html", reqs=reqs)
+    lim = persistence.load_limits()
+    return render_template("admin/requests.html", reqs=reqs,
+                            pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
+                            pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
 
 
 @app.route("/admin/traffic")
