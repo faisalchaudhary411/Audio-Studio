@@ -69,7 +69,7 @@ img{max-width:100%;display:block;}
 }
 
 @media (prefers-reduced-motion: reduce){
-  *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  *:not(.announce-banner__marquee){animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
 }
 
 /* ===== Layout shell ===== */
@@ -1267,6 +1267,7 @@ body.has-announce-ticker .nav{
 .announce-banner__marquee{
   display:flex;
   flex-wrap:nowrap;
+  flex-shrink:0;
   width:max-content;
   align-items:center;
   will-change:transform;
@@ -1307,6 +1308,6 @@ body.has-announce-ticker .nav{
   100% { transform:translateX(-50%); }
 }
 
-@media (prefers-reduced-motion: reduce){
-  .announce-banner__marquee{ animation:none; }
-}
+/* Ticker is exempt from reduced-motion (see rule near top of file) —
+   it's treated as live content, not a decorative animation, so it
+   always keeps scrolling regardless of the visitor's motion preference. */
