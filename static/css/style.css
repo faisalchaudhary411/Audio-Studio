@@ -892,3 +892,77 @@ textarea.script-input:focus{
   .studio{align-items:start;}
   .studio > .panel:first-of-type{position:sticky;top:72px;}
 }
+
+/* ===== Tools grid ===== */
+.tool-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+  gap:14px;
+}
+.tool-card{
+  display:flex;flex-direction:column;
+  background:var(--ink-panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:22px 20px;
+  text-decoration:none;color:inherit;
+  transition:border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+  min-height:180px;
+}
+.tool-card:hover{
+  border-color:rgba(232,169,60,0.45);
+  transform:translateY(-3px);
+  box-shadow:var(--shadow-soft);
+}
+.tool-card__tag{
+  font-family:var(--mono);font-size:0.68rem;color:var(--jade-hi);
+  border:1px solid rgba(79,166,156,0.4);border-radius:999px;
+  padding:3px 10px;align-self:flex-start;margin-bottom:12px;
+  letter-spacing:0.04em;
+}
+.tool-card__title{
+  font-family:var(--display);font-size:1.15rem;color:var(--text-hi);
+  margin:0 0 8px;letter-spacing:-0.01em;line-height:1.25;
+}
+.tool-card__sub{
+  color:var(--text-mid);font-size:0.88rem;line-height:1.55;
+  margin:0 0 16px;flex:1;
+}
+.tool-card__cta{
+  color:var(--brass-hi);font-size:0.85rem;font-weight:600;
+  margin-top:auto;
+}
+
+/* ===== Studio history ===== */
+.history{margin-top:8px;}
+.history__head{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:12px;
+}
+.history__clear{
+  background:transparent;border:1px solid var(--line);color:var(--text-dim);
+  font-family:var(--mono);font-size:0.72rem;padding:5px 10px;
+  border-radius:999px;cursor:pointer;
+}
+.history__clear:hover{border-color:var(--brass);color:var(--brass-hi);}
+.history__list{display:grid;gap:10px;}
+.history-item{
+  background:var(--ink-panel-2);border:1px solid var(--line);
+  border-radius:var(--radius-sm);padding:14px;
+}
+.history-item__text{
+  font-size:0.88rem;color:var(--text-mid);line-height:1.45;
+  margin-bottom:6px;
+}
+.history-item__meta{
+  font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);
+  margin-bottom:10px;
+}
+.history-item audio{width:100%;border-radius:6px;}
+
+/* Tool page breadcrumb */
+.tool-crumb{
+  font-size:0.82rem;color:var(--text-dim);margin-bottom:16px;
+}
+.tool-crumb a{color:var(--text-dim);}
+.tool-crumb a:hover{color:var(--brass-hi);}
