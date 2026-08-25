@@ -95,25 +95,22 @@ function notifInitBanner(items){
   const badgeEl = document.getElementById('announce-banner-badge');
   const textEl = document.getElementById('announce-banner-text');
   const textDup = document.getElementById('announce-banner-text-dup');
-  // ...
-  const line = `${pick.title} — ${pick.message}`;
-  textEl.textContent = line;
-  if (textDup) textDup.textContent = line;
   const linkEl = document.getElementById('announce-banner-link');
   const closeEl = document.getElementById('announce-banner-close');
-  if(!banner) return;
+  if (!banner) return;
 
   const dismissed = notifGetDismissed();
   const pick = items.find(a => a.banner && !dismissed.includes(a.id));
-  if(!pick) return;
+  if (!pick) return;
 
   badgeEl.textContent = NOTIF_TYPE_LABEL[pick.type] || 'News';
   badgeEl.className = `announce-banner__badge announce-banner__badge--${pick.type}`;
+
   const line = `${pick.title} — ${pick.message}`;
   textEl.textContent = line;
-  if(textDup) textDup.textContent = line;
+  if (textDup) textDup.textContent = line;
 
-  if(pick.link_url){
+  if (pick.link_url) {
     linkEl.href = pick.link_url;
     linkEl.textContent = pick.link_text || 'Learn more';
     linkEl.hidden = false;
@@ -128,7 +125,7 @@ function notifInitBanner(items){
 
   let dismissTimer = null;
   function hideToast(){
-    if(dismissTimer) clearTimeout(dismissTimer);
+    if (dismissTimer) clearTimeout(dismissTimer);
     notifDismiss(pick.id);
     banner.classList.remove('is-visible');
     setTimeout(() => { banner.hidden = true; }, 350);
@@ -137,7 +134,6 @@ function notifInitBanner(items){
   dismissTimer = setTimeout(hideToast, BANNER_AUTO_DISMISS_MS);
   closeEl.addEventListener('click', hideToast);
 }
-
 async function notifInit(){
   try{
     const res = await fetch('/api/announcements');
