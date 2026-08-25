@@ -63,7 +63,7 @@ function initStudio(){
     const len = textarea.value.length;
     const words = textarea.value.trim().split(/\s+/).filter(Boolean).length;
     if(charCount) charCount.textContent = `${len} chars`;
-    if(durationEst) durationEst.textContent = `~${(words/2.5).toFixed(1)}s`;
+    if(durationEst) durationEst.textContent = `\~${(words/2.5).toFixed(1)}s`;
   }
   textarea.addEventListener('input', updateMeta);
   updateMeta();
@@ -105,7 +105,6 @@ function initNavToggle(){
     btn.classList.toggle('is-open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
-  // close menu after tapping a link
   links.querySelectorAll('a').forEach(a => {
     a.addEventListener('click', () => {
       links.classList.remove('is-open');
@@ -115,10 +114,7 @@ function initNavToggle(){
   });
 }
 
-// ---- Voice preview play/pause (landing page voice library) ----
-// Gracefully handles missing audio files (real preview clips get added by
-// Faisal after generating them in Studio) — a missing file just disables
-// that one button instead of erroring visibly.
+// ---- Voice preview play/pause ----
 function initVoicePreviews(){
   const buttons = document.querySelectorAll('.voice-card__play[data-audio]');
   if(!buttons.length) return;
@@ -132,13 +128,11 @@ function initVoicePreviews(){
     btn.addEventListener('click', () => {
       if(btn.disabled) return;
 
-      // Same button clicked while playing -> pause it
       if(currentAudio && currentBtn === btn && !currentAudio.paused){
         currentAudio.pause();
         btn.classList.remove('is-playing');
         return;
       }
-      // A different preview was playing -> stop it first
       if(currentAudio && currentBtn !== btn){
         currentAudio.pause();
         currentBtn.classList.remove('is-playing');
@@ -189,7 +183,7 @@ function initNavMore(){
 function initStickyCta(){
   const bar = document.getElementById('sticky-cta');
   if(!bar) return;
-  if(!document.querySelector('.hero')) return; // homepage only
+  if(!document.querySelector('.hero')) return;
   bar.hidden = false;
   const onScroll = () => {
     const show = window.scrollY > 420;
@@ -221,26 +215,57 @@ function initBillingToggle(){
 }
 
 // ---- First-visit optional permissions sheet ----
+// Must NEVER trap the page: hide via hidden + display + class, always.
 function initPermissionsSheet(){
   const sheet = document.getElementById('perm-sheet');
   if(!sheet) return;
   const KEY = 'voxcraft_perm_seen';
-  try {
-    if(localStorage.getItem(KEY)) return;
-  } catch(e) { return; }
 
-  sheet.hidden = false;
-  const close = (allowNotif) => {
+  function forceClose(){
     try { localStorage.setItem(KEY, '1'); } catch(e) {}
     sheet.hidden = true;
-    if(allowNotif && 'Notification' in window && Notification.permission === 'default'){
-      try { Notification.requestPermission(); } catch(e) {}
+    sheet.setAttribute('hidden', '');
+    sheet.style.display = 'none';
+    sheet.classList.add('perm-sheet--closed');
+    sheet.setAttribute('aria-hidden', 'true');
+  }
+
+  try {
+    if(localStorage.getItem(KEY)){
+      forceClose();
+      return;
+    }
+  } catch(e) {
+    forceClose();
+    return;
+  }
+
+  sheet.hidden = false;
+  sheet.style.display = '';
+  sheet.classList.remove('perm-sheet--closed');
+
+  const close = (allowNotif) => {
+    forceClose();
+    if(allowNotif && typeof Notification !== 'undefined' && Notification.permission === 'default'){
+      setTimeout(() => {
+        try { Notification.requestPermission(); } catch(e) {}
+      }, 150);
     }
   };
+
   const allow = document.getElementById('perm-allow');
   const decline = document.getElementById('perm-decline');
-  if(allow) allow.addEventListener('click', () => close(true));
-  if(decline) decline.addEventListener('click', () => close(false));
+  if(allow) allow.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); close(true); });
+  if(decline) decline.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); close(false); });
+  sheet.addEventListener('click', (e) => {
+    if(e.target === sheet) close(false);
+  });
+  document.addEventListener('keydown', function onEsc(e){
+    if(e.key === 'Escape' && !sheet.hidden){
+      close(false);
+      document.removeEventListener('keydown', onEsc);
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
