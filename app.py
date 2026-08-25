@@ -460,6 +460,7 @@ def inject_globals():
         # Re-enable only after approval with ENABLE_INTERSTITIAL=1.
         "enable_interstitial_ctx": os.environ.get("ENABLE_INTERSTITIAL", "") == "1",
         "csrf_token": session.get("csrf_token", ""),
+        "voice_count_ctx": sum(len(v) for v in VOICES.values()),
     }
 
 
