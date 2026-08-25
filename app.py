@@ -658,19 +658,26 @@ def pricing():
     # if they weren't subscribed at all. Now it's driven by the session's
     # actual plan.
     current_plan = get_plan() or "free"
+    # Annual display = 10× monthly (2 months free). PKR annual from PRO_PRICE_PKR * 10.
+    pro_pkr = int(limits.get("PRO_PRICE_PKR", 840) or 840)
+    pro_plus_pkr = int(limits.get("PRO_PLUS_PRICE_PKR", 1680) or 1680)
     plans = [
         {"id": "free", "name": "Free", "price": limits.get("FREE_PRICE_LABEL", "$0"), "period": "forever",
-         "pkr": None,
+         "pkr": None, "price_annual": None, "pkr_annual": None,
          "limits": free_features,
          "cta": "Current plan" if current_plan == "free" else "Downgrade automatically at renewal",
          "cta_url": None},
         {"id": "pro", "name": "Pro", "price": limits.get("PRO_PRICE_USD_LABEL", "$3"), "period": "/month",
+         "price_annual": limits.get("PRO_PRICE_ANNUAL_USD_LABEL", "$30"),
          "pkr": limits.get("PRO_PRICE_LABEL", "840 PKR"),
+         "pkr_annual": f"{pro_pkr * 10} PKR",
          "limits": pro_features,
          "cta": "Current plan" if current_plan == "pro" else "Get Pro",
          "cta_url": None if current_plan == "pro" else url_for("upgrade", plan="pro")},
         {"id": "pro_plus", "name": "Pro+", "price": limits.get("PRO_PLUS_PRICE_USD_LABEL", "$6"), "period": "/month",
+         "price_annual": limits.get("PRO_PLUS_PRICE_ANNUAL_USD_LABEL", "$60"),
          "pkr": limits.get("PRO_PLUS_PRICE_LABEL", "1680 PKR"),
+         "pkr_annual": f"{pro_plus_pkr * 10} PKR",
          "limits": pro_plus_features, "featured": True,
          "cta": "Current plan" if current_plan == "pro_plus" else "Get Pro+",
          "cta_url": None if current_plan == "pro_plus" else url_for("upgrade", plan="pro_plus")},
