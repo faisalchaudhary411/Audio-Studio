@@ -231,8 +231,10 @@
       return;
     }
     generateBatchBtn.disabled = true;
-    batchStatus.textContent = `Generating ${lines.length} clips…`;
+    generateBatchBtn.classList.add('is-loading');
+    batchStatus.textContent = `Rendering ${lines.length} clips…`;
     batchResult.innerHTML = '';
+    const started = Date.now();
     try {
       const res = await fetch('/api/tts/batch', {
         method: 'POST',
@@ -245,25 +247,40 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        batchStatus.textContent = data.error || 'Something went wrong.';
+        const msg = data.error || 'Something went wrong.';
+        if (res.status === 429 || /limit|quota|daily/i.test(msg)) {
+          batchStatus.textContent = '';
+          batchResult.innerHTML = `<div class="limit-toast">${msg} <a href="/pricing" style="color:var(--brass-hi);margin-left:6px;">Upgrade →</a></div>`;
+        } else {
+          batchStatus.textContent = msg;
+        }
         return;
       }
-      batchStatus.textContent = `${data.clips.length} clip(s) ready`;
-      const clipsHtml = data.clips.map(c => `
-        <div style="border-top:1px solid var(--line);padding:10px 0;">
-          <div style="font-size:0.85rem;color:var(--brass-hi);font-family:var(--mono);">CLIP ${c.idx}</div>
-          <div style="font-size:0.88rem;color:var(--text-mid);font-style:italic;margin:4px 0;overflow-wrap:anywhere;word-break:break-word;">"${c.text.slice(0,80)}"</div>
-          <audio controls style="width:100%;" src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
+      const secs = ((Date.now() - started) / 1000).toFixed(1);
+      batchStatus.textContent = `${data.clips.length} clips ready · ${secs}s`;
+      batchResult.innerHTML = `
+        <div class="result-panel">
+          <div class="result-panel__label">${data.clips.length} narrations</div>
+          <div class="batch-clips">
+            ${data.clips.map(c => `
+              <div class="batch-clip">
+                <div class="batch-clip__idx">Clip ${c.idx}</div>
+                <div class="batch-clip__text">“${(c.text || '').slice(0, 100)}${(c.text || '').length > 100 ? '…' : ''}”</div>
+                <audio controls src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
+                <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
+                   download="${c.filename || ('clip-' + c.idx + '.mp3')}" href="data:audio/mpeg;base64,${c.audio_b64}">Download MP3</a>
+              </div>
+            `).join('')}
+          </div>
+          ${data.zip_b64 ? `<a class="btn btn--brass btn--sm" style="margin-top:14px;display:inline-flex;"
+             download="${data.zip_filename || 'voxcraft-batch.zip'}" href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>` : ''}
         </div>
-      `).join('');
-      batchResult.innerHTML = clipsHtml + `
-        <a class="btn btn--brass btn--sm" style="margin-top:14px;display:inline-flex;"
-           download="${data.zip_filename}" href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>
       `;
     } catch (e) {
-      batchStatus.textContent = 'Network error — check your connection.';
+      batchStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
       generateBatchBtn.disabled = false;
+      generateBatchBtn.classList.remove('is-loading');
     }
   });
 })();

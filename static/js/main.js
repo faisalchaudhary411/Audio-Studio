@@ -185,10 +185,26 @@ function initNavMore(){
   });
 }
 
+// ---- Sticky mobile CTA after scrolling past hero ----
+function initStickyCta(){
+  const bar = document.getElementById('sticky-cta');
+  if(!bar) return;
+  if(!document.querySelector('.hero')) return; // homepage only
+  bar.hidden = false;
+  const onScroll = () => {
+    const show = window.scrollY > 420;
+    bar.classList.toggle('is-visible', show);
+    document.body.classList.toggle('has-sticky-cta', show);
+  };
+  window.addEventListener('scroll', onScroll, {passive: true});
+  onScroll();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initWave();
   initStudio();
   initNavToggle();
   initNavMore();
   initVoicePreviews();
+  initStickyCta();
 });
