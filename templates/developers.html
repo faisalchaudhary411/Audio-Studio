@@ -73,12 +73,56 @@
 
   <div class="panel" style="margin:20px 0;">
     <span class="panel__label">Example request</span>
-    <pre style="background:var(--ink);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:0.82rem;color:#9cdcfe;margin-top:10px;white-space:pre-wrap;">curl -X POST https://voxcraft.site/api/v1/tts \
+    <div style="display:flex;gap:6px;margin:10px 0 0;">
+      <button type="button" class="lang-tab lang-tab--active" data-lang="curl" onclick="voxSwitchLangTab(this,'curl')">cURL</button>
+      <button type="button" class="lang-tab" data-lang="python" onclick="voxSwitchLangTab(this,'python')">Python</button>
+      <button type="button" class="lang-tab" data-lang="js" onclick="voxSwitchLangTab(this,'js')">Node.js</button>
+    </div>
+    <pre class="lang-pane" data-lang="curl" style="background:var(--ink);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:0.82rem;color:#9cdcfe;margin-top:10px;white-space:pre-wrap;">curl -X POST https://voxcraft.site/api/v1/tts \
   -H "Authorization: Bearer vox_live_your_key_here" \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello world", "voice_id": "en-US-AvaNeural"}' \
   --output speech.mp3</pre>
+    <pre class="lang-pane" data-lang="python" style="display:none;background:var(--ink);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:0.82rem;color:#9cdcfe;margin-top:10px;white-space:pre-wrap;">import requests
+
+response = requests.post(
+    "https://voxcraft.site/api/v1/tts",
+    headers={"Authorization": "Bearer vox_live_your_key_here"},
+    json={"text": "Hello world", "voice_id": "en-US-AvaNeural"},
+)
+with open("speech.mp3", "wb") as f:
+    f.write(response.content)
+
+print("Quota remaining:", response.headers.get("X-Quota-Remaining"))</pre>
+    <pre class="lang-pane" data-lang="js" style="display:none;background:var(--ink);border-radius:8px;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:0.82rem;color:#9cdcfe;margin-top:10px;white-space:pre-wrap;">const fs = require("fs");
+
+const response = await fetch("https://voxcraft.site/api/v1/tts", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer vox_live_your_key_here",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ text: "Hello world", voice_id: "en-US-AvaNeural" }),
+});
+
+const buffer = Buffer.from(await response.arrayBuffer());
+fs.writeFileSync("speech.mp3", buffer);
+
+console.log("Quota remaining:", response.headers.get("X-Quota-Remaining"));</pre>
   </div>
+
+  <script>
+    function voxSwitchLangTab(btn, lang) {
+      const container = btn.closest('.panel');
+      container.querySelectorAll('.lang-tab').forEach(t => t.classList.remove('lang-tab--active'));
+      btn.classList.add('lang-tab--active');
+      container.querySelectorAll('.lang-pane').forEach(p => { p.style.display = (p.dataset.lang === lang) ? 'block' : 'none'; });
+    }
+  </script>
+  <style>
+    .lang-tab{background:transparent;border:1px solid var(--line);color:var(--text-dim);font-family:var(--mono);font-size:0.78rem;padding:6px 14px;border-radius:6px 6px 0 0;cursor:pointer;}
+    .lang-tab--active{background:var(--ink);color:var(--brass-hi);border-color:var(--brass);}
+  </style>
 
   <div class="panel" style="margin:20px 0;">
     <span class="panel__label">Response</span>

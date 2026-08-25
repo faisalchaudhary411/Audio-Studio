@@ -42,6 +42,14 @@
 {% if adsense_publisher_id and not is_pro_ctx %}
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-{{ adsense_publisher_id }}" crossorigin="anonymous"></script>
 {% endif %}
+{# Plausible: privacy-friendly analytics — no cookies, no consent banner
+   needed (unlike GA4), which matters since this site has no cookie
+   consent UI. Inert until PLAUSIBLE_DOMAIN is set on the server — same
+   env-var-gated pattern as adsense_publisher_id above, so this can ship
+   now and get turned on later with zero further code changes. #}
+{% if plausible_domain %}
+<script defer data-domain="{{ plausible_domain }}" src="https://plausible.io/js/script.js"></script>
+{% endif %}
 </head>
 <body class="{% block bodyclass %}{% endblock %} {% if not is_pro_ctx %}has-sticky-ad{% endif %}">
 
