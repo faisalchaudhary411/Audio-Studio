@@ -90,7 +90,7 @@
   <div class="section__head">
     <span class="section__eyebrow">Voice library</span>
     <h2 class="section__title">A voice for every region, not an afterthought.</h2>
-    <p class="section__sub">88 voices across 27 languages. South Asian languages are first-class here — not a bolt-on translation layer.</p>
+    <p class="section__sub">{{ voice_count }} voices across {{ language_count }} languages. South Asian languages are first-class here — not a bolt-on translation layer.</p>
   </div>
   <div class="voice-grid">
     {% for v in featured_voices %}
@@ -104,7 +104,7 @@
     {% endfor %}
   </div>
   <div style="margin-top:24px;text-align:center;">
-    <a href="{{ url_for('studio') }}" class="btn btn--ghost">See all 88 voices in Studio</a>
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost">See all {{ voice_count }} voices in Studio</a>
   </div>
 </section>
 

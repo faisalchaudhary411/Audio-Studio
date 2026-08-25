@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}VoxCraft API — Text-to-Speech for Developers{% endblock %}
-{% block meta_description %}Add multilingual text-to-speech to your own app with a simple REST API. Fixed monthly character plans, 40+ languages, no complex billing setup.{% endblock %}
+{% block meta_description %}Add multilingual text-to-speech to your own app with a simple REST API. Fixed monthly character plans, 27 languages, no complex billing setup.{% endblock %}
 
 {% block content %}
 <div class="section" style="padding-bottom:0;">
   <div class="section__head">
     <span class="section__eyebrow">Developer API</span>
     <h1 class="section__title">Add voice to your own app</h1>
-    <p class="section__sub">A simple REST API for VoxCraft's text-to-speech engine — one endpoint, 40+ languages, no account dashboard to configure. Keys are issued automatically — no waiting on us.</p>
+    <p class="section__sub">A simple REST API for VoxCraft's text-to-speech engine — one endpoint, 27 languages, no account dashboard to configure. Keys are issued automatically — no waiting on us.</p>
   </div>
 </div>
 
@@ -135,7 +135,7 @@ X-Quota-Remaining: 198550</pre>
 
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Discover available voices</h2>
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
-    <code>GET /api/v1/voices</code> (same Bearer auth) returns every valid <code>voice_id</code> across all 40+ supported languages, so you can build a voice picker without hardcoding a list or reading separate docs.
+    <code>GET /api/v1/voices</code> (same Bearer auth) returns every valid <code>voice_id</code> across all 27 supported languages, so you can build a voice picker without hardcoding a list or reading separate docs.
   </p>
 
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Limits, plainly stated</h2>
@@ -159,7 +159,7 @@ X-Quota-Remaining: 198550</pre>
     </details>
     <details style="margin-top:10px;">
       <summary>What languages are supported?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;">The same 40+ languages available in <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a>, including particular attention to Urdu and Hindi voice quality. Call <code>GET /api/v1/voices</code> for the exact current list.</p>
+      <p style="color:var(--text-mid);line-height:1.7;">The same 27 languages available in <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a>, including particular attention to Urdu and Hindi voice quality. Call <code>GET /api/v1/voices</code> for the exact current list.</p>
     </details>
     <details style="margin-top:10px;">
       <summary>Can I use the API for commercial products?</summary>
@@ -182,7 +182,7 @@ X-Quota-Remaining: 198550</pre>
   "@type": "FAQPage",
   "mainEntity": [
     {"@type": "Question", "name": "How do I get an API key?", "acceptedAnswer": {"@type": "Answer", "text": "Free keys are issued instantly with just a name and email. Starter and Pro keys are emailed automatically as soon as payment succeeds."}},
-    {"@type": "Question", "name": "What languages are supported?", "acceptedAnswer": {"@type": "Answer", "text": "The same 40+ languages available in Voice Studio. GET /api/v1/voices returns the exact current list."}},
+    {"@type": "Question", "name": "What languages are supported?", "acceptedAnswer": {"@type": "Answer", "text": "The same 27 languages available in Voice Studio. GET /api/v1/voices returns the exact current list."}},
     {"@type": "Question", "name": "Can I use the API for commercial products?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, audio generated through the API can be used in commercial applications."}},
     {"@type": "Question", "name": "What happens if I exceed my monthly quota?", "acceptedAnswer": {"@type": "Answer", "text": "Requests return a 429 error until the quota resets next month or the plan is upgraded."}},
     {"@type": "Question", "name": "Is voice cloning or transcription available through the API?", "acceptedAnswer": {"@type": "Answer", "text": "Not yet, the API currently covers text-to-speech only."}}
