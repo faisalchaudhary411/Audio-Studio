@@ -200,6 +200,26 @@ function initStickyCta(){
   onScroll();
 }
 
+// ---- Pricing monthly / annual display toggle ----
+function initBillingToggle(){
+  const monthBtn = document.getElementById('bill-month');
+  const yearBtn = document.getElementById('bill-year');
+  if(!monthBtn || !yearBtn) return;
+  const setAnnual = (on) => {
+    document.body.classList.toggle('is-annual', on);
+    monthBtn.classList.toggle('is-active', !on);
+    yearBtn.classList.toggle('is-active', on);
+    document.querySelectorAll('.plan__pkr-annual').forEach(el => {
+      el.style.display = on ? 'block' : 'none';
+    });
+    document.querySelectorAll('.plan__pkr-month').forEach(el => {
+      el.style.display = on ? 'none' : 'block';
+    });
+  };
+  monthBtn.addEventListener('click', () => setAnnual(false));
+  yearBtn.addEventListener('click', () => setAnnual(true));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initWave();
   initStudio();
@@ -207,4 +227,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavMore();
   initVoicePreviews();
   initStickyCta();
+  initBillingToggle();
 });
