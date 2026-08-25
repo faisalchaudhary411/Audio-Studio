@@ -35,8 +35,14 @@
 }
 
 *{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
-html, body { max-width: 100%; overflow-x: hidden; }
+html{scroll-behavior:smooth;overflow-x:hidden;}
+/* overflow-x is intentionally NOT set on body: doing so turns body into
+   its own scroll container in most browsers, which breaks position:sticky
+   on .nav below (it starts sticking relative to body's box instead of the
+   viewport, so the header scrolls away with the page instead of staying
+   pinned). html's overflow-x:hidden alone is enough to stop horizontal
+   overflow/scrollbars. */
+body { max-width: 100%; }
 body{
   margin:0;
   background:
