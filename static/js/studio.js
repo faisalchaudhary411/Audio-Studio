@@ -42,7 +42,8 @@
       if (!tabPanels[key] || !tabButtons[key]) return;
       const active = key === name;
       tabPanels[key].style.display = active ? '' : 'none';
-      tabButtons[key].className = active ? 'btn btn--sm btn--brass' : 'btn btn--sm btn--ghost';
+      tabButtons[key].className = active ? 'btn btn--sm btn--brass is-active' : 'btn btn--sm';
+      tabButtons[key].setAttribute('aria-selected', active ? 'true' : 'false');
     });
   }
   Object.keys(tabButtons).forEach((key) => {
@@ -154,6 +155,8 @@
     generateSingleBtn.classList.add('is-loading');
     singleStatus.textContent = 'Rendering your voiceover…';
     singleResult.innerHTML = '';
+    const progress = document.getElementById('single-progress');
+    if (progress) { progress.classList.add('is-active'); progress.setAttribute('aria-hidden', 'false'); }
     const started = Date.now();
     try {
       const res = await fetch('/api/tts/generate', {
@@ -204,6 +207,7 @@
     } finally {
       generateSingleBtn.disabled = false;
       generateSingleBtn.classList.remove('is-loading');
+      if (progress) { progress.classList.remove('is-active'); progress.setAttribute('aria-hidden', 'true'); }
     }
   }
 
