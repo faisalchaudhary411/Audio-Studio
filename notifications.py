@@ -11,6 +11,15 @@ import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+# Sender identity for every outgoing email below. Was hardcoded to Resend's
+# shared "onboarding@resend.dev" test address in 8 separate places — that
+# domain isn't yours, so Resend either lands it in spam or, depending on
+# account mode, silently refuses to send to anyone but your own verified
+# account email. Now that voxcraft.site is verified in Resend, this single
+# constant is the one place to change if you ever want a different sender
+# address (e.g. "hello@voxcraft.site") — everything below reads from it.
+EMAIL_FROM = os.environ.get("RESEND_FROM_EMAIL", "VoxCraft <noreply@voxcraft.site>").strip()
+
 
 def _secret(key: str) -> str:
     return os.environ.get(key, "").strip()
@@ -68,7 +77,7 @@ Approve here: {admin_link}
                 )
                 attachments = [{"filename": "payment_proof.jpg", "content": screenshot_b64, "content_type": "image/jpeg", "inline": True, "content_id": "payment_screenshot"}]
 
-            payload = {"from": "VoxCraft <onboarding@resend.dev>", "to": [admin_email],
+            payload = {"from": EMAIL_FROM, "to": [admin_email],
                        "subject": f"New Pro Payment — {name}", "html": admin_html, "text": message_body}
             if attachments:
                 payload["attachments"] = attachments
@@ -100,7 +109,7 @@ Approve here: {admin_link}
                 try:
                     requests.post("https://api.resend.com/emails",
                                    headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                                   json={"from": "VoxCraft <onboarding@resend.dev>", "to": [email],
+                                   json={"from": EMAIL_FROM, "to": [email],
                                          "subject": "Payment Received — VoxCraft Pro", "html": user_html}, timeout=15)
                 except Exception:
                     pass
@@ -160,7 +169,7 @@ def notify_admin_announcement_published(title, ann_type, message, site_url="") -
     try:
         r = requests.post("https://api.resend.com/emails",
                            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [admin_email],
+                           json={"from": EMAIL_FROM, "to": [admin_email],
                                  "subject": f"{type_label} published — {title}", "html": html}, timeout=15)
         return r.status_code in (200, 201)
     except Exception:
@@ -210,7 +219,7 @@ Message:
 </div></body></html>"""
             r = requests.post("https://api.resend.com/emails",
                                headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                               json={"from": "VoxCraft <onboarding@resend.dev>", "to": [admin_email],
+                               json={"from": EMAIL_FROM, "to": [admin_email],
                                      "reply_to": email,
                                      "subject": f"Contact form — {topic_label} — {name}",
                                      "html": html, "text": plain_body}, timeout=15)
@@ -263,7 +272,7 @@ def send_key_email(user_email: str, user_name: str, license_key: str) -> bool:
     try:
         r = requests.post("https://api.resend.com/emails",
                            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [user_email],
+                           json={"from": EMAIL_FROM, "to": [user_email],
                                  "subject": "Your VoxCraft Pro License Key", "html": html}, timeout=15)
         return r.status_code in (200, 201)
     except Exception:
@@ -301,7 +310,7 @@ def send_api_key_email(customer_email: str, customer_name: str, raw_key: str, pl
     try:
         r = requests.post("https://api.resend.com/emails",
                            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [customer_email],
+                           json={"from": EMAIL_FROM, "to": [customer_email],
                                  "subject": "Your VoxCraft API Key", "html": html}, timeout=15)
         return r.status_code in (200, 201)
     except Exception:
@@ -335,7 +344,7 @@ def send_account_setup_email(customer_email: str, customer_name: str, set_passwo
     try:
         r = requests.post("https://api.resend.com/emails",
                            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [customer_email],
+                           json={"from": EMAIL_FROM, "to": [customer_email],
                                  "subject": f"Welcome to {product_label} — set your password", "html": html}, timeout=15)
         return r.status_code in (200, 201)
     except Exception:
@@ -360,7 +369,7 @@ def send_password_reset_email(customer_email: str, customer_name: str, reset_url
     try:
         r = requests.post("https://api.resend.com/emails",
                            headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
-                           json={"from": "VoxCraft <onboarding@resend.dev>", "to": [customer_email],
+                           json={"from": EMAIL_FROM, "to": [customer_email],
                                  "subject": "Reset your VoxCraft password", "html": html}, timeout=15)
         return r.status_code in (200, 201)
     except Exception:

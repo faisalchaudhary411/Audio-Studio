@@ -16,3 +16,4 @@ pytesseract>=0.3.10
 librosa==0.10.2.post1
 soundfile==0.12.1
 psutil==6.0.0
+sentry-sdk[flask]>=2.0.0

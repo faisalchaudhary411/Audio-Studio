@@ -137,6 +137,23 @@ if not _secret_key:
     )
 app.secret_key = _secret_key
 
+# MONITORING: optional Sentry error tracking. Same graceful-degradation
+# pattern as RESEND_API_KEY elsewhere — completely inert if SENTRY_DSN
+# isn't set, so this is safe to deploy before you've actually signed up
+# for Sentry. Once you do, every unhandled exception in the app gets a
+# full traceback + request context sent there instead of only ever
+# existing in a gunicorn log file nobody's watching in real time.
+# traces_sample_rate is kept low (10%) since this is a small single-VPS
+# app — full tracing on every request isn't needed to catch errors,
+# just adds overhead. send_default_pii=False is deliberate: don't want
+# customer emails/IPs flowing into a third-party dashboard by default.
+_sentry_dsn = os.environ.get("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.flask import FlaskIntegration
+    sentry_sdk.init(dsn=_sentry_dsn, integrations=[FlaskIntegration()],
+                     traces_sample_rate=0.1, send_default_pii=False)
+
 # HARDENING: on the VPS, Flask sits behind Nginx as a reverse proxy. Without
 # ProxyFix, Flask doesn't know the original request was HTTPS or came from
 # the real client, which breaks secure cookies and url_for(..., _external=True).
@@ -499,6 +516,20 @@ def _bump_monthly_chars(char_count: int):
     if is_pro():
         return
     usage_tracking.bump_monthly_chars(request, char_count)
+
+
+@app.route("/healthz")
+def healthz():
+    """For UptimeRobot (or any external uptime monitor) to ping — checks
+    that the DB is actually reachable, not just that the Flask process is
+    alive. A process can be running and still serving 500s on every real
+    page if the SQLite file got corrupted/locked/deleted; pinging '/'
+    wouldn't necessarily catch that the way a real DB round-trip does."""
+    try:
+        persistence.load_limits()
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "detail": str(e)}), 503
 
 
 @app.route("/")
