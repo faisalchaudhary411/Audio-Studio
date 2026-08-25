@@ -210,46 +210,6 @@ img{max-width:100%;display:block;}
   .notif-dropdown{position:fixed;top:auto;right:10px;left:10px;width:auto;}
 }
 
-/* ===== Top announcement banner — auto-dismissing toast, not a sticky
-   in-flow bar. Previously this was position:static, pushed page content
-   down via body.has-announce-banner, and stayed until manually closed —
-   which is what "sticky notification" referred to. Now it's fixed,
-   overlays content instead of shifting it, slides down on entrance and
-   back up on exit, and auto-dismisses itself after a few seconds. ===== */
-.announce-banner{
-  position:fixed;top:14px;left:50%;
-  width:min(560px, calc(100% - 28px));
-  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
-  padding:12px 16px;background:var(--ink-panel-2);border:1px solid var(--line);
-  border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,0.35);
-  font-size:0.88rem;color:var(--text-hi);
-  z-index:200;
-  transform:translate(-50%, -140%);
-  opacity:0;
-  transition:transform .35s cubic-bezier(.22,1,.36,1), opacity .35s ease;
-  pointer-events:none;
-}
-.announce-banner.is-visible{
-  transform:translate(-50%, 0);
-  opacity:1;
-  pointer-events:auto;
-}
-.announce-banner__badge{
-  font-family:var(--mono);font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;
-  background:var(--jade);color:#04211D;border-radius:999px;padding:3px 10px;font-weight:700;flex-shrink:0;
-}
-.announce-banner__badge--discount{background:var(--brass);color:#1A1204;}
-.announce-banner__text{flex:1;min-width:160px;color:var(--text-mid);}
-.announce-banner__link{color:var(--brass-hi);font-weight:600;flex-shrink:0;}
-.announce-banner__close{
-  background:transparent;border:none;color:var(--text-dim);font-size:1.3rem;line-height:1;
-  cursor:pointer;padding:0 4px;flex-shrink:0;margin-left:auto;
-}
-.announce-banner__close:hover{color:var(--text-hi);}
-@media (max-width:600px){
-  .announce-banner{top:10px;padding:10px 14px;}
-}
-
 .footer{
   border-top:1px solid var(--line);
   padding:0 28px 32px;
