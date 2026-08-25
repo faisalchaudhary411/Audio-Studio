@@ -449,6 +449,7 @@ def inject_globals():
         "canonical_url": canonical_url,
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
+        "plausible_domain": os.environ.get("PLAUSIBLE_DOMAIN", ""),
         # Popunder is OFF by default — deliberately paused while AdSense
         # reviews the site (popunders are on Google/Coalition for Better Ads'
         # disallowed list; running one during review risks rejection). Set
