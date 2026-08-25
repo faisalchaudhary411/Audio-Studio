@@ -18,70 +18,81 @@
   </div>
   <p class="hero__trust">No signup · First voiceover in ~10 seconds · Commercial use allowed</p>
 
-  {# Quick audio samples right in the hero — reuses the same play-button
-     pattern/JS as the full voice library below (initVoicePreviews in
-     main.js), so no separate wiring needed. Real audio files go at
-     /static/audio/previews/<voice-id-lowercase>.mp3 — missing files just
-     disable that one chip instead of breaking anything. #}
-  <div class="sample-chips">
-    <div class="sample-chip">
-      <button class="voice-card__play" data-audio="/static/audio/previews/ur-pk-uzmaneural.mp3" aria-label="Preview Uzma, Urdu">▶</button>
-      Uzma · Urdu
+  {# Large listen cards — primary proof of quality on first screen #}
+  <div class="listen-grid">
+    <button type="button" class="listen-card voice-card__play" data-audio="/static/audio/previews/ur-pk-uzmaneural.mp3" aria-label="Play Uzma, Urdu sample">
+      <span class="listen-card__play">▶</span>
+      <span class="listen-card__body">
+        <span class="listen-card__name">Uzma</span>
+        <span class="listen-card__meta">Urdu · Female · Neural</span>
+      </span>
+      <span class="listen-card__hint">Listen</span>
+    </button>
+    <button type="button" class="listen-card voice-card__play" data-audio="/static/audio/previews/hi-in-swaraneural.mp3" aria-label="Play Swara, Hindi sample">
+      <span class="listen-card__play">▶</span>
+      <span class="listen-card__body">
+        <span class="listen-card__name">Swara</span>
+        <span class="listen-card__meta">Hindi · Female · Neural</span>
+      </span>
+      <span class="listen-card__hint">Listen</span>
+    </button>
+    <button type="button" class="listen-card voice-card__play" data-audio="/static/audio/previews/en-us-jennyneural.mp3" aria-label="Play Jenny, US English sample">
+      <span class="listen-card__play">▶</span>
+      <span class="listen-card__body">
+        <span class="listen-card__name">Jenny</span>
+        <span class="listen-card__meta">US English · Female · Neural</span>
+      </span>
+      <span class="listen-card__hint">Listen</span>
+    </button>
+  </div>
+</section>
+
+<section class="section section--tight" id="how-it-works">
+  <div class="section__head">
+    <span class="section__eyebrow">How it works</span>
+    <h2 class="section__title">Script in. Studio-ready audio out.</h2>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <span class="step__num">01</span>
+      <h3>Drop in your script</h3>
+      <p>Paste text in any supported language. Numerals, loanwords, and mixed Urdu–English are handled automatically.</p>
     </div>
-    <div class="sample-chip">
-      <button class="voice-card__play" data-audio="/static/audio/previews/hi-in-swaraneural.mp3" aria-label="Preview Swara, Hindi">▶</button>
-      Swara · Hindi
+    <div class="step">
+      <span class="step__num">02</span>
+      <h3>Pick a neural voice</h3>
+      <p>{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages — rate and pitch controls without SSML wrangling.</p>
     </div>
-    <div class="sample-chip">
-      <button class="voice-card__play" data-audio="/static/audio/previews/en-us-jennyneural.mp3" aria-label="Preview Jenny, US English">▶</button>
-      Jenny · US English
+    <div class="step">
+      <span class="step__num">03</span>
+      <h3>Export clean audio</h3>
+      <p>Download MP3 or WAV, ready for YouTube, shorts, or client delivery.</p>
     </div>
   </div>
 </section>
 
-<div class="chain">
-  <div class="chain__node">
-    <span class="chain__label">01 — Input</span>
-    <h3>Drop in your script</h3>
-    <p>Paste text in any supported language. VoxCraft handles numerals, loanwords, and punctuation cues automatically.</p>
-    {# Replace src with a real screenshot: /static/img/screenshots/step-input.png — hidden automatically if missing. #}
-    <div class="shot-frame"><img src="/static/img/screenshots/step-input.png" alt="Pasting a script into VoxCraft Studio" loading="lazy" onerror="this.parentElement.style.display='none'"></div>
-  </div>
-  <span class="chain__arrow">→</span>
-  <div class="chain__node">
-    <span class="chain__label">02 — Voice</span>
-    <h3>Pick a voice model</h3>
-    <p>Neural voices tuned per-language, with adjustable rate and pitch — no SSML wrangling required.</p>
-    <div class="shot-frame"><img src="/static/img/screenshots/step-voice.png" alt="Choosing a voice in VoxCraft Studio" loading="lazy" onerror="this.parentElement.style.display='none'"></div>
-  </div>
-  <span class="chain__arrow">→</span>
-  <div class="chain__node">
-    <span class="chain__label">03 — Render</span>
-    <h3>Export clean audio</h3>
-    <p>Download MP3 or WAV, ready to drop into your edit — captions-friendly timing included.</p>
-    <div class="shot-frame"><img src="/static/img/screenshots/step-render.png" alt="Downloading rendered audio from VoxCraft Studio" loading="lazy" onerror="this.parentElement.style.display='none'"></div>
-  </div>
-</div>
-
 <section class="section">
   <div class="section__head">
     <span class="section__eyebrow">Why creators switch</span>
-    <h2 class="section__title">Built by someone shipping with it daily.</h2>
+    <h2 class="section__title">Built for daily shipping — not demos.</h2>
+    <p class="section__sub">South Asian languages are first-class. No account wall. No robotic leftovers.</p>
   </div>
-  <div class="chain" style="margin-top:0;">
-    <div class="chain__node">
-      <h3>Handles code-switching natively</h3>
-      <p>Mixed Urdu-English scripts, South Asian names, and local number formats — read the way people actually speak, not mangled by a model trained only on English.</p>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <h3>Code-switching that works</h3>
+      <p>Mixed Urdu–English scripts, local names, and number formats read the way people actually speak.</p>
     </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>No SSML headaches</h3>
-      <p>Rate and pitch controls that actually work — nothing read aloud verbatim.</p>
+    <div class="feature-card">
+      <h3>Controls that behave</h3>
+      <p>Rate and pitch that actually change delivery — nothing spoken as raw markup tags.</p>
     </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>No signup, ever</h3>
-      <p>The free tier works the moment you land here. No account wall between you and your first voiceover.</p>
+    <div class="feature-card">
+      <h3>Start in ten seconds</h3>
+      <p>Free tier needs no signup, no email, no card. Generate the moment you land.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Commercial-ready</h3>
+      <p>Audio you generate is yours — monetized YouTube, client work, and ads included.</p>
     </div>
   </div>
 </section>
