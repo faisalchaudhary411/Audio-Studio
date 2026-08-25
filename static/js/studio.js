@@ -132,13 +132,29 @@
   function renderHistory() {
     const items = loadHistory();
     if (!items.length) { historyList.innerHTML = ''; return; }
-    historyList.innerHTML = '<p class="panel__label">Recent generations</p>' + items.map((item, i) => `
-      <div style="border-top:1px solid var(--line);padding:10px 0;">
-        <div style="font-size:0.88rem;color:var(--text-mid);overflow-wrap:anywhere;word-break:break-word;">${item.text}</div>
-        <div style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);margin:4px 0 6px;">${item.size_kb} KB · ${item.time}</div>
-        <audio controls style="width:100%;" src="data:audio/mpeg;base64,${item.audio_b64}"></audio>
-      </div>
-    `).join('');
+    historyList.innerHTML = `
+      <div class="history">
+        <div class="history__head">
+          <span class="panel__label" style="margin:0;">Recent generations</span>
+          <button type="button" class="history__clear" id="history-clear">Clear</button>
+        </div>
+        <div class="history__list">
+          ${items.map((item) => `
+            <div class="history-item">
+              <div class="history-item__text">${item.text || ''}</div>
+              <div class="history-item__meta">${item.size_kb} KB · ${item.time}</div>
+              <audio controls src="data:audio/mpeg;base64,${item.audio_b64}"></audio>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+    const clearBtn = document.getElementById('history-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        localStorage.removeItem('voxcraft_history');
+        renderHistory();
+      });
+    }
   }
   renderHistory();
 
