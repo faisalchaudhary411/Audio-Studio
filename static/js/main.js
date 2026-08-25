@@ -220,6 +220,29 @@ function initBillingToggle(){
   yearBtn.addEventListener('click', () => setAnnual(true));
 }
 
+// ---- First-visit optional permissions sheet ----
+function initPermissionsSheet(){
+  const sheet = document.getElementById('perm-sheet');
+  if(!sheet) return;
+  const KEY = 'voxcraft_perm_seen';
+  try {
+    if(localStorage.getItem(KEY)) return;
+  } catch(e) { return; }
+
+  sheet.hidden = false;
+  const close = (allowNotif) => {
+    try { localStorage.setItem(KEY, '1'); } catch(e) {}
+    sheet.hidden = true;
+    if(allowNotif && 'Notification' in window && Notification.permission === 'default'){
+      try { Notification.requestPermission(); } catch(e) {}
+    }
+  };
+  const allow = document.getElementById('perm-allow');
+  const decline = document.getElementById('perm-decline');
+  if(allow) allow.addEventListener('click', () => close(true));
+  if(decline) decline.addEventListener('click', () => close(false));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initWave();
   initStudio();
@@ -228,4 +251,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initVoicePreviews();
   initStickyCta();
   initBillingToggle();
+  initPermissionsSheet();
 });

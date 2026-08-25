@@ -88,12 +88,13 @@ function notifInitBell(items){
   });
 }
 
-const BANNER_AUTO_DISMISS_MS = 6000; // toast stays visible this long, then slides back out on its own
+const BANNER_AUTO_DISMISS_MS = 12000; // longer so marquee can complete a loop
 
 function notifInitBanner(items){
   const banner = document.getElementById('announce-banner');
   const badgeEl = document.getElementById('announce-banner-badge');
   const textEl = document.getElementById('announce-banner-text');
+  const textDup = document.getElementById('announce-banner-text-dup');
   const linkEl = document.getElementById('announce-banner-link');
   const closeEl = document.getElementById('announce-banner-close');
   if(!banner) return;
@@ -104,7 +105,10 @@ function notifInitBanner(items){
 
   badgeEl.textContent = NOTIF_TYPE_LABEL[pick.type] || 'News';
   badgeEl.className = `announce-banner__badge announce-banner__badge--${pick.type}`;
-  textEl.textContent = `${pick.title} — ${pick.message}`;
+  const line = `${pick.title} — ${pick.message}`;
+  textEl.textContent = line;
+  if(textDup) textDup.textContent = line;
+
   if(pick.link_url){
     linkEl.href = pick.link_url;
     linkEl.textContent = pick.link_text || 'Learn more';
@@ -114,10 +118,6 @@ function notifInitBanner(items){
   }
 
   banner.hidden = false;
-  // Two rAFs, not one — the browser needs a full paint with the element
-  // still at its pre-transition state (opacity:0, translateY) before the
-  // is-visible class is added, or the transition can get collapsed into
-  // the initial paint and the toast just appears instantly with no slide.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     banner.classList.add('is-visible');
   }));
@@ -127,8 +127,6 @@ function notifInitBanner(items){
     if(dismissTimer) clearTimeout(dismissTimer);
     notifDismiss(pick.id);
     banner.classList.remove('is-visible');
-    // Wait for the slide-up/fade-out transition (matches the 0.35s in CSS)
-    // before setting hidden, so it doesn't just vanish mid-animation.
     setTimeout(() => { banner.hidden = true; }, 350);
   }
 
