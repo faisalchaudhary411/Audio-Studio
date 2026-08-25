@@ -191,6 +191,10 @@ img{max-width:100%;display:block;}
   font-family:var(--mono);font-size:0.62rem;font-weight:700;
   display:flex;align-items:center;justify-content:center;line-height:1;
 }
+/* Author `display:flex` above wins over the browser's default
+   [hidden]{display:none}, so the badge showed a literal "0" even when
+   JS set the hidden attribute. This restores hidden behavior. */
+.notif-bell__badge[hidden]{display:none;}
 .notif-dropdown{
   position:absolute;top:calc(100% + 10px);right:0;width:320px;max-width:88vw;
   background:var(--ink-panel);border:1px solid var(--line);border-radius:var(--radius);
