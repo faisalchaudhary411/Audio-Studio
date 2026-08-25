@@ -1,11 +1,11 @@
 // ===== VoxCraft notifications.js =====
 // Fetches /api/announcements (admin-published discounts/updates) and renders
 // them two ways: a bell dropdown (all live announcements) and, for at most
-// one item flagged "banner", a dismissible top strip. No accounts involved —
+// one item flagged "banner", a top ticker. No accounts involved —
 // "read" and "dismissed" state both live in localStorage on this device.
 
-const NOTIF_SEEN_KEY = 'voxcraft_notif_last_seen';   // newest id the visitor has opened the bell to
-const NOTIF_DISMISSED_KEY = 'voxcraft_notif_dismissed'; // banner ids explicitly closed
+const NOTIF_SEEN_KEY = 'voxcraft_notif_last_seen';
+const NOTIF_DISMISSED_KEY = 'voxcraft_notif_dismissed';
 
 function notifGetLastSeen(){
   return parseInt(localStorage.getItem(NOTIF_SEEN_KEY) || '0', 10) || 0;
@@ -24,7 +24,6 @@ function notifDismiss(id){
   const list = notifGetDismissed();
   if(!list.includes(id)){
     list.push(id);
-    // cap so this never grows unbounded for a long-lived visitor
     while(list.length > 50) list.shift();
     localStorage.setItem(NOTIF_DISMISSED_KEY, JSON.stringify(list));
   }
@@ -41,10 +40,10 @@ function notifRenderList(items){
   }
   list.innerHTML = items.map(a => `
     <div class="notif-item">
-      <span class="notif-item__type notif-item__type--${a.type}">${NOTIF_TYPE_LABEL[a.type] || 'News'}</span>
+      <span class="notif-item__type notif-item__type--\( {a.type}"> \){NOTIF_TYPE_LABEL[a.type] || 'News'}</span>
       <div class="notif-item__title">${notifEscape(a.title)}</div>
       <div class="notif-item__msg">${notifEscape(a.message)}</div>
-      ${a.link_url ? `<a class="notif-item__link" href="${notifEscape(a.link_url)}">${notifEscape(a.link_text || 'Learn more')} →</a>` : ''}
+      \( {a.link_url ? `<a class="notif-item__link" href=" \){notifEscape(a.link_url)}">${notifEscape(a.link_text || 'Learn more')} →</a>` : ''}
     </div>
   `).join('');
 }
@@ -76,7 +75,7 @@ function notifInitBell(items){
     dropdown.hidden = !open;
     bell.setAttribute('aria-expanded', open ? 'true' : 'false');
     if(open && items.length){
-      notifSetLastSeen(items[0].id); // items[0] is newest — API returns newest-first
+      notifSetLastSeen(items[0].id);
       badge.hidden = true;
     }
   });
@@ -88,8 +87,6 @@ function notifInitBell(items){
   });
 }
 
-const BANNER_AUTO_DISMISS_MS = 12000; // longer so marquee can complete a loop
-
 function notifInitBanner(items){
   const banner = document.getElementById('announce-banner');
   const badgeEl = document.getElementById('announce-banner-badge');
@@ -97,20 +94,20 @@ function notifInitBanner(items){
   const textDup = document.getElementById('announce-banner-text-dup');
   const linkEl = document.getElementById('announce-banner-link');
   const closeEl = document.getElementById('announce-banner-close');
-  if (!banner) return;
+  if(!banner) return;
 
   const dismissed = notifGetDismissed();
   const pick = items.find(a => a.banner && !dismissed.includes(a.id));
-  if (!pick) return;
+  if(!pick) return;
 
   badgeEl.textContent = NOTIF_TYPE_LABEL[pick.type] || 'News';
   badgeEl.className = `announce-banner__badge announce-banner__badge--${pick.type}`;
 
   const line = `${pick.title} — ${pick.message}`;
   textEl.textContent = line;
-  if (textDup) textDup.textContent = line;
+  if(textDup) textDup.textContent = line;
 
-  if (pick.link_url) {
+  if(pick.link_url){
     linkEl.href = pick.link_url;
     linkEl.textContent = pick.link_text || 'Learn more';
     linkEl.hidden = false;
@@ -119,21 +116,23 @@ function notifInitBanner(items){
   }
 
   banner.hidden = false;
+  document.body.classList.add('has-announce-ticker');
   requestAnimationFrame(() => requestAnimationFrame(() => {
     banner.classList.add('is-visible');
   }));
 
-  let dismissTimer = null;
+  // Stays until user closes (×) or admin expiry (API stops returning it).
+  // No auto-dismiss timer.
   function hideToast(){
-    if (dismissTimer) clearTimeout(dismissTimer);
     notifDismiss(pick.id);
     banner.classList.remove('is-visible');
+    document.body.classList.remove('has-announce-ticker');
     setTimeout(() => { banner.hidden = true; }, 350);
   }
 
-  dismissTimer = setTimeout(hideToast, BANNER_AUTO_DISMISS_MS);
-  closeEl.addEventListener('click', hideToast);
+  if(closeEl) closeEl.addEventListener('click', hideToast);
 }
+
 async function notifInit(){
   try{
     const res = await fetch('/api/announcements');
@@ -143,7 +142,7 @@ async function notifInit(){
     notifInitBell(items);
     notifInitBanner(items);
   } catch(e){
-    // silent — a failed notifications fetch shouldn't break the rest of the page
+    // silent
   }
 }
 
