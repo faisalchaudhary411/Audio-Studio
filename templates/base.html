@@ -120,6 +120,14 @@
 </main>
 
 <footer class="footer">
+  <div class="footer__cta">
+    <div class="footer__cta-copy">
+      <span class="footer__cta-eyebrow">Ready when you are</span>
+      <p class="footer__cta-title">Your next voiceover in about ten seconds.</p>
+    </div>
+    <a href="{{ url_for('studio') }}" class="btn btn--brass">Open Voice Studio</a>
+  </div>
+
   <div class="footer__top">
     <div class="footer__brand-col">
       <a href="{{ url_for('landing') }}" class="footer__brand">
@@ -128,35 +136,39 @@
         </span>
         VoxCraft
       </a>
-      <p class="footer__tagline">Studio-grade Urdu &amp; multilingual voice cloning, text-to-speech and AI music — no signup required to start.</p>
+      <p class="footer__tagline">Neural text-to-speech for Urdu, Hindi, and 25 more languages — built for creators who ship daily. No signup to start.</p>
+      <p class="footer__meta">{{ voice_count_ctx|default(88) }} voices · Commercial use allowed</p>
     </div>
     <div class="footer__col">
       <span class="footer__col-title">Product</span>
       <a href="{{ url_for('studio') }}">Voice Studio</a>
       <a href="{{ url_for('voice_cloning') }}">Voice Cloning</a>
-      <a href="{{ url_for('tools_hub') }}">Tools</a>
+      <a href="{{ url_for('tools_hub') }}">Audio Tools</a>
       <a href="{{ url_for('pricing') }}">Pricing</a>
+      <a href="{{ url_for('activate') }}">Activate license</a>
     </div>
     <div class="footer__col">
       <span class="footer__col-title">Resources</span>
-      <a href="{{ url_for('blog_list') }}">Blog</a>
+      <a href="{{ url_for('blog_list') }}">Blog &amp; guides</a>
       <a href="{{ url_for('developers') }}">Developer API</a>
-      <a href="{{ url_for('how_we_test') }}">How We Test</a>
+      <a href="{{ url_for('landing') }}#voices">Voice library</a>
+      <a href="{{ url_for('how_we_test') }}">How we test</a>
     </div>
     <div class="footer__col">
       <span class="footer__col-title">Company</span>
       <a href="{{ url_for('about') }}">About</a>
       <a href="{{ url_for('contact') }}">Contact</a>
-      <a href="{{ url_for('activate') }}">Activate</a>
-    </div>
-    <div class="footer__col">
-      <span class="footer__col-title">Legal</span>
       <a href="{{ url_for('privacy') }}">Privacy</a>
       <a href="{{ url_for('terms') }}">Terms</a>
     </div>
   </div>
   <div class="footer__bottom">
     <span class="footer__copy">&copy; 2026 VoxCraft — text to voice, crafted.</span>
+    <span class="footer__bottom-links">
+      <a href="{{ url_for('privacy') }}">Privacy</a>
+      <a href="{{ url_for('terms') }}">Terms</a>
+      <a href="{{ url_for('contact') }}">Support</a>
+    </span>
   </div>
 </footer>
 
