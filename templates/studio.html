@@ -22,17 +22,17 @@
     {% endif %}
     <span class="panel__label">Voice &amp; language</span>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <select id="language-select" class="admin-input" style="width:100%;font-family:var(--body);padding:10px;">
+      <select id="language-select" class="studio-select" aria-label="Language">
         {% for lang in voices.keys() %}
         <option value="{{ lang }}">{{ lang }}</option>
         {% endfor %}
       </select>
-      <select id="voice-select" class="admin-input" style="width:100%;font-family:var(--body);padding:10px;"></select>
+      <select id="voice-select" class="studio-select" aria-label="Voice"></select>
     </div>
 
     <div style="margin-top:16px;">
       <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Speed: <span id="speed-label">100%</span></label>
-      <input id="speed-slider" type="range" min="50" max="200" step="5" value="100" style="width:100%;">
+      <input id="speed-slider" class="studio-range" type="range" min="50" max="200" step="5" value="100">
     </div>
 
     <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
@@ -49,11 +49,11 @@
 
   <div class="panel">
     <span class="panel__label">Mode</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn--sm btn--brass" id="tab-single-btn">Single</button>
-      <button class="btn btn--sm btn--ghost" id="tab-batch-btn">Batch</button>
-      <button class="btn btn--sm btn--ghost" id="tab-clone-btn">Clone voice {% if not has_clone_music_ctx %}🔒{% endif %}</button>
-      <button class="btn btn--sm btn--ghost" id="tab-music-btn">Music {% if not has_clone_music_ctx %}🔒{% endif %}</button>
+    <div class="mode-tabs" role="tablist">
+      <button type="button" class="btn btn--sm btn--brass is-active" id="tab-single-btn" role="tab" aria-selected="true">Single</button>
+      <button type="button" class="btn btn--sm" id="tab-batch-btn" role="tab" aria-selected="false">Batch</button>
+      <button type="button" class="btn btn--sm" id="tab-clone-btn" role="tab" aria-selected="false">Clone {% if not has_clone_music_ctx %}🔒{% endif %}</button>
+      <button type="button" class="btn btn--sm" id="tab-music-btn" role="tab" aria-selected="false">Music {% if not has_clone_music_ctx %}🔒{% endif %}</button>
     </div>
   </div>
 </div>
@@ -83,6 +83,7 @@
       <button class="btn btn--brass" id="generate-single-btn">Generate speech</button>
       <span class="render-status" data-single-status></span>
     </div>
+    <div class="gen-progress" id="single-progress" aria-hidden="true"><div class="gen-progress__bar"></div></div>
     <div id="single-result" style="margin-top:16px;"></div>
     <p class="privacy-note">Scripts are processed to generate audio and are not kept for training or marketing. Generated files stay in your browser session only.</p>
     <div id="history-list" style="margin-top:20px;"></div>
