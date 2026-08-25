@@ -2276,20 +2276,21 @@ def api_generate():
     lim = get_limits()
     char_limit_widget = None if is_pro() else lim["FREE_CHAR_LIMIT"]
     if char_limit_widget and len(text) > char_limit_widget:
-        return jsonify({"error": f"Free plan is capped at {char_limit_widget:,} characters per generation. Upgrade to Pro for unlimited length."}), 402
+        return jsonify({"error": f"Free plan allows up to {char_limit_widget:,} characters per generation. Shorten the script, or upgrade for unlimited length."}), 429
 
     if _would_exceed_monthly_quota(len(text), lim["FREE_MONTHLY_CHAR_QUOTA"]):
-        return jsonify({"error": f"Free plan's monthly quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters is used up. Upgrade to Pro for unlimited, or wait until next month."}), 402
+        return jsonify({"error": f"Monthly free quota ({lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters) is used up. It resets next month — or upgrade for unlimited."}), 429
 
     if not _under_limit("usage_singles", lim["FREE_DAILY_ACTIONS"]):
-        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Upgrade to Pro for unlimited."}), 402
+        return jsonify({"error": f"Daily free limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Resets at midnight UTC — or upgrade for unlimited."}), 429
 
     rate_str = f"{speed_pct - 100:+d}%"
     text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
     try:
         audio = tts_dispatch(text, voice_id, rate=rate_str, ssml_mode=ssml_mode, speed_pct=speed_pct)
     except Exception as e:
-        return jsonify({"error": f"Error generating audio: {str(e)}"}), 500
+        # Don't leak internal stack traces to the client
+        return jsonify({"error": "Could not generate audio right now. Please try again in a moment."}), 500
 
     _bump_counter("usage_singles")
     _bump_monthly_chars(len(text))
