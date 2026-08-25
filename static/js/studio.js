@@ -151,8 +151,10 @@
 
   async function runSingleGeneration() {
     generateSingleBtn.disabled = true;
-    singleStatus.textContent = 'Generating…';
+    generateSingleBtn.classList.add('is-loading');
+    singleStatus.textContent = 'Rendering your voiceover…';
     singleResult.innerHTML = '';
+    const started = Date.now();
     try {
       const res = await fetch('/api/tts/generate', {
         method: 'POST',
@@ -166,14 +168,27 @@
       });
       const data = await res.json();
       if (!res.ok) {
-        singleStatus.textContent = data.error || 'Something went wrong.';
+        const msg = data.error || 'Something went wrong.';
+        // Friendlier limit messaging for a premium feel
+        if (res.status === 429 || /limit|quota|daily/i.test(msg)) {
+          singleStatus.innerHTML = '';
+          singleResult.innerHTML = `<div class="limit-toast">${msg} <a href="/pricing" style="color:var(--brass-hi);margin-left:6px;">Upgrade for unlimited →</a></div>`;
+        } else {
+          singleStatus.textContent = msg;
+        }
         return;
       }
-      singleStatus.textContent = `Generated · ${data.size_kb} KB`;
+      const secs = ((Date.now() - started) / 1000).toFixed(1);
+      singleStatus.textContent = `Ready · ${data.size_kb} KB · ${secs}s`;
       singleResult.innerHTML = `
-        <audio controls style="width:100%;" src="data:audio/mpeg;base64,${data.audio_b64}"></audio>
-        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-           download="${data.filename}" href="data:audio/mpeg;base64,${data.audio_b64}">Download MP3</a>
+        <div class="result-panel">
+          <div class="result-panel__label">Your narration</div>
+          <audio controls src="data:audio/mpeg;base64,${data.audio_b64}"></audio>
+          <div class="result-panel__actions">
+            <a class="btn btn--brass btn--sm" download="${data.filename}" href="data:audio/mpeg;base64,${data.audio_b64}">Download MP3</a>
+            <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
+          </div>
+        </div>
       `;
       const items = loadHistory();
       items.unshift({
@@ -185,9 +200,10 @@
       saveHistory(items);
       renderHistory();
     } catch (e) {
-      singleStatus.textContent = 'Network error — check your connection.';
+      singleStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
       generateSingleBtn.disabled = false;
+      generateSingleBtn.classList.remove('is-loading');
     }
   }
 

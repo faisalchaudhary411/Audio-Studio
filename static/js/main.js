@@ -163,9 +163,32 @@ function initVoicePreviews(){
   });
 }
 
+// ---- "More" dropdown in desktop nav ----
+function initNavMore(){
+  const wrap = document.getElementById('nav-more');
+  const btn = document.getElementById('nav-more-btn');
+  if(!wrap || !btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = wrap.classList.toggle('is-open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', () => {
+    wrap.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  wrap.querySelectorAll('a').forEach(a => {
+    a.addEventListener('click', () => {
+      wrap.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initWave();
   initStudio();
   initNavToggle();
+  initNavMore();
   initVoicePreviews();
 });
