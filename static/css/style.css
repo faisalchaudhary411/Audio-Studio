@@ -1204,7 +1204,7 @@ main{min-height:50vh;}
 }
 .voices-cta{margin-top:28px;text-align:center;}
 
-/* ===== News / discount ticker (horizontal marquee) ===== */
+/* ===== News / discount ticker ===== */
 .announce-banner{
   position:fixed;
   top:0; left:0; right:0;
@@ -1212,11 +1212,10 @@ main{min-height:50vh;}
   display:flex;
   align-items:center;
   gap:10px;
-  height:44px;
+  height:40px;
   padding:0 12px;
   background:#121820;
-  border-bottom:1px solid rgba(232,169,60,0.35);
-  box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  border-bottom:1px solid rgba(232,169,60,0.4);
   transform:translateY(-110%);
   opacity:0;
   transition:transform .35s ease, opacity .35s ease;
@@ -1228,22 +1227,32 @@ main{min-height:50vh;}
   opacity:1;
   pointer-events:auto;
 }
+
+/* Push header + page down so ticker does not cover nav */
+body.has-announce-ticker{
+  padding-top:40px;
+}
+body.has-announce-ticker .nav{
+  top:40px;
+}
+
 .announce-banner__badge{
   flex-shrink:0;
   font-family:var(--mono);
-  font-size:0.65rem;
+  font-size:0.62rem;
   font-weight:700;
   letter-spacing:0.06em;
   text-transform:uppercase;
   background:var(--jade);
   color:#04211D;
   border-radius:999px;
-  padding:4px 10px;
+  padding:3px 9px;
 }
 .announce-banner__badge--discount{
   background:var(--brass);
   color:#1A1204;
 }
+
 .announce-banner__track{
   flex:1;
   min-width:0;
@@ -1251,48 +1260,53 @@ main{min-height:50vh;}
   height:100%;
   display:flex;
   align-items:center;
+  mask-image:linear-gradient(90deg, transparent, #000 2%, #000 98%, transparent);
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 2%, #000 98%, transparent);
 }
+
 .announce-banner__marquee{
   display:flex;
+  flex-wrap:nowrap;
   width:max-content;
   align-items:center;
-  animation:tickerScroll 22s linear infinite;
+  will-change:transform;
+  animation:tickerScroll 28s linear infinite;
 }
+
 .announce-banner__text{
-  flex:none;
+  flex:0 0 auto;
   display:inline-block;
   white-space:nowrap;
-  color:var(--text-mid);
-  font-size:0.88rem;
-  padding-right:3rem;
-  line-height:1.3;
+  color:#c5cdd4;
+  font-size:0.85rem;
+  padding-right:4rem;
+  line-height:40px;
 }
+
 .announce-banner__link{
   flex-shrink:0;
   color:var(--brass-hi);
   font-weight:600;
-  font-size:0.82rem;
+  font-size:0.8rem;
   white-space:nowrap;
 }
 .announce-banner__close{
   flex-shrink:0;
   background:transparent;
   border:none;
-  color:var(--text-dim);
-  font-size:1.25rem;
+  color:#8a949c;
+  font-size:1.2rem;
   line-height:1;
   cursor:pointer;
-  padding:4px 6px;
+  padding:4px;
 }
-.announce-banner__close:hover{color:var(--text-hi);}
+.announce-banner__close:hover{ color:#fff; }
 
 @keyframes tickerScroll{
-  0%{ transform:translateX(0); }
-  100%{ transform:translateX(-50%); }
+  0%   { transform:translateX(0); }
+  100% { transform:translateX(-50%); }
 }
 
 @media (prefers-reduced-motion: reduce){
   .announce-banner__marquee{ animation:none; }
-  .announce-banner__text{ white-space:normal; }
-  #announce-banner-text-dup{ display:none; }
 }
