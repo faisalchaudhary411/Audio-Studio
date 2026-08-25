@@ -1,8 +1,8 @@
   <div class="panel">
     <span class="panel__label">Transcribe</span>
     <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Converts speech in an audio file to text. Supports WAV, MP3, M4A, OGG, FLAC — up to 10MB. Long files are processed in chunks, so it works for anything from a voice memo to a full interview.</p>
-    <input type="file" id="transcribe-file" accept=".wav,.mp3,.m4a,.ogg,.flac" style="margin-bottom:10px;">
-    <select id="transcribe-lang" class="admin-input" style="width:100%;padding:10px;font-family:var(--body);margin-bottom:10px;">
+    <input type="file" class="file-input" id="transcribe-file" accept=".wav,.mp3,.m4a,.ogg,.flac" < class="file-input" style="margin-bottom:12px;">
+    <select id="transcribe-lang" class="studio-select" style="margin-bottom:12px;">
       {% for name, code in lang_options.items() %}
       <option value="{{ code }}">{{ name }}</option>
       {% endfor %}
