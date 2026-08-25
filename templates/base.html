@@ -12,7 +12,7 @@
 <link rel="icon" type="image/png" sizes="96x96" href="{{ url_for('static', filename='favicons/favicon-96x96.png') }}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
 <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
-<meta name="theme-color" content="#101820">
+<meta name="theme-color" content="#0c1117">
 <meta name="description" content="{% block meta_description %}VoxCraft — multilingual text-to-speech and practical online audio tools for creators.{% endblock %}">
 
 <!-- Tells Google which URL is the "real" one when a page is reachable
@@ -61,23 +61,28 @@
     VoxCraft
   </a>
   <nav class="nav__links" id="nav-links">
-    <a href="{{ url_for('landing') }}">Home</a>
-    <a href="{{ url_for('studio') }}">Voice Studio</a>
+    <a href="{{ url_for('studio') }}" class="is-primary">Voice Studio</a>
     <a href="{{ url_for('tools_hub') }}">Tools</a>
     <a href="{{ url_for('pricing') }}">Pricing</a>
-    <a href="{{ url_for('blog_list') }}">Blog</a>
-    <a href="{{ url_for('landing') }}#voices">Voices</a>
-    <a href="{{ url_for('developers') }}">Developer API</a>
+    <div class="nav__more" id="nav-more">
+      <button type="button" class="nav__more-btn" id="nav-more-btn" aria-expanded="false" aria-haspopup="true">More ▾</button>
+      <div class="nav__more-menu" id="nav-more-menu" role="menu">
+        <a href="{{ url_for('landing') }}#voices" role="menuitem">Voices</a>
+        <a href="{{ url_for('blog_list') }}" role="menuitem">Blog</a>
+        <a href="{{ url_for('developers') }}" role="menuitem">Developer API</a>
+        <a href="{{ url_for('voice_cloning') }}" role="menuitem">Voice Cloning</a>
+        <a href="{{ url_for('about') }}" role="menuitem">About</a>
+      </div>
+    </div>
     {% if plan_ctx == 'pro_plus' %}
-    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro+">{{ license_name_ctx|truncate(14, True, '') }} · Pro+ ✓</a>
+    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro+">{{ license_name_ctx|truncate(14, True, '') }} · Pro+</a>
     {% elif plan_ctx == 'pro' %}
-    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro">{{ license_name_ctx|truncate(14, True, '') }} · Pro ✓</a>
+    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro">{{ license_name_ctx|truncate(14, True, '') }} · Pro</a>
     {% else %}
     <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">Get Pro</a>
-    <a href="{{ url_for('activate') }}">Activate</a>
     {% endif %}
     {% if account_email_ctx %}
-    <a href="{{ url_for('account_dashboard') }}" title="{{ account_email_ctx }}">My Account</a>
+    <a href="{{ url_for('account_dashboard') }}" title="{{ account_email_ctx }}">Account</a>
     {% else %}
     <a href="{{ url_for('account_login') }}">Log In</a>
     {% endif %}

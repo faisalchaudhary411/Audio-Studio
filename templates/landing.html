@@ -16,7 +16,7 @@
     <a href="{{ url_for('studio') }}" class="btn btn--brass">Start creating — free</a>
     <a href="{{ url_for('pricing') }}" class="btn btn--ghost">See pricing</a>
   </div>
-  <p style="color:var(--text-dim);font-size:0.85rem;margin-top:10px;">No signup — generate your first voiceover in 10 seconds.</p>
+  <p class="hero__trust">No signup · First voiceover in ~10 seconds · Commercial use allowed</p>
 
   {# Quick audio samples right in the hero — reuses the same play-button
      pattern/JS as the full voice library below (initVoicePreviews in
@@ -90,7 +90,7 @@
   <div class="section__head">
     <span class="section__eyebrow">Voice library</span>
     <h2 class="section__title">A voice for every region, not an afterthought.</h2>
-    <p class="section__sub">{{ voice_count }} voices across {{ language_count }} languages. South Asian languages are first-class here — not a bolt-on translation layer.</p>
+    <p class="section__sub">{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages. South Asian languages are first-class here — not a bolt-on translation layer.</p>
   </div>
   <div class="voice-grid">
     {% for v in featured_voices %}
@@ -103,8 +103,8 @@
     </div>
     {% endfor %}
   </div>
-  <div style="margin-top:24px;text-align:center;">
-    <a href="{{ url_for('studio') }}" class="btn btn--ghost">See all {{ voice_count }} voices in Studio</a>
+  <div style="margin-top:28px;text-align:center;">
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost">See all {{ voice_count|default(88) }} voices in Studio</a>
   </div>
 </section>
 
