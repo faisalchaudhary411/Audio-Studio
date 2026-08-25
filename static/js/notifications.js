@@ -95,6 +95,10 @@ function notifInitBanner(items){
   const badgeEl = document.getElementById('announce-banner-badge');
   const textEl = document.getElementById('announce-banner-text');
   const textDup = document.getElementById('announce-banner-text-dup');
+  // ...
+  const line = `${pick.title} — ${pick.message}`;
+  textEl.textContent = line;
+  if (textDup) textDup.textContent = line;
   const linkEl = document.getElementById('announce-banner-link');
   const closeEl = document.getElementById('announce-banner-close');
   if(!banner) return;
