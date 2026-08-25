@@ -40,10 +40,10 @@ function notifRenderList(items){
   }
   list.innerHTML = items.map(a => `
     <div class="notif-item">
-      <span class="notif-item__type notif-item__type--\( {a.type}"> \){NOTIF_TYPE_LABEL[a.type] || 'News'}</span>
+      <span class="notif-item__type notif-item__type--${a.type}">${NOTIF_TYPE_LABEL[a.type] || 'News'}</span>
       <div class="notif-item__title">${notifEscape(a.title)}</div>
       <div class="notif-item__msg">${notifEscape(a.message)}</div>
-      \( {a.link_url ? `<a class="notif-item__link" href=" \){notifEscape(a.link_url)}">${notifEscape(a.link_text || 'Learn more')} →</a>` : ''}
+      ${a.link_url ? `<a class="notif-item__link" href="${notifEscape(a.link_url)}">${notifEscape(a.link_text || 'Learn more')} →</a>` : ''}
     </div>
   `).join('');
 }
