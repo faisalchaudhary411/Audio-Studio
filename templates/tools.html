@@ -16,21 +16,21 @@
 {% endif %}
 
 <div class="section" style="padding-top:0;">
-  <div class="voice-grid">
+  <div class="tool-grid">
     {% for tool in ordered_tools %}
-    <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="panel" style="display:block;text-decoration:none;">
-      <span class="voice-card__tag" style="margin-bottom:10px;display:inline-block;">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
-      <h2 style="font-family:var(--display);font-size:1.1rem;margin:2px 0 8px;color:var(--text-hi);">{{ tool.h1 }}</h2>
-      <p style="color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:0 0 14px;">{{ tool.sub }}</p>
-      <span style="color:var(--brass-hi);font-size:0.85rem;font-weight:600;">Open tool →</span>
+    <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card">
+      <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
+      <h2 class="tool-card__title">{{ tool.h1 }}</h2>
+      <p class="tool-card__sub">{{ tool.sub }}</p>
+      <span class="tool-card__cta">Open tool →</span>
     </a>
     {% endfor %}
     {% if filedesk_url %}
-    <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="panel" style="display:block;text-decoration:none;">
-      <span class="voice-card__tag" style="margin-bottom:10px;display:inline-block;">PDF Tools</span>
-      <h2 style="font-family:var(--display);font-size:1.1rem;margin:2px 0 8px;color:var(--text-hi);">FileDesk — PDF tools</h2>
-      <p style="color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:0 0 14px;">Merge, split, compress and convert PDFs — a separate free toolkit, opens in a new tab.</p>
-      <span style="color:var(--brass-hi);font-size:0.85rem;font-weight:600;">Open FileDesk ↗</span>
+    <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="tool-card">
+      <span class="tool-card__tag">PDF Tools</span>
+      <h2 class="tool-card__title">FileDesk — PDF tools</h2>
+      <p class="tool-card__sub">Merge, split, compress and convert PDFs — a separate free toolkit, opens in a new tab.</p>
+      <span class="tool-card__cta">Open FileDesk ↗</span>
     </a>
     {% endif %}
   </div>

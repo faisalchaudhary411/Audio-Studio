@@ -11,8 +11,8 @@
     <p class="section__sub">{{ tool.sub }}</p>
   </div>
 
-  <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:16px;">
-    <a href="{{ url_for('tools_hub') }}" style="color:var(--text-dim);">All tools</a> / {{ tool.eyebrow }}
+  <p class="tool-crumb">
+    <a href="{{ url_for('tools_hub') }}">All tools</a> / {{ tool.eyebrow }}
   </p>
 
   {% if tool.usage_key and not is_pro_ctx and usage %}
