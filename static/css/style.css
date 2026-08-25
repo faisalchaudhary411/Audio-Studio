@@ -1137,6 +1137,12 @@ main{min-height:50vh;}
 }
 
 /* ===== First-visit permissions sheet ===== */
+.perm-sheet[hidden],
+.perm-sheet.perm-sheet--closed{
+  display:none !important;
+  pointer-events:none !important;
+  visibility:hidden !important;
+}
 .perm-sheet{
   position:fixed;inset:0;z-index:300;
   background:rgba(6,10,14,0.72);
