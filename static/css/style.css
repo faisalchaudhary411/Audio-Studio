@@ -1203,3 +1203,96 @@ main{min-height:50vh;}
   box-shadow:0 0 0 1px rgba(79,166,156,0.3), var(--shadow-soft);
 }
 .voices-cta{margin-top:28px;text-align:center;}
+
+/* ===== News / discount ticker (horizontal marquee) ===== */
+.announce-banner{
+  position:fixed;
+  top:0; left:0; right:0;
+  z-index:200;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  height:44px;
+  padding:0 12px;
+  background:#121820;
+  border-bottom:1px solid rgba(232,169,60,0.35);
+  box-shadow:0 8px 24px rgba(0,0,0,0.35);
+  transform:translateY(-110%);
+  opacity:0;
+  transition:transform .35s ease, opacity .35s ease;
+  pointer-events:none;
+  overflow:hidden;
+}
+.announce-banner.is-visible{
+  transform:translateY(0);
+  opacity:1;
+  pointer-events:auto;
+}
+.announce-banner__badge{
+  flex-shrink:0;
+  font-family:var(--mono);
+  font-size:0.65rem;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  background:var(--jade);
+  color:#04211D;
+  border-radius:999px;
+  padding:4px 10px;
+}
+.announce-banner__badge--discount{
+  background:var(--brass);
+  color:#1A1204;
+}
+.announce-banner__track{
+  flex:1;
+  min-width:0;
+  overflow:hidden;
+  height:100%;
+  display:flex;
+  align-items:center;
+}
+.announce-banner__marquee{
+  display:flex;
+  width:max-content;
+  align-items:center;
+  animation:tickerScroll 22s linear infinite;
+}
+.announce-banner__text{
+  flex:none;
+  display:inline-block;
+  white-space:nowrap;
+  color:var(--text-mid);
+  font-size:0.88rem;
+  padding-right:3rem;
+  line-height:1.3;
+}
+.announce-banner__link{
+  flex-shrink:0;
+  color:var(--brass-hi);
+  font-weight:600;
+  font-size:0.82rem;
+  white-space:nowrap;
+}
+.announce-banner__close{
+  flex-shrink:0;
+  background:transparent;
+  border:none;
+  color:var(--text-dim);
+  font-size:1.25rem;
+  line-height:1;
+  cursor:pointer;
+  padding:4px 6px;
+}
+.announce-banner__close:hover{color:var(--text-hi);}
+
+@keyframes tickerScroll{
+  0%{ transform:translateX(0); }
+  100%{ transform:translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .announce-banner__marquee{ animation:none; }
+  .announce-banner__text{ white-space:normal; }
+  #announce-banner-text-dup{ display:none; }
+}
