@@ -120,21 +120,23 @@
   <div class="section__head">
     <span class="section__eyebrow">Voice library</span>
     <h2 class="section__title">A voice for every region, not an afterthought.</h2>
-    <p class="section__sub">{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages. South Asian languages are first-class here — not a bolt-on translation layer.</p>
+    <p class="section__sub">{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages. South Asian languages are first-class — not a bolt-on.</p>
   </div>
   <div class="voice-grid">
     {% for v in featured_voices %}
-    <div class="voice-card">
+    <div class="voice-card voice-card--premium">
       <div class="voice-card__top">
         <span class="voice-card__name">{{ v.name }}</span>
+        <span class="voice-card__tag">{{ v.gender }}</span>
       </div>
-      <div class="voice-card__meta">{{ v.language }} · {{ v.gender }}</div>
-      <button class="voice-card__play" data-audio="/static/audio/previews/{{ v.audio_slug }}.mp3" aria-label="Preview {{ v.name }}, {{ v.language }}">▶</button>
+      <div class="voice-card__meta">{{ v.language }} · Neural</div>
+      <button type="button" class="voice-card__play" data-audio="/static/audio/previews/{{ v.audio_slug }}.mp3" aria-label="Preview {{ v.name }}, {{ v.language }}">▶</button>
+      <span class="voice-card__hint">Tap to preview</span>
     </div>
     {% endfor %}
   </div>
-  <div style="margin-top:28px;text-align:center;">
-    <a href="{{ url_for('studio') }}" class="btn btn--ghost">See all {{ voice_count|default(88) }} voices in Studio</a>
+  <div class="voices-cta">
+    <a href="{{ url_for('studio') }}" class="btn btn--brass">Try all {{ voice_count|default(88) }} voices in Studio</a>
   </div>
 </section>
 

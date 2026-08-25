@@ -78,9 +78,9 @@
       </div>
     </div>
     {% if plan_ctx == 'pro_plus' %}
-    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro+">{{ license_name_ctx|truncate(14, True, '') }} · Pro+</a>
+    <a href="{{ url_for('pricing') }}" class="nav-plan nav-plan--plus" title="{{ license_name_ctx or 'Pro+' }}">Pro+</a>
     {% elif plan_ctx == 'pro' %}
-    <a href="{{ url_for('pricing') }}" style="color:var(--jade-hi);" title="{{ license_name_ctx }} — Pro">{{ license_name_ctx|truncate(14, True, '') }} · Pro</a>
+    <a href="{{ url_for('pricing') }}" class="nav-plan" title="{{ license_name_ctx or 'Pro' }}">Pro</a>
     {% else %}
     <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">Get Pro</a>
     {% endif %}
@@ -110,9 +110,32 @@
 
 <div class="announce-banner" id="announce-banner" hidden>
   <span class="announce-banner__badge" id="announce-banner-badge">Update</span>
-  <span class="announce-banner__text" id="announce-banner-text"></span>
+  <div class="announce-banner__track">
+    <div class="announce-banner__marquee">
+      <span class="announce-banner__text" id="announce-banner-text"></span>
+      <span class="announce-banner__text" id="announce-banner-text-dup" aria-hidden="true"></span>
+    </div>
+  </div>
   <a class="announce-banner__link" id="announce-banner-link" href="#" hidden></a>
   <button class="announce-banner__close" id="announce-banner-close" aria-label="Dismiss">&times;</button>
+</div>
+
+{# First-visit permissions sheet — only what the product actually uses #}
+<div class="perm-sheet" id="perm-sheet" hidden>
+  <div class="perm-sheet__card" role="dialog" aria-labelledby="perm-title" aria-modal="true">
+    <span class="perm-sheet__eyebrow">Before you start</span>
+    <h2 class="perm-sheet__title" id="perm-title">A few optional permissions</h2>
+    <p class="perm-sheet__sub">VoxCraft works without an account. These only improve the experience when you allow them.</p>
+    <ul class="perm-sheet__list">
+      <li><strong>Notifications</strong> — discounts and product updates (you can decline).</li>
+      <li><strong>Microphone</strong> — only when you use voice cloning, asked at that moment.</li>
+      <li><strong>Storage</strong> — recent generations stay in this browser only.</li>
+    </ul>
+    <div class="perm-sheet__actions">
+      <button type="button" class="btn btn--ghost" id="perm-decline">Continue without</button>
+      <button type="button" class="btn btn--brass" id="perm-allow">Allow notifications</button>
+    </div>
+  </div>
 </div>
 
 <main>

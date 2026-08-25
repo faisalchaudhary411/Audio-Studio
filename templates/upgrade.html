@@ -1,109 +1,99 @@
 {% extends "base.html" %}
-{% block title %}Get Pro — VoxCraft{% endblock %}
+{% block title %}Upgrade — VoxCraft{% endblock %}
 
 {% block content %}
-<section class="section" style="max-width:560px;">
-  <div class="section__head">
-    <span class="section__eyebrow">Get Pro</span>
-    <h2 class="section__title">Choose how to pay</h2>
+<section class="section upgrade-page">
+  <div class="section__head" style="text-align:center;max-width:36ch;margin-left:auto;margin-right:auto;">
+    <span class="section__eyebrow">Upgrade</span>
+    <h2 class="section__title">Choose your plan, then how to pay</h2>
+    <p class="section__sub">Both Pro and Pro+ stay visible — pick one, then pay by card or PKR transfer.</p>
   </div>
 
-  <div class="panel" style="margin-bottom:16px;display:flex;gap:10px;">
-    <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro' %}border-color:var(--brass);{% endif %}">
-      <input type="radio" name="plan" value="pro" form="upgrade-form" data-checkout-url="{{ checkout_url or '' }}" data-pkr="{{ pro_price_pkr }}" {% if requested_plan == 'pro' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
-      <strong>Pro</strong> — {{ pro_price_usd }}/mo<br><span style="color:var(--text-dim);font-size:0.78rem;">TTS only · or {{ pro_price_pkr }} PKR</span>
+  {# ---- Plan picker: always show BOTH ---- #}
+  <div class="upgrade-plans" role="radiogroup" aria-label="Choose plan">
+    <label class="upgrade-plan {% if requested_plan == 'pro' %}is-selected{% endif %}" data-plan-card="pro">
+      <input type="radio" name="plan" value="pro" form="upgrade-form"
+             data-checkout-url="{{ checkout_url or '' }}"
+             data-pkr="{{ pro_price_pkr }}"
+             data-label="Pro"
+             {% if requested_plan != 'pro_plus' %}checked{% endif %}>
+      <span class="upgrade-plan__badge">TTS</span>
+      <span class="upgrade-plan__name">Pro</span>
+      <span class="upgrade-plan__price">{{ pro_price_usd }}<span>/mo</span></span>
+      <span class="upgrade-plan__pkr">or {{ pro_price_pkr }} PKR / month</span>
+      <ul class="upgrade-plan__perks">
+        <li>Full voice library</li>
+        <li>Higher daily limits</li>
+        <li>Batch generation</li>
+        <li>No ads</li>
+      </ul>
     </label>
-    <label style="flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;{% if requested_plan == 'pro_plus' %}border-color:var(--brass);{% endif %}">
-      <input type="radio" name="plan" value="pro_plus" form="upgrade-form" data-checkout-url="{{ checkout_url_pro_plus or '' }}" data-pkr="{{ pro_plus_price_pkr }}" {% if requested_plan == 'pro_plus' %}checked{% endif %} onchange="voxcraftUpdateCheckoutLink()" style="margin-right:6px;">
-      <strong>Pro+</strong> — {{ pro_plus_price_usd }}/mo<br><span style="color:var(--text-dim);font-size:0.78rem;">+ Voice clone, music · or {{ pro_plus_price_pkr }} PKR</span>
+
+    <label class="upgrade-plan {% if requested_plan == 'pro_plus' %}is-selected{% endif %}" data-plan-card="pro_plus">
+      <input type="radio" name="plan" value="pro_plus" form="upgrade-form"
+             data-checkout-url="{{ checkout_url_pro_plus or '' }}"
+             data-pkr="{{ pro_plus_price_pkr }}"
+             data-label="Pro+"
+             {% if requested_plan == 'pro_plus' %}checked{% endif %}>
+      <span class="upgrade-plan__badge upgrade-plan__badge--plus">Best value</span>
+      <span class="upgrade-plan__name">Pro+</span>
+      <span class="upgrade-plan__price">{{ pro_plus_price_usd }}<span>/mo</span></span>
+      <span class="upgrade-plan__pkr">or {{ pro_plus_price_pkr }} PKR / month</span>
+      <ul class="upgrade-plan__perks">
+        <li>Everything in Pro</li>
+        <li>Voice cloning</li>
+        <li>AI music</li>
+        <li>Priority generation</li>
+      </ul>
     </label>
   </div>
 
   {% if checkout_url or checkout_url_pro_plus %}
-  <div class="panel" style="margin-bottom:16px;">
+  <div class="panel upgrade-pay">
     <span class="panel__label">Pay by card (international)</span>
-    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:12px;">Instant activation via Freemius — card or PayPal. Uses whichever plan is selected above.</p>
-    <a id="voxcraft-checkout-link" href="{{ (checkout_url_pro_plus if requested_plan == 'pro_plus' else checkout_url) or '#' }}" class="btn btn--brass btn--block">Pay with card →</a>
-    <p id="voxcraft-checkout-missing" style="display:none;color:var(--text-dim);font-size:0.78rem;margin-top:8px;">Card checkout for this plan isn't set up yet — please use manual payment below.</p>
+    <p class="upgrade-pay__hint">Instant activation via Freemius — card or PayPal. Uses the plan selected above.</p>
+    <a id="voxcraft-checkout-link" href="#" class="btn btn--brass btn--block">Pay with card →</a>
+    <p id="voxcraft-checkout-missing" class="upgrade-pay__missing" hidden>Card checkout for this plan isn’t set up yet — use manual payment below.</p>
   </div>
-  <div style="text-align:center;color:var(--text-dim);font-size:0.82rem;margin:16px 0;">— or pay manually (Pakistan) —</div>
-  <script>
-    // Keeps the card-checkout button pointed at the SAME plan the person
-    // has selected below it, instead of always linking to one fixed URL
-    // regardless of which plan they picked (the original bug: Pro+ buyers
-    // landed on the Pro checkout page no matter what).
-    // ALSO now keeps the "send Rs X" amount below in sync with the same
-    // selection — previously the manual-payment instructions never showed
-    // an amount at all, for either plan, so a Pakistani customer paying by
-    // EasyPaisa/JazzCash/bank had to guess how much to send.
-    function voxcraftUpdateCheckoutLink() {
-      var selected = document.querySelector('input[name="plan"]:checked');
-      var link = document.getElementById('voxcraft-checkout-link');
-      var missing = document.getElementById('voxcraft-checkout-missing');
-      var amountEl = document.getElementById('voxcraft-pkr-amount');
-      if (selected && amountEl) {
-        amountEl.textContent = 'Rs ' + selected.getAttribute('data-pkr');
-      }
-      if (!selected || !link) return;
-      var url = selected.getAttribute('data-checkout-url');
-      if (url) {
-        link.href = url;
-        link.style.display = '';
-        if (missing) missing.style.display = 'none';
-      } else {
-        link.style.display = 'none';
-        if (missing) missing.style.display = '';
-      }
-    }
-    voxcraftUpdateCheckoutLink();
-  </script>
+  <div class="upgrade-or">— or pay manually (Pakistan) —</div>
   {% endif %}
 
-  <div class="panel">
+  <div class="panel upgrade-manual">
     {% if submitted %}
       {% if already_pro %}
-        <p style="color:var(--jade-hi);font-weight:600;margin-bottom:12px;">✓ Payment request submitted — reference ID <strong>{{ req_id }}</strong>.</p>
-        <div style="background:rgba(120,200,160,0.08);border:1px solid rgba(120,200,160,0.25);border-radius:12px;padding:14px;margin-top:12px;">
-          <p style="color:var(--text-mid);font-size:0.85rem;line-height:1.6;">
-            You already have active Pro access on this device, so nothing has changed for you right now — your existing access keeps working exactly as before.
-            We'll review this payment and apply it as a renewal/extension once verified.
-          </p>
+        <p class="upgrade-ok">✓ Payment request submitted — reference <strong>{{ req_id }}</strong>.</p>
+        <div class="upgrade-note upgrade-note--ok">
+          <p>You already have active Pro access on this device. We’ll review this payment as a renewal once verified.</p>
         </div>
       {% elif auto_approved %}
-        <p style="color:var(--jade-hi);font-weight:600;margin-bottom:12px;">✓ Activated instantly on this device — reference ID <strong>{{ req_id }}</strong>.</p>
-        <div style="background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.25);border-radius:12px;padding:14px;margin-top:12px;">
-          <div style="color:var(--brass-hi);font-weight:600;font-size:0.88rem;margin-bottom:6px;">⏳ This access is temporary until verified</div>
-          <p style="color:var(--text-mid);font-size:0.85rem;line-height:1.6;">
-            We manually verify every payment. Your Pro access will <strong style="color:var(--text-hi);">automatically stop working after {{ grace_hours }} hours</strong>
-            if we haven't confirmed your payment by then. Once verified, it becomes permanent — no action needed on your end.
-          </p>
+        <p class="upgrade-ok">✓ Activated on this device — reference <strong>{{ req_id }}</strong>.</p>
+        <div class="upgrade-note upgrade-note--warn">
+          <div class="upgrade-note__title">Temporary until verified</div>
+          <p>Access stops after {{ grace_hours }} hours if payment isn’t confirmed. Once verified, it stays permanent.</p>
         </div>
       {% else %}
-        <p style="color:var(--jade-hi);">Request submitted — reference ID <strong>{{ req_id }}</strong>. We'll email your license key once verified.</p>
+        <p class="upgrade-ok">Request submitted — reference <strong>{{ req_id }}</strong>. We’ll email your license key once verified.</p>
       {% endif %}
     {% else %}
-      {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
+      {% if error %}<p class="upgrade-err">{{ error }}</p>{% endif %}
 
-      <div class="panel" style="margin-bottom:16px;background:rgba(232,169,60,0.08);border-color:var(--brass);">
-        <span style="color:var(--text-dim);font-size:0.78rem;">Amount to send for <strong style="color:var(--text-hi);">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong></span>
-        <div style="font-family:var(--display);font-size:1.6rem;color:var(--brass-hi);font-weight:700;" id="voxcraft-pkr-amount">Rs {{ pro_plus_price_pkr if requested_plan == 'pro_plus' else pro_price_pkr }}</div>
+      <div class="upgrade-amount">
+        <span class="upgrade-amount__label">Amount for <strong id="voxcraft-plan-label">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong></span>
+        <div class="upgrade-amount__value" id="voxcraft-pkr-amount">Rs {{ pro_plus_price_pkr if requested_plan == 'pro_plus' else pro_price_pkr }}</div>
       </div>
 
-      <div style="font-family:var(--mono);font-size:0.85rem;color:var(--text-mid);margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:14px;display:grid;gap:10px;">
-        <div><strong style="color:var(--text-hi);">📱 EasyPaisa:</strong> 0334-1771875 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Open EasyPaisa app → Send Money → Mobile Account</span></div>
-        <div><strong style="color:var(--text-hi);">💚 NayaPay:</strong> 0334-1771875 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Open NayaPay app → Send Money → Mobile Account</span></div>
-        <div><strong style="color:var(--text-hi);">🏦 UBL Bank:</strong> 0430292120673 (M Faisal Aslam)<br><span style="color:var(--text-dim);font-size:0.78rem;">Any bank app/digital wallet → Send Money → Bank Account</span></div>
+      <div class="upgrade-pay-methods">
+        <div><strong>EasyPaisa</strong> 0334-1771875 (M Faisal Aslam)<br><span>Send Money → Mobile Account</span></div>
+        <div><strong>NayaPay</strong> 0334-1771875 (M Faisal Aslam)<br><span>Send Money → Mobile Account</span></div>
+        <div><strong>UBL Bank</strong> 0430292120673 (M Faisal Aslam)<br><span>Bank transfer</span></div>
       </div>
 
-      <div class="panel" style="margin-bottom:16px;">
-        <p style="color:var(--text-dim);font-size:0.82rem;">Plan selected above: <strong style="color:var(--text-hi);">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong> — submitting below applies to that plan.</p>
-      </div>
-
-      <form id="upgrade-form" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="name" placeholder="Full name" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
-        <input type="email" name="email" placeholder="Email" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
-        <input type="tel" name="phone" placeholder="Phone (optional)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
-        <select name="payment_method" class="admin-input" style="width:100%;padding:12px;font-family:var(--body);margin-bottom:10px;">
+      <form id="upgrade-form" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="text" name="name" placeholder="Full name" class="upgrade-field" required>
+        <input type="email" name="email" placeholder="Email" class="upgrade-field" required>
+        <input type="tel" name="phone" placeholder="Phone (optional)" class="upgrade-field">
+        <select name="payment_method" class="studio-select" style="margin-bottom:10px;">
           <option value="EasyPaisa">EasyPaisa</option>
           <option value="NayaPay">NayaPay</option>
           <option value="UBL Bank">UBL Bank</option>
@@ -111,13 +101,56 @@
           <option value="HBL Bank">HBL Bank</option>
           <option value="Other">Other</option>
         </select>
-        <input type="text" name="txn_id" placeholder="Transaction / reference ID *" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Payment screenshot (recommended, for instant activation)</label>
-        <input type="file" name="screenshot" accept="image/*" style="margin:6px 0 14px;">
-        <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:14px;">Both are required for instant activation. Without them, your request goes to manual review instead.</p>
+        <input type="text" name="txn_id" placeholder="Transaction / reference ID *" class="upgrade-field" required>
+        <label class="upgrade-file-label">Payment screenshot (recommended for faster activation)</label>
+        <input type="file" name="screenshot" accept="image/*" class="file-input">
+        <p class="upgrade-fine">Screenshot + transaction ID help instant activation. Without them, the request goes to manual review.</p>
         <button type="submit" class="btn btn--brass btn--block">Submit for verification</button>
       </form>
     {% endif %}
   </div>
 </section>
+
+<script>
+(function () {
+  function updateUpgradeUI() {
+    var selected = document.querySelector('input[name="plan"]:checked');
+    var link = document.getElementById('voxcraft-checkout-link');
+    var missing = document.getElementById('voxcraft-checkout-missing');
+    var amountEl = document.getElementById('voxcraft-pkr-amount');
+    var labelEl = document.getElementById('voxcraft-plan-label');
+
+    document.querySelectorAll('[data-plan-card]').forEach(function (card) {
+      var input = card.querySelector('input[name="plan"]');
+      card.classList.toggle('is-selected', !!(input && input.checked));
+    });
+
+    if (!selected) return;
+    if (amountEl) amountEl.textContent = 'Rs ' + selected.getAttribute('data-pkr');
+    if (labelEl) labelEl.textContent = selected.getAttribute('data-label') || selected.value;
+
+    if (link) {
+      var url = selected.getAttribute('data-checkout-url');
+      if (url) {
+        link.href = url;
+        link.style.display = '';
+        if (missing) missing.hidden = true;
+      } else {
+        link.style.display = 'none';
+        if (missing) missing.hidden = false;
+      }
+    }
+  }
+
+  document.querySelectorAll('input[name="plan"]').forEach(function (r) {
+    r.addEventListener('change', updateUpgradeUI);
+  });
+  // Ensure one plan is always selected
+  if (!document.querySelector('input[name="plan"]:checked')) {
+    var first = document.querySelector('input[name="plan"]');
+    if (first) first.checked = true;
+  }
+  updateUpgradeUI();
+})();
+</script>
 {% endblock %}

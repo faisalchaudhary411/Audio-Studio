@@ -27,38 +27,39 @@
     {% endif %}
   {% endif %}
 
-  <div class="plans" style="margin-bottom:12px;">
-    <div class="panel">
-      <span class="panel__label">Free</span>
-      <p style="font-family:var(--display);font-size:1.6rem;color:var(--text-hi);margin:6px 0;">$0</p>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:16px;">{{ '{:,}'.format(api_free_quota) }} characters/month · instant, no card</p>
-      <form method="post" action="{{ url_for('developers_signup') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="customer_name" placeholder="Your name" class="script-input" style="min-height:auto;padding:11px;width:100%;margin-bottom:8px;" required>
-        <input type="email" name="customer_email" placeholder="you@example.com" class="script-input" style="min-height:auto;padding:11px;width:100%;margin-bottom:10px;" required>
-        <button type="submit" class="btn btn--brass btn--block">Get a free key instantly</button>
+  <div class="api-plans">
+    <div class="api-plan">
+      <span class="api-plan__tag">Free</span>
+      <p class="api-plan__price">$0</p>
+      <p class="api-plan__quota">{{ '{:,}'.format(api_free_quota) }} chars / month · instant, no card</p>
+      <form method="post" action="{{ url_for('developers_signup') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="text" name="customer_name" placeholder="Your name" class="upgrade-field" required>
+        <input type="email" name="customer_email" placeholder="you@example.com" class="upgrade-field" required>
+        <button type="submit" class="btn btn--brass btn--block">Get free key</button>
       </form>
-      {% if signup_error %}<p style="color:#e88;font-size:0.8rem;margin-top:8px;">{{ signup_error }}</p>{% endif %}
+      {% if signup_error %}<p class="upgrade-err" style="margin-top:8px;">{{ signup_error }}</p>{% endif %}
     </div>
 
-    <div class="panel">
-      <span class="panel__label">Starter</span>
-      <p style="font-family:var(--display);font-size:1.6rem;color:var(--text-hi);margin:6px 0;">{{ api_starter_price }}<span style="font-size:0.9rem;color:var(--text-dim);">/mo</span></p>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:16px;">{{ '{:,}'.format(api_starter_quota) }} characters/month · key emailed the moment payment succeeds</p>
+    <div class="api-plan">
+      <span class="api-plan__tag">Starter</span>
+      <p class="api-plan__price">{{ api_starter_price }}<span>/mo</span></p>
+      <p class="api-plan__quota">{{ '{:,}'.format(api_starter_quota) }} chars / month · key on payment</p>
       {% if checkout_url_api_starter %}
-      <a href="{{ checkout_url_api_starter }}" class="btn btn--ghost btn--block">Subscribe</a>
+      <a href="{{ checkout_url_api_starter }}" class="btn btn--ghost btn--block">Subscribe · Starter</a>
       {% else %}
-      <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--ghost btn--block">Contact us</a>
+      <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--ghost btn--block">Contact for Starter</a>
       {% endif %}
     </div>
 
-    <div class="panel" style="border-color:var(--brass);">
-      <span class="panel__label">Pro</span>
-      <p style="font-family:var(--display);font-size:1.6rem;color:var(--text-hi);margin:6px 0;">{{ api_pro_price }}<span style="font-size:0.9rem;color:var(--text-dim);">/mo</span></p>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:16px;">{{ '{:,}'.format(api_pro_quota) }} characters/month · key emailed the moment payment succeeds</p>
+    <div class="api-plan api-plan--featured">
+      <span class="api-plan__tag">Pro</span>
+      <p class="api-plan__price">{{ api_pro_price }}<span>/mo</span></p>
+      <p class="api-plan__quota">{{ '{:,}'.format(api_pro_quota) }} chars / month · key on payment</p>
       {% if checkout_url_api_pro %}
-      <a href="{{ checkout_url_api_pro }}" class="btn btn--brass btn--block">Subscribe</a>
+      <a href="{{ checkout_url_api_pro }}" class="btn btn--brass btn--block">Subscribe · Pro</a>
       {% else %}
-      <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--brass btn--block">Contact us</a>
+      <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--brass btn--block">Contact for Pro</a>
       {% endif %}
     </div>
   </div>
