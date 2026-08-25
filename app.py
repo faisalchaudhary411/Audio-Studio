@@ -560,7 +560,24 @@ def landing():
     all_posts = persistence.load_blogs()
     recent_posts = [p for p in all_posts if p.get("published")][:3]
 
-    return render_template("landing.html", featured_voices=featured_voices, recent_posts=recent_posts)
+    # Keep marketing numbers in sync with voices.py (single source of truth).
+    voice_count = sum(len(v) for v in VOICES.values())
+    language_count = len(VOICES)
+
+    return render_template(
+        "landing.html",
+        featured_voices=featured_voices,
+        recent_posts=recent_posts,
+        voice_count=voice_count,
+        language_count=language_count,
+    )
+
+
+@app.route("/voices")
+def voices_page():
+    """Nav and external links sometimes hit /voices. Redirect to the
+    homepage voice-library section so visitors never see a 404."""
+    return redirect(url_for("landing") + "#voices", code=302)
 
 
 def usage_summary() -> dict:
@@ -1213,7 +1230,8 @@ def admin_limits():
             "FREE_BATCH_MAX_LINES": int(request.form.get("FREE_BATCH_MAX_LINES", 20)),
             "FREE_PREVIEW_LIMIT": int(request.form.get("FREE_PREVIEW_LIMIT", 5)),
             "PRO_BATCH_MAX": int(request.form.get("PRO_BATCH_MAX", 20)),
-            "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 20)),
+            # Default matches len of FREE_VOICES in voices.py (currently 27).
+            "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 27)),
             "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
             "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
             "PRO_PRICE_USD_LABEL": request.form.get("PRO_PRICE_USD_LABEL", "$3"),
