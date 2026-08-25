@@ -14,16 +14,29 @@
     <span>No signup on Free</span>
   </div>
 
+  <div class="billing-toggle" role="group" aria-label="Billing period">
+    <button type="button" class="is-active" id="bill-month" data-billing="month">Monthly</button>
+    <button type="button" id="bill-year" data-billing="year">Annual <span class="billing-toggle__save">−2 mo</span></button>
+  </div>
+
   <div class="plans">
     {% for p in plans %}
-    <div class="plan {% if p.get('featured') %}plan--featured{% endif %}">
+    <div class="plan {% if p.get('featured') %}plan--featured{% endif %}" data-plan="{{ p.id }}">
       <span class="plan__name">{{ p.name }}</span>
       <div>
+        {% if p.id == 'free' %}
         <span class="plan__price">{{ p.price }}</span>
         <span class="plan__period">{{ p.period }}</span>
+        {% else %}
+        <span class="plan__price plan__price-month">{{ p.price }}</span>
+        <span class="plan__price plan__price-annual">{{ p.price_annual }}</span>
+        <span class="plan__period plan__period-month">{{ p.period }}</span>
+        <span class="plan__period plan__period-annual">/year</span>
+        {% endif %}
       </div>
       {% if p.pkr %}
-      <p style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;">or {{ p.pkr }}/mo — EasyPaisa / JazzCash / bank</p>
+      <p class="plan__pkr-month" style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;">or {{ p.pkr }}/mo — EasyPaisa / JazzCash / bank</p>
+      <p class="plan__pkr-annual" style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;display:none;">or {{ p.pkr_annual }}/yr — EasyPaisa / JazzCash / bank</p>
       {% endif %}
       <ul class="plan__list">
         {% for item in p.limits %}
@@ -40,6 +53,9 @@
     </div>
     {% endfor %}
   </div>
+  <p style="text-align:center;color:var(--text-dim);font-size:0.8rem;margin-top:16px;max-width:42ch;margin-left:auto;margin-right:auto;">
+    Annual = 10 months billed for 12 (save 2 months). Start on monthly checkout, then message support for yearly conversion — or pay the yearly PKR amount on the upgrade form.
+  </p>
 
   <p style="text-align:center;color:var(--text-dim);font-size:0.88rem;margin-top:24px;">
     Already have a license key? <a href="{{ url_for('activate') }}" style="color:var(--brass-hi)">Activate it here</a>.
