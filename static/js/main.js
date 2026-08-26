@@ -199,6 +199,20 @@ function initBillingToggle(){
   const monthBtn = document.getElementById('bill-month');
   const yearBtn = document.getElementById('bill-year');
   if(!monthBtn || !yearBtn) return;
+
+  // Rewrites each plan card's CTA link to carry the selected billing
+  // period through to /upgrade (e.g. ?plan=pro&billing=annual), so
+  // toggling this control actually changes what the customer checks
+  // out for — previously it only changed the displayed price text and
+  // the button still always linked to the monthly checkout regardless.
+  function setLinkBilling(url, billing){
+    try{
+      const u = new URL(url, window.location.origin);
+      u.searchParams.set('billing', billing);
+      return u.pathname + u.search;
+    }catch(e){ return url; }
+  }
+
   const setAnnual = (on) => {
     document.body.classList.toggle('is-annual', on);
     monthBtn.classList.toggle('is-active', !on);
@@ -208,6 +222,9 @@ function initBillingToggle(){
     });
     document.querySelectorAll('.plan__pkr-month').forEach(el => {
       el.style.display = on ? 'none' : 'block';
+    });
+    document.querySelectorAll('.plan[data-plan] > a.btn[href]').forEach(link => {
+      link.href = setLinkBilling(link.getAttribute('href'), on ? 'annual' : 'monthly');
     });
   };
   monthBtn.addEventListener('click', () => setAnnual(false));
