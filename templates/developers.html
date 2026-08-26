@@ -27,6 +27,11 @@
     {% endif %}
   {% endif %}
 
+  <div class="billing-toggle" role="group" aria-label="Billing period" style="margin:0 auto 20px;">
+    <button type="button" id="api-bill-month" class="is-active" data-billing="monthly">Monthly</button>
+    <button type="button" id="api-bill-year" data-billing="annual">Annual <span class="billing-toggle__save">−2 mo</span></button>
+  </div>
+
   <div class="api-plans">
     <div class="api-plan">
       <span class="api-plan__tag">Free</span>
@@ -43,10 +48,10 @@
 
     <div class="api-plan">
       <span class="api-plan__tag">Starter</span>
-      <p class="api-plan__price">{{ api_starter_price }}<span>/mo</span></p>
+      <p class="api-plan__price"><span class="api-plan__price-val" data-monthly="{{ api_starter_price }}" data-annual="{{ api_starter_price_annual }}">{{ api_starter_price }}</span><span class="api-plan__price-period">/mo</span></p>
       <p class="api-plan__quota">{{ '{:,}'.format(api_starter_quota) }} chars / month · key on payment</p>
       {% if checkout_url_api_starter %}
-      <a href="{{ checkout_url_api_starter }}" class="btn btn--ghost btn--block">Subscribe · Starter</a>
+      <a href="{{ checkout_url_api_starter }}" class="btn btn--ghost btn--block" data-fs-checkout>Subscribe · Starter</a>
       {% else %}
       <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--ghost btn--block">Contact for Starter</a>
       {% endif %}
@@ -54,10 +59,10 @@
 
     <div class="api-plan api-plan--featured">
       <span class="api-plan__tag">Pro</span>
-      <p class="api-plan__price">{{ api_pro_price }}<span>/mo</span></p>
+      <p class="api-plan__price"><span class="api-plan__price-val" data-monthly="{{ api_pro_price }}" data-annual="{{ api_pro_price_annual }}">{{ api_pro_price }}</span><span class="api-plan__price-period">/mo</span></p>
       <p class="api-plan__quota">{{ '{:,}'.format(api_pro_quota) }} chars / month · key on payment</p>
       {% if checkout_url_api_pro %}
-      <a href="{{ checkout_url_api_pro }}" class="btn btn--brass btn--block">Subscribe · Pro</a>
+      <a href="{{ checkout_url_api_pro }}" class="btn btn--brass btn--block" data-fs-checkout>Subscribe · Pro</a>
       {% else %}
       <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--brass btn--block">Contact for Pro</a>
       {% endif %}
@@ -65,6 +70,47 @@
   </div>
   <p style="color:var(--text-dim);font-size:0.82rem;text-align:center;">Need more volume than Pro? <a href="{{ url_for('contact', topic='API Access') }}" style="color:var(--brass-hi);">Get in touch</a> for a custom plan.</p>
 </section>
+
+<script>
+(function () {
+  // Same mechanism as the consumer /upgrade page: Freemius's hosted
+  // checkout reads billing_cycle=monthly|annual off the SAME checkout
+  // link (one Freemius plan, priced two ways), so toggling here just
+  // rewrites that one query param on the existing Starter/Pro links —
+  // no separate annual checkout URL needs configuring in admin/limits.
+  var monthBtn = document.getElementById('api-bill-month');
+  var yearBtn = document.getElementById('api-bill-year');
+  if (!monthBtn || !yearBtn) return;
+
+  function withFreemiusBilling(url, billing) {
+    if (!url) return url;
+    try {
+      var u = new URL(url, window.location.origin);
+      u.searchParams.set('billing_cycle', billing);
+      return u.toString();
+    } catch (e) { return url; }
+  }
+
+  function setAnnual(on) {
+    monthBtn.classList.toggle('is-active', !on);
+    yearBtn.classList.toggle('is-active', on);
+    var billing = on ? 'annual' : 'monthly';
+    document.querySelectorAll('.api-plan__price-val').forEach(function (el) {
+      el.textContent = el.getAttribute(on ? 'data-annual' : 'data-monthly') || el.textContent;
+    });
+    document.querySelectorAll('.api-plan__price-period').forEach(function (el) {
+      el.textContent = on ? '/yr' : '/mo';
+    });
+    document.querySelectorAll('a[data-fs-checkout]').forEach(function (link) {
+      var base = link.getAttribute('data-base-href') || link.getAttribute('href');
+      link.setAttribute('data-base-href', base);
+      link.href = withFreemiusBilling(base, billing);
+    });
+  }
+  monthBtn.addEventListener('click', function () { setAnnual(false); });
+  yearBtn.addEventListener('click', function () { setAnnual(true); });
+})();
+</script>
 
 <section class="section" style="max-width:820px;">
   <h2 style="font-family:var(--display);color:var(--text-hi);margin-bottom:14px;font-size:1.2rem;">How it works</h2>
