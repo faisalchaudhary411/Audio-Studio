@@ -9,18 +9,29 @@
     <p class="section__sub">Both Pro and Pro+ stay visible — pick one, then pay by card or PKR transfer.</p>
   </div>
 
+  {# ---- Billing period: carries through to both card checkout (as
+       billing_cycle=) and the manual-payment amount/record below. Defaults
+       to whatever was selected on the pricing page (?billing=annual). ---- #}
+  <div class="billing-toggle" role="group" aria-label="Billing period" style="margin:0 auto 20px;">
+    <button type="button" id="upgrade-bill-month" class="{{ 'is-active' if requested_billing != 'annual' }}" data-billing="monthly">Monthly</button>
+    <button type="button" id="upgrade-bill-year" class="{{ 'is-active' if requested_billing == 'annual' }}" data-billing="annual">Annual <span class="billing-toggle__save">−2 mo</span></button>
+  </div>
+
   {# ---- Plan picker: always show BOTH ---- #}
   <div class="upgrade-plans" role="radiogroup" aria-label="Choose plan">
     <label class="upgrade-plan {% if requested_plan == 'pro' %}is-selected{% endif %}" data-plan-card="pro">
       <input type="radio" name="plan" value="pro" form="upgrade-form"
              data-checkout-url="{{ checkout_url or '' }}"
-             data-pkr="{{ pro_price_pkr }}"
+             data-pkr-monthly="{{ pro_price_pkr }}"
+             data-pkr-annual="{{ pro_price_pkr_annual }}"
+             data-usd-monthly="{{ pro_price_usd }}"
+             data-usd-annual="{{ pro_price_annual_usd }}"
              data-label="Pro"
              {% if requested_plan != 'pro_plus' %}checked{% endif %}>
       <span class="upgrade-plan__badge">TTS</span>
       <span class="upgrade-plan__name">Pro</span>
-      <span class="upgrade-plan__price">{{ pro_price_usd }}<span>/mo</span></span>
-      <span class="upgrade-plan__pkr">or {{ pro_price_pkr }} PKR / month</span>
+      <span class="upgrade-plan__price"><span class="upgrade-plan__price-val">{{ pro_price_usd }}</span><span class="upgrade-plan__price-period">/mo</span></span>
+      <span class="upgrade-plan__pkr">or <span class="upgrade-plan__pkr-val">{{ pro_price_pkr }}</span> PKR / <span class="upgrade-plan__pkr-period">month</span></span>
       <ul class="upgrade-plan__perks">
         <li>Full voice library</li>
         <li>Higher daily limits</li>
@@ -32,13 +43,16 @@
     <label class="upgrade-plan {% if requested_plan == 'pro_plus' %}is-selected{% endif %}" data-plan-card="pro_plus">
       <input type="radio" name="plan" value="pro_plus" form="upgrade-form"
              data-checkout-url="{{ checkout_url_pro_plus or '' }}"
-             data-pkr="{{ pro_plus_price_pkr }}"
+             data-pkr-monthly="{{ pro_plus_price_pkr }}"
+             data-pkr-annual="{{ pro_plus_price_pkr_annual }}"
+             data-usd-monthly="{{ pro_plus_price_usd }}"
+             data-usd-annual="{{ pro_plus_price_annual_usd }}"
              data-label="Pro+"
              {% if requested_plan == 'pro_plus' %}checked{% endif %}>
       <span class="upgrade-plan__badge upgrade-plan__badge--plus">Best value</span>
       <span class="upgrade-plan__name">Pro+</span>
-      <span class="upgrade-plan__price">{{ pro_plus_price_usd }}<span>/mo</span></span>
-      <span class="upgrade-plan__pkr">or {{ pro_plus_price_pkr }} PKR / month</span>
+      <span class="upgrade-plan__price"><span class="upgrade-plan__price-val">{{ pro_plus_price_usd }}</span><span class="upgrade-plan__price-period">/mo</span></span>
+      <span class="upgrade-plan__pkr">or <span class="upgrade-plan__pkr-val">{{ pro_plus_price_pkr }}</span> PKR / <span class="upgrade-plan__pkr-period">month</span></span>
       <ul class="upgrade-plan__perks">
         <li>Everything in Pro</li>
         <li>Voice cloning</li>
@@ -51,7 +65,7 @@
   {% if checkout_url or checkout_url_pro_plus %}
   <div class="panel upgrade-pay">
     <span class="panel__label">Pay by card (international)</span>
-    <p class="upgrade-pay__hint">Instant activation via Freemius — card or PayPal. Uses the plan selected above.</p>
+    <p class="upgrade-pay__hint">Instant activation via Freemius — card or PayPal. Uses the plan and billing period selected above.</p>
     <a id="voxcraft-checkout-link" href="#" class="btn btn--brass btn--block">Pay with card →</a>
     <p id="voxcraft-checkout-missing" class="upgrade-pay__missing" hidden>Card checkout for this plan isn’t set up yet — use manual payment below.</p>
   </div>
@@ -69,7 +83,7 @@
         <p class="upgrade-ok">✓ Activated on this device — reference <strong>{{ req_id }}</strong>.</p>
         <div class="upgrade-note upgrade-note--warn">
           <div class="upgrade-note__title">Temporary until verified</div>
-          <p>Access stops after {{ grace_hours }} hours if payment isn’t confirmed. Once verified, it stays permanent.</p>
+          <p>Access stops after {{ grace_hours }} hours if payment isn’t confirmed. Once verified, it stays permanent{{ ' for a full year' if requested_billing == 'annual' else '' }}.</p>
         </div>
       {% else %}
         <p class="upgrade-ok">Request submitted — reference <strong>{{ req_id }}</strong>. We’ll email your license key once verified.</p>
@@ -78,8 +92,8 @@
       {% if error %}<p class="upgrade-err">{{ error }}</p>{% endif %}
 
       <div class="upgrade-amount">
-        <span class="upgrade-amount__label">Amount for <strong id="voxcraft-plan-label">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong></span>
-        <div class="upgrade-amount__value" id="voxcraft-pkr-amount">Rs {{ pro_plus_price_pkr if requested_plan == 'pro_plus' else pro_price_pkr }}</div>
+        <span class="upgrade-amount__label">Amount for <strong id="voxcraft-plan-label">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong> (<span id="voxcraft-billing-label">{{ 'annual' if requested_billing == 'annual' else 'monthly' }}</span>)</span>
+        <div class="upgrade-amount__value" id="voxcraft-pkr-amount">Rs {{ pro_plus_price_pkr_annual if (requested_plan == 'pro_plus' and requested_billing == 'annual') else (pro_plus_price_pkr if requested_plan == 'pro_plus' else (pro_price_pkr_annual if requested_billing == 'annual' else pro_price_pkr)) }}</div>
       </div>
 
       <div class="upgrade-pay-methods">
@@ -90,6 +104,7 @@
 
       <form id="upgrade-form" method="post" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="billing" id="upgrade-billing-field" value="{{ requested_billing }}">
         <input type="text" name="name" placeholder="Full name" class="upgrade-field" required>
         <input type="email" name="email" placeholder="Email" class="upgrade-field" required>
         <input type="tel" name="phone" placeholder="Phone (optional)" class="upgrade-field">
@@ -113,26 +128,75 @@
 
 <script>
 (function () {
+  var isAnnual = {{ 'true' if requested_billing == 'annual' else 'false' }};
+
+  function currentBilling(){ return isAnnual ? 'annual' : 'monthly'; }
+
+  function withBilling(url, billing) {
+    if (!url) return url;
+    try {
+      var u = new URL(url, window.location.origin);
+      u.searchParams.set('billing', billing);
+      return u.pathname + u.search;
+    } catch (e) { return url; }
+  }
+
+  // Freemius's hosted checkout accepts billing_cycle=monthly|annual as a
+  // URL param on the SAME checkout link (it's one plan, priced two ways in
+  // Freemius) — no separate annual checkout URL needs configuring.
+  function withFreemiusBilling(url, billing) {
+    if (!url) return url;
+    try {
+      var u = new URL(url, window.location.origin);
+      u.searchParams.set('billing_cycle', billing);
+      return u.toString();
+    } catch (e) { return url; }
+  }
+
   function updateUpgradeUI() {
     var selected = document.querySelector('input[name="plan"]:checked');
     var link = document.getElementById('voxcraft-checkout-link');
     var missing = document.getElementById('voxcraft-checkout-missing');
     var amountEl = document.getElementById('voxcraft-pkr-amount');
     var labelEl = document.getElementById('voxcraft-plan-label');
+    var billingLabelEl = document.getElementById('voxcraft-billing-label');
+    var billingField = document.getElementById('upgrade-billing-field');
+    var billing = currentBilling();
 
     document.querySelectorAll('[data-plan-card]').forEach(function (card) {
       var input = card.querySelector('input[name="plan"]');
       card.classList.toggle('is-selected', !!(input && input.checked));
     });
 
+    // Reflect the selected billing period in each plan card's own price.
+    document.querySelectorAll('.upgrade-plan').forEach(function (card) {
+      var input = card.querySelector('input[name="plan"]');
+      if (!input) return;
+      var usd = billing === 'annual' ? input.getAttribute('data-usd-annual') : input.getAttribute('data-usd-monthly');
+      var pkr = billing === 'annual' ? input.getAttribute('data-pkr-annual') : input.getAttribute('data-pkr-monthly');
+      var valEl = card.querySelector('.upgrade-plan__price-val');
+      var perEl = card.querySelector('.upgrade-plan__price-period');
+      var pkrValEl = card.querySelector('.upgrade-plan__pkr-val');
+      var pkrPerEl = card.querySelector('.upgrade-plan__pkr-period');
+      if (valEl) valEl.textContent = usd;
+      if (perEl) perEl.textContent = billing === 'annual' ? '/yr' : '/mo';
+      if (pkrValEl) pkrValEl.textContent = pkr;
+      if (pkrPerEl) pkrPerEl.textContent = billing === 'annual' ? 'year' : 'month';
+    });
+
     if (!selected) return;
-    if (amountEl) amountEl.textContent = 'Rs ' + selected.getAttribute('data-pkr');
+    var pkrForAmount = billing === 'annual'
+      ? selected.getAttribute('data-pkr-annual')
+      : selected.getAttribute('data-pkr-monthly');
+    if (amountEl) amountEl.textContent = 'Rs ' + pkrForAmount;
     if (labelEl) labelEl.textContent = selected.getAttribute('data-label') || selected.value;
+    if (billingLabelEl) billingLabelEl.textContent = billing;
+    if (billingField) billingField.value = billing;
 
     if (link) {
       var url = selected.getAttribute('data-checkout-url');
       if (url) {
-        link.href = url;
+        link.href = withFreemiusBilling(url, billing);
         link.style.display = '';
         if (missing) missing.hidden = true;
       } else {
@@ -145,6 +209,22 @@
   document.querySelectorAll('input[name="plan"]').forEach(function (r) {
     r.addEventListener('change', updateUpgradeUI);
   });
+
+  var monthBtn = document.getElementById('upgrade-bill-month');
+  var yearBtn = document.getElementById('upgrade-bill-year');
+  if (monthBtn && yearBtn) {
+    monthBtn.addEventListener('click', function () {
+      isAnnual = false;
+      monthBtn.classList.add('is-active'); yearBtn.classList.remove('is-active');
+      updateUpgradeUI();
+    });
+    yearBtn.addEventListener('click', function () {
+      isAnnual = true;
+      yearBtn.classList.add('is-active'); monthBtn.classList.remove('is-active');
+      updateUpgradeUI();
+    });
+  }
+
   // Ensure one plan is always selected
   if (!document.querySelector('input[name="plan"]:checked')) {
     var first = document.querySelector('input[name="plan"]');
