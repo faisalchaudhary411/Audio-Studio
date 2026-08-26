@@ -194,26 +194,45 @@ def sweep_expired_keys() -> int:
     return changed
 
 
+def _resolve_expiry(subscription_type: str = "monthly",
+                     expires_in_hours: float = None,
+                     expires_at_override: str = "") -> str:
+    """Single source of truth for how long a newly-created key is valid —
+    used by both create_subscription_key and create_new_key_manual so
+    "annual" means the same 365 days everywhere a key gets minted, not a
+    slightly different number depending on which code path made it.
+
+    Precedence: an explicit override (the ACTUAL expiry Freemius already
+    computed for this purchase, since Freemius tracks the customer's real
+    billing cycle itself) beats any locally-guessed duration. Then a grace
+    countdown (hours). Then a duration inferred from subscription_type."""
+    if expires_at_override:
+        return _normalize_freemius_date(expires_at_override)
+    if expires_in_hours is not None:
+        return (dt.datetime.now() + dt.timedelta(hours=expires_in_hours)).strftime("%Y-%m-%d %H:%M")
+    if subscription_type == "annual":
+        return (dt.datetime.now() + dt.timedelta(days=365)).strftime("%Y-%m-%d %H:%M")
+    if subscription_type in ("monthly", "recurring"):
+        return (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+    return ""
+
+
 def create_subscription_key(customer_name: str, customer_email: str,
                              subscription_type: str = "monthly",
                              amount_paid: float = 0,
                              freemius_license_id: str = "",
                              expires_in_hours: float = None,
+                             expires_at: str = "",
                              plan: str = "pro") -> str:
     key = generate_license_key()
-    if expires_in_hours is not None:
-        expires_at = (dt.datetime.now() + dt.timedelta(hours=expires_in_hours)).strftime("%Y-%m-%d %H:%M")
-    elif subscription_type in ("monthly", "recurring"):
-        expires_at = (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
-    else:
-        expires_at = ""
+    resolved_expires_at = _resolve_expiry(subscription_type, expires_in_hours, expires_at)
     keys = _keys()
     keys[key] = {
         "used": False, "revoked": False,
         "created": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "activated_by": "", "activated_on": "",
         "customer_name": customer_name, "customer_email": customer_email,
-        "subscription_type": subscription_type, "expires_at": expires_at,
+        "subscription_type": subscription_type, "expires_at": resolved_expires_at,
         "freemius_license_id": freemius_license_id, "amount_paid": amount_paid,
         "renewal_count": 0, "activated_fp": "",
         "plan": plan if plan in PLANS else "pro",
@@ -222,8 +241,12 @@ def create_subscription_key(customer_name: str, customer_email: str,
     return key
 
 
-def create_new_key_manual(plan: str = "pro") -> str:
-    """Admin-panel 'create a key by hand' button (e.g. for manual bank-transfer approvals)."""
+def create_new_key_manual(plan: str = "pro", subscription_type: str = "monthly") -> str:
+    """Admin-panel 'create a key by hand' button (e.g. for manual bank-transfer
+    approvals). subscription_type controls duration — "annual" for 365 days,
+    anything else (including the "monthly" default) for 30 — same table
+    _resolve_expiry uses everywhere else, so a hand-issued annual key lasts
+    exactly as long as one issued through the normal approval flow."""
     key = generate_license_key()
     keys = _keys()
     keys[key] = {
@@ -231,13 +254,15 @@ def create_new_key_manual(plan: str = "pro") -> str:
         "created": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "activated_by": "", "activated_on": "",
         "customer_name": "Manual", "customer_email": "",
-        "subscription_type": "monthly",
-        "expires_at": (dt.datetime.now() + dt.timedelta(days=30)).strftime("%Y-%m-%d %H:%M"),
+        "subscription_type": subscription_type,
+        "expires_at": _resolve_expiry(subscription_type),
         "amount_paid": 0, "renewal_count": 0, "activated_fp": "",
         "plan": plan if plan in PLANS else "pro",
     }
     _save(keys)
     return key
+
+
 
 
 def revoke_key(key: str):

@@ -210,11 +210,12 @@ def _ocr_amount_found(ocr_text: str, expected_amount) -> bool:
     return target in re.findall(r"\d+", ocr_text)
 
 
-def submit_pro_request(request, name, email, phone="", payment_method="", txn_id="", screenshot_b64="", plan="pro"):
+def submit_pro_request(request, name, email, phone="", payment_method="", txn_id="", screenshot_b64="", plan="pro", billing="monthly"):
     reqs = persistence.load_requests()
     req_id = f"REQ-{int(time.time())}-{random.randint(1000, 9999)}"
     ip_hash = hash_ip(get_client_ip(request))
     plan = plan if plan in ("pro", "pro_plus") else "pro"
+    billing = billing if billing == "annual" else "monthly"
 
     if _rate_limited(ip_hash):
         return {"success": False,
@@ -235,7 +236,12 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
     # excluded from the auto-approval gate below rather than treated as a
     # mismatch, so a server without tesseract set up just behaves exactly
     # as it did before this was added.
-    expected_amount = limits.get("PRO_PLUS_PRICE_PKR" if plan == "pro_plus" else "PRO_PRICE_PKR", 0)
+    # Annual = 10x the monthly PKR price (2 months free, same math as the
+    # pricing/upgrade pages) — matched here so the OCR amount check expects
+    # the actual annual total instead of flagging every annual payment as
+    # a mismatch against the monthly price.
+    base_price = limits.get("PRO_PLUS_PRICE_PKR" if plan == "pro_plus" else "PRO_PRICE_PKR", 0)
+    expected_amount = int(base_price or 0) * 10 if billing == "annual" else base_price
     ocr_text = _ocr_extract_text(screenshot_b64)
     ocr_available = bool(ocr_text.strip())
     ocr_txn_match = _ocr_txn_id_found(ocr_text, txn_id) if ocr_available else False
@@ -292,6 +298,7 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         "auto_approved": auto_approved,
         "grace_expires": (dt.datetime.now() + dt.timedelta(hours=grace_hours)).strftime("%Y-%m-%d %H:%M") if auto_approved else "",
         "plan_requested": plan,
+        "billing_requested": billing,
     }
     reqs.insert(0, new_req)
     notified = notifications.notify_admin_new_request(name, email, phone, req_id,

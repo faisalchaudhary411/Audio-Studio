@@ -784,18 +784,32 @@ def upgrade():
     checkout_url_pro_plus = lim.get("CHECKOUT_URL_PRO_PLUS") or None
     requested_plan = request.args.get("plan") if request.method == "GET" else request.form.get("plan")
     requested_plan = requested_plan if requested_plan in ("pro", "pro_plus") else "pro"
+    requested_billing = request.args.get("billing") if request.method == "GET" else request.form.get("billing")
+    requested_billing = requested_billing if requested_billing == "annual" else "monthly"
+    # Annual PKR = 10x monthly (2 months free), same math the pricing page
+    # uses — kept in sync here so the manual-payment amount shown always
+    # matches what pricing.html advertised.
+    pro_price_pkr_annual = int(lim.get("PRO_PRICE_PKR", 840) or 840) * 10
+    pro_plus_price_pkr_annual = int(lim.get("PRO_PLUS_PRICE_PKR", 1680) or 1680) * 10
+    upgrade_ctx = dict(
+        checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus,
+        requested_plan=requested_plan, requested_billing=requested_billing,
+        pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
+        pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
+        pro_price_annual_usd=lim.get("PRO_PRICE_ANNUAL_USD_LABEL", "$30"),
+        pro_plus_price_annual_usd=lim.get("PRO_PLUS_PRICE_ANNUAL_USD_LABEL", "$60"),
+        pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
+        pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680),
+        pro_price_pkr_annual=pro_price_pkr_annual,
+        pro_plus_price_pkr_annual=pro_plus_price_pkr_annual,
+    )
     if request.method == "GET":
         # BUG FIX: this previously never read MANUAL_GRACE_HOURS at all on
         # the initial page load — only after submitting the form — so the
         # "access stops working after X hours" text was disconnected from
         # whatever was actually set in /admin/limits.
         grace_hours = lim.get("MANUAL_GRACE_HOURS", 72)
-        return render_template("upgrade.html", checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus,
-                                grace_hours=grace_hours, requested_plan=requested_plan,
-                                pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
-                                pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
-                                pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
-                                pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
+        return render_template("upgrade.html", grace_hours=grace_hours, **upgrade_ctx)
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip()
     phone = (request.form.get("phone") or "").strip()
@@ -803,12 +817,7 @@ def upgrade():
     txn_id = (request.form.get("txn_id") or "").strip()
 
     def _upgrade_error(msg):
-        return render_template("upgrade.html", error=msg, checkout_url=checkout_url,
-                                checkout_url_pro_plus=checkout_url_pro_plus, requested_plan=requested_plan,
-                                pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
-                                pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
-                                pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
-                                pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
+        return render_template("upgrade.html", error=msg, **upgrade_ctx)
 
     if not name or not email:
         return _upgrade_error("Name and email are required.")
@@ -836,26 +845,16 @@ def upgrade():
     already_pro = is_pro()
 
     result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64,
-                                              plan=requested_plan)
+                                              plan=requested_plan, billing=requested_billing)
     if result.get("success"):
         if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
-        return render_template("upgrade.html", submitted=True, req_id=result["id"], checkout_url=checkout_url,
-                                checkout_url_pro_plus=checkout_url_pro_plus,
+        return render_template("upgrade.html", submitted=True, req_id=result["id"],
                                 auto_approved=result.get("auto_approved", False),
                                 grace_hours=result.get("grace_hours"),
-                                already_pro=already_pro, requested_plan=requested_plan,
-                                pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
-                                pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
-                                pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
-                                pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
+                                already_pro=already_pro, **upgrade_ctx)
     return render_template("upgrade.html", error=result.get("error", "Something went wrong. Please try again."),
-                            checkout_url=checkout_url, checkout_url_pro_plus=checkout_url_pro_plus,
-                            requested_plan=requested_plan,
-                            pro_price_usd=lim.get("PRO_PRICE_USD_LABEL", "$3"),
-                            pro_plus_price_usd=lim.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
-                            pro_price_pkr=lim.get("PRO_PRICE_PKR", 840),
-                            pro_plus_price_pkr=lim.get("PRO_PLUS_PRICE_PKR", 1680))
+                            **upgrade_ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -1275,7 +1274,8 @@ def admin_keys():
         action = request.form.get("action")
         key = request.form.get("key", "")
         if action == "create":
-            licensing.create_new_key_manual(plan=request.form.get("plan", "pro"))
+            licensing.create_new_key_manual(plan=request.form.get("plan", "pro"),
+                                             subscription_type=request.form.get("duration", "monthly"))
         elif action == "revoke":
             licensing.revoke_key(key)
         elif action == "unrevoke":
@@ -1305,8 +1305,14 @@ def admin_requests():
             target = next((r for r in reqs if r["id"] == req_id), None)
             if target:
                 plan = target.get("plan_requested", "pro")
+                # Grant the duration the customer actually paid for — an
+                # annual manual-payment request approved here previously got
+                # the same hardcoded 30-day key as a monthly one, since
+                # billing period was never captured or passed through.
+                billing = target.get("billing_requested", "monthly")
                 new_key = licensing.create_subscription_key(target.get("name", "Pro User"), target.get("email", ""),
-                                                              plan=plan)
+                                                              plan=plan,
+                                                              subscription_type="annual" if billing == "annual" else "monthly")
                 pro_requests.approve_request(req_id, new_key)
                 _provision_paid_account(target.get("email", ""), target.get("name", "Pro User"),
                                          "VoxCraft Pro+" if plan == "pro_plus" else "VoxCraft Pro")
@@ -1728,10 +1734,19 @@ def fs_callback():
         license_key = existing_key
     else:
         limits = persistence.load_limits()
+        # BUG FIX: this used to hardcode subscription_type="monthly" (a
+        # blind 30-day expiry) regardless of what the customer actually
+        # bought. Freemius already knows the real billing cycle — verify_result
+        # carries its actual `expires_at` — so an annual purchase was getting
+        # cut off after 30 days instead of a year, until the next webhook
+        # happened to correct it (which for an annual plan could be
+        # ~11 months away). Passing that real expiry through directly fixes
+        # both monthly and annual the same way, with no separate code path.
         license_key = licensing.create_subscription_key(
             customer_name=verify_result.get("customer_name") or "Pro User",
             customer_email=verify_result.get("customer_email") or fs_email,
-            subscription_type="monthly",
+            subscription_type="recurring",
+            expires_at=verify_result.get("expires_at", ""),
             freemius_license_id=fs_license_id,
             amount_paid=limits.get("PRO_PRICE_PKR", 0),
             plan=verify_result.get("plan", "pro"),
