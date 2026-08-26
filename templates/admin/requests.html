@@ -16,7 +16,7 @@
           <strong style="font-family:var(--display);font-size:1.1rem;">{{ r.name }}</strong>
           <div style="color:var(--text-dim);font-size:0.85rem;">{{ r.email }} · {{ r.phone or 'no phone' }}</div>
           <div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);margin-top:4px;">{{ r.id }} · {{ r.date }}</div>
-          {% if r.plan_requested %}<div style="color:var(--text-dim);font-size:0.78rem;margin-top:2px;">Plan: {{ 'Pro+' if r.plan_requested == 'pro_plus' else 'Pro' }} · expect ~PKR {{ pro_plus_price_pkr if r.plan_requested == 'pro_plus' else pro_price_pkr }}</div>{% endif %}
+          {% if r.plan_requested %}<div style="color:var(--text-dim);font-size:0.78rem;margin-top:2px;">Plan: {{ 'Pro+' if r.plan_requested == 'pro_plus' else 'Pro' }} · {{ 'Annual' if r.billing_requested == 'annual' else 'Monthly' }} · expect ~PKR {{ (pro_plus_price_pkr * 10 if r.billing_requested == 'annual' else pro_plus_price_pkr) if r.plan_requested == 'pro_plus' else (pro_price_pkr * 10 if r.billing_requested == 'annual' else pro_price_pkr) }}</div>{% endif %}
           {% if r.payment_method %}<div style="margin-top:6px;"><span class="voice-card__tag">{{ r.payment_method }}</span> {% if r.txn_id %}<span style="color:var(--text-dim);font-size:0.8rem;">ref: {{ r.txn_id }}</span>{% endif %}</div>{% endif %}
           {% if r.duplicate_txn or r.duplicate_screenshot %}
           <div style="margin-top:8px;background:rgba(232,136,136,0.1);border:1px solid rgba(232,136,136,0.3);border-radius:8px;padding:8px 10px;">

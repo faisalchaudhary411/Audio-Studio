@@ -15,6 +15,10 @@
       <option value="pro">Pro ($3)</option>
       <option value="pro_plus">Pro+ ($6 — clone + music)</option>
     </select>
+    <select name="duration" class="admin-input" style="width:auto;">
+      <option value="monthly">Monthly (30 days)</option>
+      <option value="annual">Annual (365 days)</option>
+    </select>
     <button type="submit" class="btn btn--brass btn--sm">+ Create new key</button>
   </form>
 
@@ -30,6 +34,7 @@
           <td class="wrap-ok" style="max-width:180px;">{{ row.customer_name or '—' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">{{ row.customer_email }}</span></td>
           <td>
             {% if row.plan == 'pro_plus' %}<span style="color:var(--brass-hi);font-weight:600;">Pro+</span>{% else %}Pro{% endif %}
+            {% if row.subscription_type == 'annual' %}<br><span style="color:var(--text-dim);font-size:0.72rem;">Annual</span>{% elif row.subscription_type == 'grace' %}<br><span style="color:var(--text-dim);font-size:0.72rem;">Grace</span>{% endif %}
           </td>
           <td>{% if row.revoked %}<span style="color:#e88;">Revoked</span>{% else %}<span style="color:var(--jade-hi);">Active</span>{% endif %}</td>
           <td style="font-family:var(--mono);font-size:0.78rem;">{{ row.expires_at or '—' }}</td>
