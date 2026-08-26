@@ -75,11 +75,12 @@
       <div style="grid-column:1/-1;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Checkout URL — Pro ($3/mo, Freemius)</label>
         <input type="text" name="CHECKOUT_URL" value="{{ limits.CHECKOUT_URL }}" class="admin-input" style="width:100%;">
+        <p style="color:var(--text-dim);font-size:0.75rem;margin-top:4px;">One link for both cycles — the site appends billing_cycle=monthly/annual itself when the customer toggles Annual. This only works if the Pro plan on Freemius's own Plans page actually HAS an annual price added to it — otherwise Freemius silently checks out at whatever cycle the plan does have (usually monthly), regardless of what billing_cycle says.</p>
       </div>
       <div style="grid-column:1/-1;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Checkout URL — Pro+ ($6/mo, Freemius)</label>
         <input type="text" name="CHECKOUT_URL_PRO_PLUS" value="{{ limits.CHECKOUT_URL_PRO_PLUS }}" class="admin-input" style="width:100%;">
-        <p style="color:var(--text-dim);font-size:0.75rem;margin-top:4px;">Must be the Pro+ plan's own Freemius checkout link, not the same one as Pro above — Freemius gives each plan a separate checkout URL.</p>
+        <p style="color:var(--text-dim);font-size:0.75rem;margin-top:4px;">Must be the Pro+ plan's own Freemius checkout link, not the same one as Pro above — Freemius gives each plan a separate checkout URL. Same annual-pricing requirement as Pro above.</p>
       </div>
       <div style="grid-column:1/-1;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free features (pipe-separated)</label>
@@ -117,9 +118,14 @@
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">API Starter price label</label>
         <input type="text" name="API_STARTER_PRICE_USD_LABEL" value="{{ limits.API_STARTER_PRICE_USD_LABEL }}" class="admin-input" style="width:100%;">
       </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">API Starter price label (annual)</label>
+        <input type="text" name="API_STARTER_PRICE_ANNUAL_USD_LABEL" value="{{ limits.API_STARTER_PRICE_ANNUAL_USD_LABEL }}" class="admin-input" style="width:100%;">
+      </div>
       <div style="grid-column:1/-1;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Checkout URL — API Starter (Freemius)</label>
         <input type="text" name="CHECKOUT_URL_API_STARTER" value="{{ limits.CHECKOUT_URL_API_STARTER }}" class="admin-input" style="width:100%;">
+        <p style="color:var(--text-dim);font-size:0.75rem;margin-top:4px;">One link for both cycles — the site appends billing_cycle=monthly/annual itself. Requires an actual annual price to be added to this plan on the Freemius Plans page, or the annual toggle silently checks out at the monthly price.</p>
       </div>
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">API Pro quota (chars/month)</label>
@@ -128,6 +134,10 @@
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">API Pro price label</label>
         <input type="text" name="API_PRO_PRICE_USD_LABEL" value="{{ limits.API_PRO_PRICE_USD_LABEL }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">API Pro price label (annual)</label>
+        <input type="text" name="API_PRO_PRICE_ANNUAL_USD_LABEL" value="{{ limits.API_PRO_PRICE_ANNUAL_USD_LABEL }}" class="admin-input" style="width:100%;">
       </div>
       <div style="grid-column:1/-1;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Checkout URL — API Pro (Freemius)</label>
