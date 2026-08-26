@@ -58,6 +58,11 @@ DEFAULT_LIMITS = {
     "PRO_PRICE_PKR": 840,
     "PRO_PRICE_LABEL": "840 PKR",
     "PRO_PRICE_USD_LABEL": "$3",
+    # Annual USD labels: were read by app.py's pricing()/upgrade() routes
+    # via limits.get(...) with a hardcoded fallback, but never actually
+    # existed as a real config key or an admin-editable field — so admin
+    # had no way to change them; they silently always showed the fallback.
+    "PRO_PRICE_ANNUAL_USD_LABEL": "$30",
     # Pro+ previously had NO PKR fields at all — only Pro did — so the
     # manual-payment flow (EasyPaisa/JazzCash/bank, used by Pakistani
     # customers who can't pay by card) never told a Pro+ buyer how many
@@ -65,6 +70,7 @@ DEFAULT_LIMITS = {
     "PRO_PLUS_PRICE_PKR": 1680,
     "PRO_PLUS_PRICE_LABEL": "1680 PKR",
     "PRO_PLUS_PRICE_USD_LABEL": "$6",
+    "PRO_PLUS_PRICE_ANNUAL_USD_LABEL": "$60",
     "FREE_PRICE_LABEL": "$0",
     "CHECKOUT_URL": "",
     # Was one field for both plans, so every checkout — Pro or Pro+ — sent

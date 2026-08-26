@@ -1237,9 +1237,11 @@ def admin_limits():
             "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
             "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
             "PRO_PRICE_USD_LABEL": request.form.get("PRO_PRICE_USD_LABEL", "$3"),
+            "PRO_PRICE_ANNUAL_USD_LABEL": request.form.get("PRO_PRICE_ANNUAL_USD_LABEL", "$30"),
             "PRO_PLUS_PRICE_PKR": int(request.form.get("PRO_PLUS_PRICE_PKR", 1680)),
             "PRO_PLUS_PRICE_LABEL": request.form.get("PRO_PLUS_PRICE_LABEL", "1680 PKR"),
             "PRO_PLUS_PRICE_USD_LABEL": request.form.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
+            "PRO_PLUS_PRICE_ANNUAL_USD_LABEL": request.form.get("PRO_PLUS_PRICE_ANNUAL_USD_LABEL", "$60"),
             "FREE_PRICE_LABEL": request.form.get("FREE_PRICE_LABEL", "$0"),
             "CHECKOUT_URL": request.form.get("CHECKOUT_URL", ""),
             "CHECKOUT_URL_PRO_PLUS": request.form.get("CHECKOUT_URL_PRO_PLUS", ""),
@@ -1250,9 +1252,11 @@ def admin_limits():
             "API_FREE_QUOTA": int(request.form.get("API_FREE_QUOTA", 10000)),
             "API_STARTER_QUOTA": int(request.form.get("API_STARTER_QUOTA", 200000)),
             "API_STARTER_PRICE_USD_LABEL": request.form.get("API_STARTER_PRICE_USD_LABEL", "$9"),
+            "API_STARTER_PRICE_ANNUAL_USD_LABEL": request.form.get("API_STARTER_PRICE_ANNUAL_USD_LABEL", "$90"),
             "CHECKOUT_URL_API_STARTER": request.form.get("CHECKOUT_URL_API_STARTER", ""),
             "API_PRO_QUOTA": int(request.form.get("API_PRO_QUOTA", 1000000)),
             "API_PRO_PRICE_USD_LABEL": request.form.get("API_PRO_PRICE_USD_LABEL", "$29"),
+            "API_PRO_PRICE_ANNUAL_USD_LABEL": request.form.get("API_PRO_PRICE_ANNUAL_USD_LABEL", "$290"),
             "CHECKOUT_URL_API_PRO": request.form.get("CHECKOUT_URL_API_PRO", ""),
         }
         ok, err = persistence.save_limits(limits)
