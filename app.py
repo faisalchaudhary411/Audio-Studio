@@ -685,6 +685,26 @@ def pricing():
     return render_template("pricing.html", plans=plans)
 
 
+def _developers_ctx(lim):
+    """Shared context for /developers and /developers/signup (GET-error and
+    POST-success/error re-renders) — was three separate copies of this same
+    dict that had already drifted out of sync once (Starter/Pro annual
+    price labels only existed in one of the three). One function means
+    they can't drift again."""
+    return dict(
+        api_max_chars=API_MAX_CHARS_PER_REQUEST,
+        api_free_quota=lim.get("API_FREE_QUOTA", 10000),
+        api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
+        api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
+        api_starter_price_annual=lim.get("API_STARTER_PRICE_ANNUAL_USD_LABEL", "$90"),
+        checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
+        api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
+        api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
+        api_pro_price_annual=lim.get("API_PRO_PRICE_ANNUAL_USD_LABEL", "$290"),
+        checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
+    )
+
+
 @app.route("/developers")
 def developers():
     """Public marketing/landing page for the API product, now fully
@@ -696,16 +716,7 @@ def developers():
     issuance/overrides, it's just no longer required for a customer to get
     a key."""
     lim = persistence.load_limits()
-    return render_template(
-        "developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST,
-        api_free_quota=lim.get("API_FREE_QUOTA", 10000),
-        api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
-        api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
-        checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
-        api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
-        api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
-        checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
-    )
+    return render_template("developers.html", **_developers_ctx(lim))
 
 
 @app.route("/developers/signup", methods=["POST"])
@@ -723,15 +734,7 @@ def developers_signup():
     quota = int(lim.get("API_FREE_QUOTA", 10000))
 
     if not name or not email or "@" not in email:
-        return render_template("developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST,
-                                api_free_quota=quota,
-                                api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
-                                api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
-                                checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
-                                api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
-                                api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
-                                checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
-                                signup_error="Enter a name and a valid email.")
+        return render_template("developers.html", **_developers_ctx(lim), signup_error="Enter a name and a valid email.")
 
     existing = api_keys.find_key_by_email(email, plan="api_free")
     if existing:
@@ -741,15 +744,7 @@ def developers_signup():
         notifications.send_api_key_email(email, name, result["raw_key"], "api_free", quota)
         signup_result = {"already_had_key": False, "raw_key": result["raw_key"], "customer_email": email}
 
-    return render_template("developers.html", api_max_chars=API_MAX_CHARS_PER_REQUEST,
-                            api_free_quota=quota,
-                            api_starter_quota=lim.get("API_STARTER_QUOTA", 200000),
-                            api_starter_price=lim.get("API_STARTER_PRICE_USD_LABEL", "$9"),
-                            checkout_url_api_starter=lim.get("CHECKOUT_URL_API_STARTER") or None,
-                            api_pro_quota=lim.get("API_PRO_QUOTA", 1000000),
-                            api_pro_price=lim.get("API_PRO_PRICE_USD_LABEL", "$29"),
-                            checkout_url_api_pro=lim.get("CHECKOUT_URL_API_PRO") or None,
-                            signup_result=signup_result)
+    return render_template("developers.html", **_developers_ctx(lim), signup_result=signup_result)
 
 
 # ---------------------------------------------------------------------------
