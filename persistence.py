@@ -175,6 +175,14 @@ def init_db():
                     token TEXT PRIMARY KEY,
                     data  TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS promo_codes (
+                    code TEXT PRIMARY KEY,
+                    data TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS promo_redemptions (
+                    id   TEXT PRIMARY KEY,
+                    data TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -738,3 +746,77 @@ def delete_password_token(token: str):
             conn.commit()
         finally:
             conn.close()
+
+
+# ---- Promo codes ----------------------------------------------------------
+def load_promo_codes() -> dict:
+    """Returns {code: data_dict} for all promo codes."""
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT code, data FROM promo_codes").fetchall()
+        return {c: json.loads(d) for c, d in rows}
+    finally:
+        conn.close()
+
+
+def save_promo_codes(codes: dict) -> tuple:
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("DELETE FROM promo_codes")
+                for code, data in codes.items():
+                    conn.execute(
+                        "INSERT INTO promo_codes(code, data) VALUES (?, ?)",
+                        (code, json.dumps(data, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return True, ""
+            except Exception as e:
+                conn.rollback()
+                return False, str(e)
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
+
+
+def load_promo_redemptions() -> list:
+    """Returns list of redemption records (newest first is caller's job)."""
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT data FROM promo_redemptions").fetchall()
+        return [json.loads(r[0]) for r in rows]
+    finally:
+        conn.close()
+
+
+def save_promo_redemptions(items: list) -> tuple:
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("DELETE FROM promo_redemptions")
+                for item in items:
+                    rid = str(item.get("id", ""))
+                    conn.execute(
+                        "INSERT INTO promo_redemptions(id, data) VALUES (?, ?)",
+                        (rid, json.dumps(item, ensure_ascii=False)),
+                    )
+                conn.commit()
+                return True, ""
+            except Exception as e:
+                conn.rollback()
+                return False, str(e)
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
+
+
+def promo_redemption_transaction():
+    """Context manager style helper is not needed; callers use load + save
+    under _write_lock for the small volume of promo redemptions."""
+    pass

@@ -45,6 +45,7 @@ import api_keys
 import accounts
 import pro_requests
 import notifications
+import promo
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import hmac
@@ -845,9 +846,38 @@ def upgrade():
     # grace window, even though their real key was never actually invalid.
     already_pro = is_pro()
 
+    # Optional one-time discount promo (manual PKR path). Freemius card
+    # checkouts use the matching coupon configured in the Freemius dashboard.
+    promo_code = (request.form.get("promo_code") or "").strip()
+    promo_info = None
+    if promo_code:
+        ok, pmsg, prec = promo.validate_for_discount(promo_code, email, request)
+        if not ok:
+            return _upgrade_error(pmsg)
+        # Consume now so a second simultaneous submit from another tab cannot
+        # reuse the same code. If submit_pro_request later fails we still
+        # keep the redemption (admin can reactivate the code if needed).
+        cok, cmsg, _ = promo.consume_discount(
+            promo_code, email, request,
+            plan=requested_plan,
+            amount_before=0,
+        )
+        if not cok:
+            return _upgrade_error(cmsg)
+        promo_info = {"code": promo_code, "discount_percent": prec.get("discount_percent", 0)}
+
     result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64,
                                               plan=requested_plan, billing=requested_billing)
     if result.get("success"):
+        # Attach promo metadata onto the request record for admin visibility
+        if promo_info and result.get("id"):
+            reqs = persistence.load_requests()
+            for r in reqs:
+                if r.get("id") == result["id"]:
+                    r["promo_code"] = promo_info["code"]
+                    r["promo_discount_percent"] = promo_info["discount_percent"]
+                    break
+            persistence.save_requests(reqs)
         if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
         return render_template("upgrade.html", submitted=True, req_id=result["id"],
@@ -1577,6 +1607,76 @@ def admin_api_keys():
         k["usage"] = api_keys.get_usage(k["key_hash"])
 
     return render_template("admin/api_keys.html", keys=keys, just_created=just_created)
+
+
+@app.route("/admin/promos", methods=["GET", "POST"])
+@admin_required
+def admin_promos():
+    """Create / enable / disable / delete promo codes and view redemptions."""
+    error = success = None
+    if request.method == "POST":
+        action = request.form.get("action")
+        code = request.form.get("code", "")
+        if action == "create":
+            ok, msg, _ = promo.create_promo(
+                code=request.form.get("code", ""),
+                promo_type=request.form.get("promo_type", "free"),
+                plan=request.form.get("plan", "pro"),
+                duration_months=request.form.get("duration_months", 1),
+                discount_percent=request.form.get("discount_percent", 0),
+                expires_at=request.form.get("expires_at", ""),
+                max_uses=request.form.get("max_uses", 0),
+                note=request.form.get("note", ""),
+            )
+            if ok:
+                success = msg
+            else:
+                error = msg
+        elif action == "deactivate":
+            ok, msg = promo.deactivate_promo(code)
+            success = msg if ok else None
+            error = None if ok else msg
+        elif action == "activate":
+            ok, msg = promo.activate_promo(code)
+            success = msg if ok else None
+            error = None if ok else msg
+        elif action == "delete":
+            ok, msg = promo.delete_promo(code)
+            success = msg if ok else None
+            error = None if ok else msg
+    promos = promo.list_promos()
+    redemptions = persistence.load_promo_redemptions()
+    redemptions.sort(key=lambda r: r.get("redeemed_at", ""), reverse=True)
+    return render_template(
+        "admin/promos.html",
+        promos=promos,
+        redemptions=redemptions,
+        today=dt.datetime.now().strftime("%Y-%m-%d"),
+        error=error,
+        success=success,
+    )
+
+
+@app.route("/redeem", methods=["GET", "POST"])
+def redeem_promo():
+    """Public page: redeem a free-plan promo code (one-time per email + device)."""
+    if request.method == "GET":
+        return render_template("redeem.html", code=request.args.get("code", ""))
+
+    code = request.form.get("code", "")
+    name = request.form.get("name", "")
+    email = request.form.get("email", "")
+    site_url = request.url_root.rstrip("/")
+    ok, msg, result = promo.redeem_free(code, email, name, request, site_url=site_url)
+    if ok:
+        return render_template("redeem.html", success=msg, result=result)
+    return render_template(
+        "redeem.html",
+        error=msg,
+        code=code,
+        name=name,
+        email=email,
+    )
 
 
 @app.route("/api/announcements")
