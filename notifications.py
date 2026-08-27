@@ -374,3 +374,30 @@ def send_password_reset_email(customer_email: str, customer_name: str, reset_url
         return r.status_code in (200, 201)
     except Exception:
         return False
+
+
+def send_device_unlock_email(customer_email: str, customer_name: str, unlock_url: str) -> bool:
+    """One-time link that clears the device lock on a license key so the
+    customer can activate on a new phone/browser without admin help."""
+    resend_key = _secret("RESEND_API_KEY")
+    if not resend_key:
+        return False
+    html = f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#101820;font-family:Arial,sans-serif">
+<div style="max-width:560px;margin:0 auto;padding:24px 16px">
+  <div style="background:#182530;border-radius:12px;padding:20px;margin-bottom:16px">
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">Hi <strong style="color:#fff">{customer_name or 'there'}</strong>,</p>
+    <p style="color:#ccc;font-size:14px;margin:0 0 12px">You asked to move your VoxCraft Pro license to a new device. Click below to unlock it. After that, open the Activate page on your new device and enter your key.</p>
+    <div style="text-align:center;margin:20px 0;">
+      <a href="{unlock_url}" style="display:inline-block;background:#E8A93C;color:#1A1204;font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Unlock device</a>
+    </div>
+    <p style="color:#888;font-size:12px;margin:16px 0 0;">This link works once and expires in 1 hour. If you didn't request this, you can ignore this email — your key stays locked to the current device.</p>
+  </div>
+</div></body></html>"""
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": EMAIL_FROM, "to": [customer_email],
+                                 "subject": "Unlock your VoxCraft license for a new device", "html": html}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False

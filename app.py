@@ -771,7 +771,12 @@ def activate():
         # that everything else in the app checks against).
         session["license_key"] = result.get("internal_key", key)
         return render_template("activate.html", success=True, name=result.get("name"))
-    return render_template("activate.html", error=result.get("error", "Invalid license key."))
+    return render_template(
+        "activate.html",
+        error=result.get("error", "Invalid license key."),
+        needs_unlock=result.get("needs_unlock", False),
+        attempted_key=key if result.get("needs_unlock") else "",
+    )
 
 
 @app.route("/upgrade", methods=["GET", "POST"])
@@ -1780,6 +1785,103 @@ def resend_key():
         return render_template("resend_key.html", success="You have an active API key on this email. For security the full key cannot be re-displayed; contact support if you lost it.")
     # Always show generic success to avoid email enumeration
     return render_template("resend_key.html", success="If a matching active license was found, the key has been re-sent to your email.")
+
+
+@app.route("/unlock-device", methods=["GET", "POST"])
+def unlock_device():
+    """Self-serve device unlock: prove you own the key (key + matching email)
+    → we email a one-time link → clicking it clears the device lock so the
+    key can be activated on the new device."""
+    if request.method == "GET":
+        return render_template(
+            "unlock_device.html",
+            prefill_key=request.args.get("key", ""),
+        )
+
+    key = (request.form.get("license_key") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    if not key or not email or "@" not in email:
+        return render_template(
+            "unlock_device.html",
+            error="Enter your license key and the email on the license.",
+            prefill_key=key,
+            email=email,
+        )
+
+    # Resolve internal key (supports Freemius keys that wrap an internal one)
+    keys = persistence.load_license_keys()
+    info = keys.get(key)
+    if not info:
+        # Maybe they typed a Freemius id — find by freemius_license_id or email
+        for k, v in keys.items():
+            if (v.get("freemius_license_id") or "") == key:
+                key, info = k, v
+                break
+            if (v.get("customer_email") or "").strip().lower() == email and licensing.is_subscription_active(v):
+                # Don't auto-pick by email alone when key doesn't match — too loose
+                pass
+
+    # Generic response either way (no enumeration)
+    generic_ok = (
+        "If the key and email match an active license, we sent an unlock link. "
+        "Check your inbox (and spam). The link works once and expires in 1 hour."
+    )
+
+    if not info or not licensing.is_subscription_active(info) or info.get("revoked"):
+        return render_template("unlock_device.html", success=generic_ok)
+
+    stored_email = (info.get("customer_email") or "").strip().lower()
+    if stored_email != email:
+        return render_template("unlock_device.html", success=generic_ok)
+
+    # Create one-time unlock token (1 hour)
+    token = secrets.token_urlsafe(32)
+    expires = (dt.datetime.now() + dt.timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    persistence.set_password_token(token, {
+        "email": email,
+        "key": key,
+        "expires_at": expires,
+        "purpose": "device_unlock",
+    })
+    unlock_url = request.url_root.rstrip("/") + url_for("confirm_unlock_device", token=token)
+    name = info.get("customer_name") or "there"
+    sent = notifications.send_device_unlock_email(email, name, unlock_url)
+    if not sent:
+        # Still show generic; log for admin
+        app.logger.warning(f"Device unlock email failed for {email} key={key[:12]}…")
+    persistence.append_audit("device_unlock_requested", f"{email} key={key[:16]}…", actor=email)
+    return render_template("unlock_device.html", success=generic_ok)
+
+
+@app.route("/unlock-device/confirm/<token>", methods=["GET"])
+def confirm_unlock_device(token):
+    """One-time link from email: clear device lock on the key."""
+    record = persistence.get_password_token(token)
+    if not record or record.get("purpose") != "device_unlock":
+        return render_template("unlock_device.html", error="This unlock link is invalid or has already been used.")
+    try:
+        exp = dt.datetime.strptime(record.get("expires_at", ""), "%Y-%m-%d %H:%M:%S")
+        if dt.datetime.now() > exp:
+            persistence.delete_password_token(token)
+            return render_template("unlock_device.html", error="This unlock link has expired. Request a new one.")
+    except ValueError:
+        persistence.delete_password_token(token)
+        return render_template("unlock_device.html", error="This unlock link is invalid.")
+
+    key = record.get("key", "")
+    ok = licensing.reset_device_lock(key)
+    persistence.delete_password_token(token)  # single-use
+    if not ok:
+        return render_template("unlock_device.html", error="Could not unlock that key. Contact support.")
+    persistence.append_audit("device_unlock_confirmed", f"key={key[:16]}…", actor=record.get("email", ""))
+    return render_template(
+        "unlock_device.html",
+        success=(
+            "Device lock cleared. On this device, open Activate, enter your license key, "
+            "and you should be good to go."
+        ),
+        show_activate=True,
+    )
 
 
 @app.route("/admin/audit")

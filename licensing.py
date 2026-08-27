@@ -370,19 +370,19 @@ def _is_same_device_strict(info: dict, request) -> bool:
     return ip_matches and fp_matches
 
 
-# Soft device limit: a key may be active on up to this many distinct
-# browser fingerprints. Beyond that the customer must ask admin to reset
-# device lock (or free up a slot by not using an old device).
-MAX_DEVICES_PER_KEY = 3
+# Strict single-device lock. Same browser fingerprint (or recently-seen IP)
+# can re-activate freely; a different device must use the self-serve
+# unlock flow at /unlock-device (email proof) or admin reset.
+MAX_DEVICES_PER_KEY = 1
 
 
 def activate_vox_license(key: str, request) -> dict:
     """Activate/re-activate a key. Same-device re-activation is allowed even
     if IP changed (mirrors your original fix for mobile network switching).
 
-    Soft multi-device: up to MAX_DEVICES_PER_KEY distinct fingerprints are
-    allowed. Beyond that the user sees a clear message and can contact
-    support / use the admin reset-device action.
+    Strict one-device: only the known fingerprint/IP history can re-activate.
+    New device → clear error pointing the user to /unlock-device, where they
+    prove ownership (key + email) and receive a one-time unlock link.
 
     Uses persistence.license_key_transaction() instead of the old
     load-whole-dict/mutate/save-whole-dict pattern — that had a real race
@@ -407,25 +407,12 @@ def activate_vox_license(key: str, request) -> dict:
 
         if info.get("used"):
             if _is_same_device(info, request):
-                # Known device — just refresh history
+                # Known device — refresh history (IP can change on same phone)
                 if current_ip != "unknown":
                     ip_hash = hash_ip(current_ip)
-                    info["activated_ips"] = _push_history(info.get("activated_ips"), ip_hash, cap=MAX_DEVICES_PER_KEY)
+                    info["activated_ips"] = _push_history(info.get("activated_ips"), ip_hash, cap=5)
                     info["activated_by"] = ip_hash
-                info["activated_fps"] = _push_history(info.get("activated_fps"), current_fp, cap=MAX_DEVICES_PER_KEY)
-                info["activated_fp"] = current_fp
-                info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-                holder["info"] = info
-                return {"valid": True, "name": info.get("customer_name", "Pro User")}
-
-            # New device — allow if under soft limit
-            fp_history = info.get("activated_fps") or ([info["activated_fp"]] if info.get("activated_fp") else [])
-            if len(fp_history) < MAX_DEVICES_PER_KEY:
-                if current_ip != "unknown":
-                    ip_hash = hash_ip(current_ip)
-                    info["activated_ips"] = _push_history(info.get("activated_ips"), ip_hash, cap=MAX_DEVICES_PER_KEY)
-                    info["activated_by"] = ip_hash
-                info["activated_fps"] = _push_history(info.get("activated_fps"), current_fp, cap=MAX_DEVICES_PER_KEY)
+                info["activated_fps"] = _push_history(info.get("activated_fps"), current_fp, cap=5)
                 info["activated_fp"] = current_fp
                 info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
                 holder["info"] = info
@@ -434,9 +421,11 @@ def activate_vox_license(key: str, request) -> dict:
             return {
                 "valid": False,
                 "error": (
-                    f"This key is already active on {MAX_DEVICES_PER_KEY} devices. "
-                    "Remove access from an old device or contact support to reset the device lock."
+                    "This key is already active on another device. "
+                    "To move it here, go to Unlock device, enter this key and the email "
+                    "on the license, and follow the link we send you."
                 ),
+                "needs_unlock": True,
             }
 
         # First activation
