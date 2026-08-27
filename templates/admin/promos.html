@@ -55,16 +55,23 @@
           <option value="discount">Discount %</option>
         </select>
       </label>
-      <label id="field-plan" style="display:flex;flex-direction:column;gap:4px;font-size:0.82rem;color:var(--text-dim);">
-        Plan
-        <select name="plan" class="admin-input" style="width:auto;">
-          <option value="pro">Pro</option>
-          <option value="pro_plus">Pro+</option>
-          <option value="api_starter">API Starter</option>
-          <option value="api_pro">API Pro</option>
-          <option value="all">All (Pro+ + API Pro)</option>
-        </select>
-      </label>
+      <div id="field-plan" style="display:flex;flex-direction:column;gap:4px;font-size:0.82rem;color:var(--text-dim);">
+        <span>Plans (select one or more)</span>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding-top:4px;">
+          <label style="display:flex;align-items:center;gap:4px;color:var(--text-mid);font-size:0.85rem;cursor:pointer;">
+            <input type="checkbox" name="plans" value="pro" checked> Pro
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;color:var(--text-mid);font-size:0.85rem;cursor:pointer;">
+            <input type="checkbox" name="plans" value="pro_plus"> Pro+
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;color:var(--text-mid);font-size:0.85rem;cursor:pointer;">
+            <input type="checkbox" name="plans" value="api_starter"> API Starter
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;color:var(--text-mid);font-size:0.85rem;cursor:pointer;">
+            <input type="checkbox" name="plans" value="api_pro"> API Pro
+          </label>
+        </div>
+      </div>
       <label id="field-duration" style="display:flex;flex-direction:column;gap:4px;font-size:0.82rem;color:var(--text-dim);">
         Duration
         <select name="duration_months" class="admin-input" style="width:auto;">
@@ -119,7 +126,8 @@
           </td>
           <td style="font-size:0.85rem;">
             {% if p.type == 'free' %}
-              {{ p.plan }} · {{ p.duration_months }} mo
+              {% if p.plans %}{{ p.plans | join(', ') }}{% else %}{{ p.plan }}{% endif %}
+              · {{ p.duration_months }} mo
             {% else %}
               {{ p.discount_percent }}% off
             {% endif %}
