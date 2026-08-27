@@ -14,12 +14,17 @@
       <p style="color:var(--jade-hi);">Activated — welcome, {{ name }}. Head to the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a> to start using Pro.</p>
     {% else %}
       {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
+      {% if needs_unlock %}
+      <p style="margin-bottom:14px;">
+        <a href="{{ url_for('unlock_device', key=attempted_key) }}" class="btn btn--brass btn--sm">Unlock for this device</a>
+      </p>
+      {% endif %}
       <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="license_key" placeholder="VOXCRAFT-PRO-XXXXXXXXXXXXXX or your Freemius key" class="script-input" style="min-height:auto;padding:14px;" required>
+        <input type="text" name="license_key" placeholder="VOXCRAFT-PRO-XXXXXXXXXXXXXX or your Freemius key" class="script-input" style="min-height:auto;padding:14px;" required value="{{ attempted_key or '' }}">
         <button type="submit" class="btn btn--brass btn--block" style="margin-top:14px;">Activate</button>
       </form>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-top:10px;">Works with both a VoxCraft key and a Freemius (card payment) license key.</p>
-      <p style="color:var(--text-dim);font-size:0.85rem;margin-top:14px;">Don't have a key yet? <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">Get Pro</a>.</p>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-top:14px;">Don't have a key yet? <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">Get Pro</a>. · Switched phones? <a href="{{ url_for('unlock_device') }}" style="color:var(--brass-hi)">Unlock device</a>.</p>
     {% endif %}
   </div>
 
@@ -46,7 +51,7 @@
       </details>
       <details style="margin-top:10px;">
         <summary>Can I use one license on multiple devices?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">A license is tied to a single device at a time. If you need to move it to a new device or browser, activating there will update the binding — contact <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">support</a> if you run into trouble switching.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">A license is tied to a single device at a time. To move it to a new phone or browser, use <a href="{{ url_for('unlock_device') }}" style="color:var(--brass-hi);">Unlock device</a> — enter your key and the email on the license, click the link we email you, then activate on the new device.</p>
       </details>
       <details style="margin-top:10px;">
         <summary>I just paid manually — why isn't my key working yet?</summary>

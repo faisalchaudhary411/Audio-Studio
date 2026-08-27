@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Unlock Device — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:440px;margin:0 auto;">
+  <div class="section__head" style="text-align:center;">
+    <span class="section__eyebrow">License</span>
+    <h2 class="section__title">Unlock for a new device</h2>
+    <p class="section__sub">Your key is locked to one device. Prove you own it (key + email) and we’ll email a one-time unlock link.</p>
+  </div>
+
+  {% if error %}
+  <div class="panel" style="border-color:#e88;margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+  {% if success %}
+  <div class="panel" style="border-color:var(--jade-hi);margin-bottom:16px;">
+    {{ success }}
+    {% if show_activate %}
+    <p style="margin-top:12px;"><a href="{{ url_for('activate') }}" class="btn btn--brass btn--sm">Activate key now</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not success %}
+  <form method="post" class="panel">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label style="display:block;margin-bottom:12px;">
+      <span style="font-size:0.82rem;color:var(--text-dim);">License key</span>
+      <input type="text" name="license_key" class="admin-input" required
+             value="{{ prefill_key or '' }}" placeholder="VOXCRAFT-PRO-…"
+             style="width:100%;margin-top:4px;font-family:var(--mono);font-size:0.9rem;">
+    </label>
+    <label style="display:block;margin-bottom:16px;">
+      <span style="font-size:0.82rem;color:var(--text-dim);">Email on the license</span>
+      <input type="email" name="email" class="admin-input" required
+             value="{{ email or '' }}" placeholder="you@example.com"
+             style="width:100%;margin-top:4px;">
+    </label>
+    <button type="submit" class="btn btn--brass" style="width:100%;">Send unlock link</button>
+  </form>
+  {% endif %}
+
+  <p style="text-align:center;margin-top:20px;font-size:0.85rem;color:var(--text-dim);">
+    <a href="{{ url_for('activate') }}">Activate</a> ·
+    <a href="{{ url_for('resend_key') }}">Resend key</a>
+  </p>
+</section>
+{% endblock %}
