@@ -95,6 +95,12 @@ _start_clone_ref_sweep_thread()
 
 app = Flask(__name__)
 
+# Single source of truth for the canonical domain — used by the canonical
+# <link> tag, sitemap.xml, and robots.txt so they always point at the real
+# site regardless of which hostname (www, app.voxcraft.site, etc.) a given
+# request actually arrived on. Change here only.
+CANONICAL_HOST = "https://voxcraft.site"
+
 
 def static_url(filename: str) -> str:
     """Cache-busted static asset URL: appends ?v=<file mtime> instead of a
@@ -439,7 +445,7 @@ def inject_globals():
     # since both should canonicalize to their bare path anyway. Any future
     # page can override this explicitly by passing canonical_url into its
     # own render_template() call if it ever needs to point elsewhere.
-    canonical_url = request.url_root.rstrip("/") + request.path
+    canonical_url = CANONICAL_HOST + request.path
     return {
         "is_pro_ctx": is_pro(),
         "plan_ctx": get_plan(),
@@ -1007,7 +1013,7 @@ def sitemap():
     published blog post, using whatever domain the request actually came in
     on (so it's correct whether you're on Render's default domain or your
     real one, without needing a hardcoded base URL)."""
-    base = request.url_root.rstrip("/")
+    base = CANONICAL_HOST
     static_paths = [
         ("/", "1.0", "weekly"),
         ("/studio", "0.9", "weekly"),
@@ -1054,7 +1060,7 @@ def sitemap():
 
 @app.route("/robots.txt")
 def robots_txt():
-    base = request.url_root.rstrip("/")
+    base = CANONICAL_HOST
     content = f"""User-agent: *
 Allow: /
 Disallow: /admin/
