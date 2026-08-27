@@ -460,3 +460,30 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
         persistence.save_promo_codes(codes)
 
     return True, result["message"], result
+
+
+# ---- Simple rate limit for /redeem (in-process; sufficient at current scale)
+_redeem_attempts: dict = {}  # key -> list of timestamps
+
+
+def check_redeem_rate_limit(request, max_attempts: int = 8, window_seconds: int = 3600) -> str | None:
+    """Returns error message if rate limited, else None."""
+    import time
+    ip_hash = hash_ip(get_client_ip(request))
+    fp = get_browser_fingerprint(request)
+    key = f"{ip_hash}:{fp}"
+    now = time.time()
+    window = _redeem_attempts.get(key, [])
+    window = [t for t in window if now - t < window_seconds]
+    if len(window) >= max_attempts:
+        return "Too many redeem attempts. Please try again in an hour."
+    window.append(now)
+    _redeem_attempts[key] = window
+    # Opportunistic cleanup
+    if len(_redeem_attempts) > 5000:
+        cutoff = now - window_seconds
+        for k in list(_redeem_attempts.keys()):
+            _redeem_attempts[k] = [t for t in _redeem_attempts[k] if t > cutoff]
+            if not _redeem_attempts[k]:
+                del _redeem_attempts[k]
+    return None

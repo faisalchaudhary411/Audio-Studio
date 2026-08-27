@@ -1618,7 +1618,7 @@ def admin_promos():
         action = request.form.get("action")
         code = request.form.get("code", "")
         if action == "create":
-            ok, msg, _ = promo.create_promo(
+            ok, msg, rec = promo.create_promo(
                 code=request.form.get("code", ""),
                 promo_type=request.form.get("promo_type", "free"),
                 plan=request.form.get("plan", "pro"),
@@ -1630,28 +1630,38 @@ def admin_promos():
             )
             if ok:
                 success = msg
+                persistence.append_audit("promo_create", f"{rec.get('code')} type={rec.get('type')}")
             else:
                 error = msg
         elif action == "deactivate":
             ok, msg = promo.deactivate_promo(code)
             success = msg if ok else None
             error = None if ok else msg
+            if ok:
+                persistence.append_audit("promo_deactivate", code)
         elif action == "activate":
             ok, msg = promo.activate_promo(code)
             success = msg if ok else None
             error = None if ok else msg
+            if ok:
+                persistence.append_audit("promo_activate", code)
         elif action == "delete":
             ok, msg = promo.delete_promo(code)
             success = msg if ok else None
             error = None if ok else msg
+            if ok:
+                persistence.append_audit("promo_delete", code)
     promos = promo.list_promos()
     redemptions = persistence.load_promo_redemptions()
     redemptions.sort(key=lambda r: r.get("redeemed_at", ""), reverse=True)
+    today = dt.datetime.now().strftime("%Y-%m-%d")
+    soon = (dt.datetime.now() + dt.timedelta(days=7)).strftime("%Y-%m-%d")
     return render_template(
         "admin/promos.html",
         promos=promos,
         redemptions=redemptions,
-        today=dt.datetime.now().strftime("%Y-%m-%d"),
+        today=today,
+        soon=soon,
         error=error,
         success=success,
     )
@@ -1663,12 +1673,20 @@ def redeem_promo():
     if request.method == "GET":
         return render_template("redeem.html", code=request.args.get("code", ""))
 
+    limited = promo.check_redeem_rate_limit(request)
+    if limited:
+        return render_template("redeem.html", error=limited,
+                               code=request.form.get("code", ""),
+                               name=request.form.get("name", ""),
+                               email=request.form.get("email", ""))
+
     code = request.form.get("code", "")
     name = request.form.get("name", "")
     email = request.form.get("email", "")
     site_url = request.url_root.rstrip("/")
     ok, msg, result = promo.redeem_free(code, email, name, request, site_url=site_url)
     if ok:
+        persistence.append_audit("promo_redeem_free", f"{code} → {email}", actor=email)
         return render_template("redeem.html", success=msg, result=result)
     return render_template(
         "redeem.html",
@@ -1677,6 +1695,98 @@ def redeem_promo():
         name=name,
         email=email,
     )
+
+
+@app.route("/api/promo/validate", methods=["POST"])
+def api_promo_validate():
+    """Live discount validation for the upgrade page (AJAX). Does NOT consume the code."""
+    data = request.get_json(silent=True) or {}
+    code = data.get("code") or request.form.get("code", "")
+    email = data.get("email") or request.form.get("email", "")
+    ok, msg, rec = promo.validate_for_discount(code, email, request)
+    if not ok:
+        return jsonify({"ok": False, "message": msg})
+    return jsonify({
+        "ok": True,
+        "message": msg,
+        "discount_percent": rec.get("discount_percent", 0),
+    })
+
+
+@app.route("/resend-key", methods=["GET", "POST"])
+def resend_key():
+    """Self-serve: customer enters email + last 4 of txn ID (or full key prefix)
+    to have their license / API key re-emailed."""
+    if request.method == "GET":
+        return render_template("resend_key.html")
+
+    email = (request.form.get("email") or "").strip().lower()
+    hint = (request.form.get("hint") or "").strip()
+    if not email or "@" not in email:
+        return render_template("resend_key.html", error="Enter a valid email.")
+    if len(hint) < 4:
+        return render_template("resend_key.html", error="Enter at least the last 4 characters of your transaction ID or license key.", email=email)
+
+    # Look up license keys by email
+    keys = persistence.load_license_keys()
+    matched_keys = []
+    for k, info in keys.items():
+        if (info.get("customer_email") or "").strip().lower() != email:
+            continue
+        if not licensing.is_subscription_active(info) or info.get("revoked"):
+            continue
+        # Soft match: hint appears in key or in any stored txn-like field
+        blob = (k + " " + str(info.get("freemius_license_id", ""))).upper()
+        if hint.upper() in blob or blob.endswith(hint.upper()):
+            matched_keys.append(k)
+
+    # Also check pro requests for txn_id match
+    if not matched_keys:
+        for r in persistence.load_requests():
+            if (r.get("email") or "").strip().lower() != email:
+                continue
+            txn = (r.get("txn_id") or "")
+            if hint.lower() in txn.lower() or txn.lower().endswith(hint.lower()):
+                # Find key created for this request if any
+                for k, info in keys.items():
+                    if (info.get("customer_email") or "").strip().lower() == email and licensing.is_subscription_active(info):
+                        matched_keys.append(k)
+                        break
+
+    sent_any = False
+    if matched_keys:
+        name = "Customer"
+        for k, info in keys.items():
+            if k in matched_keys:
+                name = info.get("customer_name") or name
+                break
+        for k in matched_keys[:3]:
+            if notifications.send_key_email(email, name, k):
+                sent_any = True
+        persistence.append_audit("resend_key", f"{email} keys={len(matched_keys)}", actor=email)
+
+    # API keys
+    api_matched = False
+    for ak in persistence.load_api_keys():
+        if (ak.get("customer_email") or "").strip().lower() == email and ak.get("active"):
+            # We cannot re-show the raw key (hashed at rest). Tell them to contact support
+            # or we email a note that they already have an active key.
+            api_matched = True
+            break
+
+    if sent_any:
+        return render_template("resend_key.html", success="If a matching active license was found, the key has been re-sent to your email.")
+    if api_matched and not matched_keys:
+        return render_template("resend_key.html", success="You have an active API key on this email. For security the full key cannot be re-displayed; contact support if you lost it.")
+    # Always show generic success to avoid email enumeration
+    return render_template("resend_key.html", success="If a matching active license was found, the key has been re-sent to your email.")
+
+
+@app.route("/admin/audit")
+@admin_required
+def admin_audit():
+    rows = persistence.load_audit_log(200)
+    return render_template("admin/audit.html", rows=rows)
 
 
 @app.route("/api/announcements")

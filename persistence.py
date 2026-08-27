@@ -183,6 +183,10 @@ def init_db():
                     id   TEXT PRIMARY KEY,
                     data TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id   TEXT PRIMARY KEY,
+                    data TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -820,3 +824,53 @@ def promo_redemption_transaction():
     """Context manager style helper is not needed; callers use load + save
     under _write_lock for the small volume of promo redemptions."""
     pass
+
+
+# ---- Audit log ------------------------------------------------------------
+def append_audit(action: str, detail: str = "", actor: str = "admin") -> None:
+    """Append-only admin action log. Keeps the last 500 entries."""
+    import uuid
+    import datetime as _dt
+    entry = {
+        "id": str(uuid.uuid4()),
+        "at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "actor": actor,
+        "action": action,
+        "detail": (detail or "")[:500],
+    }
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "INSERT INTO audit_log(id, data) VALUES (?, ?)",
+                    (entry["id"], json.dumps(entry, ensure_ascii=False)),
+                )
+                # Cap at 500 rows
+                count = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
+                if count > 500:
+                    old = conn.execute(
+                        "SELECT id FROM audit_log ORDER BY id ASC LIMIT ?",
+                        (count - 500,),
+                    ).fetchall()
+                    for (oid,) in old:
+                        conn.execute("DELETE FROM audit_log WHERE id = ?", (oid,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            finally:
+                conn.close()
+    except Exception:
+        pass  # never break the main action for logging
+
+
+def load_audit_log(limit: int = 100) -> list:
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT data FROM audit_log").fetchall()
+        items = [json.loads(r[0]) for r in rows]
+        items.sort(key=lambda x: x.get("at", ""), reverse=True)
+        return items[:limit]
+    finally:
+        conn.close()
