@@ -87,6 +87,10 @@
         </div>
       {% else %}
         <p class="upgrade-ok">Request submitted — reference <strong>{{ req_id }}</strong>. We’ll email your license key once verified.</p>
+        <p style="margin-top:10px;font-size:0.88rem;">
+          <a href="{{ url_for('request_status') }}">Check status anytime</a>
+          (use this request ID + your email).
+        </p>
       {% endif %}
     {% else %}
       {% if error %}<p class="upgrade-err">{{ error }}</p>{% endif %}

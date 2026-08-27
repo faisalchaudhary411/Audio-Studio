@@ -34,7 +34,10 @@
           {% set t = topic or 'General' %}
           <option value="General" {% if t == 'General' %}selected{% endif %}>General question</option>
           <option value="Support" {% if t == 'Support' %}selected{% endif %}>Studio / tool support</option>
-          <option value="Pro Licensing" {% if t == 'Pro Licensing' %}selected{% endif %}>Pro license / payment verification</option>
+          <option value="Payment status" {% if t == 'Payment status' %}selected{% endif %}>Payment / request status (self-serve)</option>
+          <option value="Missing key" {% if t == 'Missing key' %}selected{% endif %}>Lost / resend license key (self-serve)</option>
+          <option value="New device" {% if t == 'New device' %}selected{% endif %}>Unlock for new device (self-serve)</option>
+          <option value="Pro Licensing" {% if t == 'Pro Licensing' %}selected{% endif %}>Pro license / other payment issue</option>
           <option value="Bug Report" {% if t == 'Bug Report' %}selected{% endif %}>Bug report</option>
           <option value="Feature Request" {% if t == 'Feature Request' %}selected{% endif %}>Feature request</option>
           <option value="Press / Partnership" {% if t == 'Press / Partnership' %}selected{% endif %}>Press / partnership</option>
@@ -53,7 +56,8 @@
   <div style="margin-top:24px;color:var(--text-mid);line-height:1.7;">
     <h2 style="font-family:var(--display);color:var(--text-hi);font-size:1.05rem;margin-bottom:10px;">Before you write in</h2>
     <ul style="padding-left:18px;">
-      <li><strong>Pro payment verification:</strong> include the request ID from your <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">upgrade</a> confirmation — it's the fastest way for us to find your submission.</li>
+      <li><strong>Payment status:</strong> use <a href="{{ url_for('request_status') }}" style="color:var(--brass-hi);">check status</a> with your email + request ID — no need to wait for a reply.</li>
+      <li><strong>Lost key:</strong> <a href="{{ url_for('resend_key') }}" style="color:var(--brass-hi);">resend key</a>. <strong>New phone:</strong> <a href="{{ url_for('unlock_device') }}" style="color:var(--brass-hi);">unlock device</a>.</li>
       <li><strong>License not activating:</strong> check the <a href="{{ url_for('activate') }}" style="color:var(--brass-hi);">activate</a> page first — most issues are a copy-paste error in the key.</li>
       <li><strong>Tool not working as expected:</strong> tell us the input file type/language and what you expected vs. what happened — it helps us reproduce it fast.</li>
       <li><strong>Data or privacy questions:</strong> see our <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">privacy policy</a> for what we collect and retain.</li>

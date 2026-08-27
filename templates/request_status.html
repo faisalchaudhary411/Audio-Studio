@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Payment Status — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:440px;margin:0 auto;">
+  <div class="section__head" style="text-align:center;">
+    <span class="section__eyebrow">Support</span>
+    <h2 class="section__title">Check payment status</h2>
+    <p class="section__sub">Enter the email you paid with and your request ID or transaction reference.</p>
+  </div>
+
+  {% if error %}
+  <div class="panel" style="border-color:#e88;margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+
+  {% if not_found %}
+  <div class="panel" style="margin-bottom:16px;">
+    No matching request found for that email and ID. Double-check both, or submit a new request on the <a href="{{ url_for('upgrade') }}">Upgrade</a> page.
+  </div>
+  {% endif %}
+
+  {% if results %}
+  <div style="display:grid;gap:12px;margin-bottom:20px;">
+    {% for r in results %}
+    <div class="panel">
+      <div style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);">{{ r.id }} · {{ r.date }}</div>
+      <div style="margin-top:6px;font-weight:600;color:{% if r.status == 'approved' %}var(--jade-hi){% elif r.status == 'rejected' %}#e88{% else %}var(--brass-hi){% endif %};">
+        {{ r.status }}{% if r.auto_approved %} · instant{% endif %}
+      </div>
+      <div style="margin-top:6px;font-size:0.9rem;">{{ r.message }}</div>
+      {% if r.status == 'approved' %}
+      <p style="margin-top:10px;"><a href="{{ url_for('activate') }}" class="btn btn--brass btn--sm">Activate key</a></p>
+      {% elif r.status == 'rejected' %}
+      <p style="margin-top:10px;"><a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm">Submit again</a></p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not results %}
+  <form method="post" class="panel">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label style="display:block;margin-bottom:12px;">
+      <span style="font-size:0.82rem;color:var(--text-dim);">Email</span>
+      <input type="email" name="email" class="admin-input" required value="{{ email or '' }}"
+             style="width:100%;margin-top:4px;" placeholder="you@example.com">
+    </label>
+    <label style="display:block;margin-bottom:16px;">
+      <span style="font-size:0.82rem;color:var(--text-dim);">Request ID or transaction ID</span>
+      <input type="text" name="hint" class="admin-input" required minlength="4"
+             style="width:100%;margin-top:4px;" placeholder="REQ-… or txn/ref ID">
+    </label>
+    <button type="submit" class="btn btn--brass" style="width:100%;">Check status</button>
+  </form>
+  {% endif %}
+
+  <p style="text-align:center;margin-top:20px;font-size:0.85rem;color:var(--text-dim);">
+    <a href="{{ url_for('resend_key') }}">Resend key</a> ·
+    <a href="{{ url_for('unlock_device') }}">Unlock device</a> ·
+    <a href="{{ url_for('upgrade') }}">Upgrade</a>
+  </p>
+</section>
+{% endblock %}
