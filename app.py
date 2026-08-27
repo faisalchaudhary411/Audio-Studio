@@ -871,8 +871,20 @@ def upgrade():
             return _upgrade_error(cmsg)
         promo_info = {"code": promo_code, "discount_percent": prec.get("discount_percent", 0)}
 
-    result = pro_requests.submit_pro_request(request, name, email, phone, payment_method, txn_id, screenshot_b64,
-                                              plan=requested_plan, billing=requested_billing)
+    # Expected PKR for OCR amount gate (promo reduces it)
+    base_pkr = int(lim.get("PRO_PLUS_PRICE_PKR" if requested_plan == "pro_plus" else "PRO_PRICE_PKR", 0) or 0)
+    expected_pkr = base_pkr * 10 if requested_billing == "annual" else base_pkr
+    if promo_info and promo_info.get("discount_percent"):
+        expected_pkr = int(round(expected_pkr * (100 - int(promo_info["discount_percent"])) / 100))
+    elif not promo_info:
+        # Still pass full expected amount so OCR amount gate is consistent
+        pass
+
+    result = pro_requests.submit_pro_request(
+        request, name, email, phone, payment_method, txn_id, screenshot_b64,
+        plan=requested_plan, billing=requested_billing,
+        expected_amount_override=expected_pkr,
+    )
     if result.get("success"):
         # Attach promo metadata onto the request record for admin visibility
         if promo_info and result.get("id"):

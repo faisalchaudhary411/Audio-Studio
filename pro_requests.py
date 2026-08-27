@@ -196,21 +196,33 @@ def _ocr_txn_id_found(ocr_text: str, txn_id: str) -> bool:
     return txn_digits in _digits_only(ocr_text)
 
 
-def _ocr_amount_found(ocr_text: str, expected_amount) -> bool:
-    """Exact whole-number token match (not substring) — deliberately
-    stricter than the txn_id check above, since a substring match on a
-    plain amount like '840' would trivially false-positive against phone
-    numbers, dates, or any other number sharing that digit sequence."""
+def _ocr_amount_found(ocr_text: str, expected_amount, tolerance_pct: float = 2.0) -> bool:
+    """True if any number OCR read is within tolerance_pct of expected
+    (default ±2%, min ±1 PKR). Banking apps show 840 / 840.00 / 1,680 —
+    we compare numeric value. Hard gate for auto-approve only; admin can
+    still approve odd amounts manually."""
     if not expected_amount:
         return False
     try:
-        target = str(int(expected_amount))
+        expected = float(expected_amount)
     except Exception:
         return False
-    return target in re.findall(r"\d+", ocr_text)
+    if expected <= 0:
+        return False
+    tol = max(expected * (tolerance_pct / 100.0), 1.0)
+    for token in re.findall(r"\d[\d,]*\.?\d*", ocr_text or ""):
+        try:
+            val = float(token.replace(",", ""))
+        except ValueError:
+            continue
+        if abs(val - expected) <= tol:
+            return True
+    return False
 
 
-def submit_pro_request(request, name, email, phone="", payment_method="", txn_id="", screenshot_b64="", plan="pro", billing="monthly"):
+def submit_pro_request(request, name, email, phone="", payment_method="", txn_id="",
+                       screenshot_b64="", plan="pro", billing="monthly",
+                       expected_amount_override=None):
     reqs = persistence.load_requests()
     req_id = f"REQ-{int(time.time())}-{random.randint(1000, 9999)}"
     ip_hash = hash_ip(get_client_ip(request))
@@ -229,19 +241,16 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
     duplicate_txn = _txn_id_is_duplicate(txn_id)
     duplicate_screenshot = _screenshot_is_duplicate(screenshot_hash)
 
-    # OCR cross-check: does the txn_id the customer typed actually appear
-    # IN the screenshot they uploaded, and does the plan's price appear
-    # too? ocr_available is False (not "failed") whenever tesseract isn't
-    # installed or nothing readable was found — that case is deliberately
-    # excluded from the auto-approval gate below rather than treated as a
-    # mismatch, so a server without tesseract set up just behaves exactly
-    # as it did before this was added.
-    # Annual = 10x the monthly PKR price (2 months free, same math as the
-    # pricing/upgrade pages) — matched here so the OCR amount check expects
-    # the actual annual total instead of flagging every annual payment as
-    # a mismatch against the monthly price.
+    # Expected PKR amount (annual = 10× monthly). Promo discount can override
+    # via expected_amount_override from the upgrade route.
     base_price = limits.get("PRO_PLUS_PRICE_PKR" if plan == "pro_plus" else "PRO_PRICE_PKR", 0)
-    expected_amount = int(base_price or 0) * 10 if billing == "annual" else base_price
+    expected_amount = int(base_price or 0) * 10 if billing == "annual" else int(base_price or 0)
+    if expected_amount_override is not None:
+        try:
+            expected_amount = int(round(float(expected_amount_override)))
+        except (TypeError, ValueError):
+            pass
+
     ocr_text = _ocr_extract_text(screenshot_b64)
     ocr_available = bool(ocr_text.strip())
     ocr_txn_match = _ocr_txn_id_found(ocr_text, txn_id) if ocr_available else False
@@ -253,8 +262,6 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
     internal_key = None
 
     # ---- Auto-reject clear junk (never hits admin inbox) ----
-    # These are high-confidence fraud / mistakes. Genuine customers can
-    # fix and resubmit (rejected status is excluded from duplicate checks).
     if duplicate_txn:
         auto_rejected = True
         reject_reason = "This transaction ID was already used on another request."
@@ -268,28 +275,34 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         auto_rejected = True
         reject_reason = "The uploaded screenshot is not a valid image. Please upload a clear PNG or JPG."
     elif ocr_available and txn_id.strip() and not ocr_txn_match and screenshot_b64:
-        # OCR read the image but the typed txn ID is nowhere in it — almost
-        # always a mismatched screenshot or fabricated ID.
         auto_rejected = True
         reject_reason = (
             "The transaction ID you entered does not appear in the payment screenshot. "
             "Double-check both and submit again."
         )
 
-    # ---- Auto-approve clean submissions (when enabled in /admin/limits) ----
-    # Amount match is still NOT required (banking apps format PKR differently).
+    # ---- Auto-approve → GRACE access only (never permanent) ----
+    # Requires ALL of:
+    #   • AUTO_APPROVE_MANUAL enabled in /admin/limits
+    #   • Valid image + unique txn + unique screenshot
+    #   • OCR actually readable (if tesseract missing → admin queue, no blind approve)
+    #   • OCR finds typed txn ID in the image
+    #   • OCR finds amount within ±2% of expected (plan/billing/promo)
+    #   • This device has not already received an auto-approve
+    # Key is always subscription_type="grace" with MANUAL_GRACE_HOURS.
+    # Permanent access only after admin Approve in /admin/requests.
     if (not auto_rejected and auto_approve_enabled and txn_id.strip()
             and _is_valid_image(screenshot_b64)
             and not _device_already_auto_approved(ip_hash)
             and not duplicate_txn and not duplicate_screenshot
-            and not (ocr_available and not ocr_txn_match)):
+            and ocr_available
+            and ocr_txn_match
+            and ocr_amount_match):
         internal_key = licensing.create_subscription_key(
             name.strip(), email.strip(), subscription_type="grace",
             expires_in_hours=grace_hours, plan=plan,
         )
-        # Immediately bind this key to the CURRENT device/session so the
-        # customer gets instant access on the browser they're using right
-        # now — not just an emailed key they'd have to separately activate.
+        # Bind to this device immediately for grace-period access.
         licensing.activate_vox_license(internal_key, request)
         auto_approved = True
 
@@ -322,12 +335,15 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         "ocr_available": ocr_available,
         "ocr_txn_match": ocr_txn_match,
         "ocr_amount_match": ocr_amount_match,
+        "expected_amount_pkr": expected_amount,
         "auto_approved": auto_approved,
         "auto_rejected": auto_rejected,
         "reject_reason": reject_reason,
         "grace_expires": (dt.datetime.now() + dt.timedelta(hours=grace_hours)).strftime("%Y-%m-%d %H:%M") if auto_approved else "",
         "plan_requested": plan,
         "billing_requested": billing,
+        # Grace only — permanent key is created only when admin clicks Approve
+        "access_type": "grace" if auto_approved else "",
     }
     reqs.insert(0, new_req)
 
