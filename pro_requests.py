@@ -248,16 +248,38 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
     ocr_amount_match = _ocr_amount_found(ocr_text, expected_amount) if ocr_available else False
 
     auto_approved = False
+    auto_rejected = False
+    reject_reason = ""
     internal_key = None
 
-    # Same conditions as before, PLUS: neither the txn_id nor the
-    # screenshot may already be in use by another live request, AND — if
-    # OCR is available and found readable text at all — the typed txn_id
-    # must actually appear in that text. Amount match is deliberately NOT
-    # a gate here (currency formatting varies too much across banking
-    # apps to risk blocking a genuine customer on a false negative) — it's
-    # surfaced to admin as an informational flag instead, see below.
-    if (auto_approve_enabled and txn_id.strip() and _is_valid_image(screenshot_b64)
+    # ---- Auto-reject clear junk (never hits admin inbox) ----
+    # These are high-confidence fraud / mistakes. Genuine customers can
+    # fix and resubmit (rejected status is excluded from duplicate checks).
+    if duplicate_txn:
+        auto_rejected = True
+        reject_reason = "This transaction ID was already used on another request."
+    elif duplicate_screenshot and screenshot_b64:
+        auto_rejected = True
+        reject_reason = "This payment screenshot was already used on another request."
+    elif payment_method and (not txn_id or len(txn_id.strip()) < 6):
+        auto_rejected = True
+        reject_reason = "A valid transaction / reference ID (at least 6 characters) is required."
+    elif payment_method and screenshot_b64 and not _is_valid_image(screenshot_b64):
+        auto_rejected = True
+        reject_reason = "The uploaded screenshot is not a valid image. Please upload a clear PNG or JPG."
+    elif ocr_available and txn_id.strip() and not ocr_txn_match and screenshot_b64:
+        # OCR read the image but the typed txn ID is nowhere in it — almost
+        # always a mismatched screenshot or fabricated ID.
+        auto_rejected = True
+        reject_reason = (
+            "The transaction ID you entered does not appear in the payment screenshot. "
+            "Double-check both and submit again."
+        )
+
+    # ---- Auto-approve clean submissions (when enabled in /admin/limits) ----
+    # Amount match is still NOT required (banking apps format PKR differently).
+    if (not auto_rejected and auto_approve_enabled and txn_id.strip()
+            and _is_valid_image(screenshot_b64)
             and not _device_already_auto_approved(ip_hash)
             and not duplicate_txn and not duplicate_screenshot
             and not (ocr_available and not ocr_txn_match)):
@@ -271,12 +293,21 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         licensing.activate_vox_license(internal_key, request)
         auto_approved = True
 
+    if auto_rejected:
+        status = "rejected"
+    elif auto_approved:
+        status = "approved"
+    elif payment_method:
+        status = "payment_pending"
+    else:
+        status = "pending"
+
     new_req = {
         "id": req_id,
         "name": name.strip(),
         "email": email.strip(),
         "phone": phone.strip(),
-        "status": "approved" if auto_approved else ("payment_pending" if payment_method else "pending"),
+        "status": status,
         "date": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "key_assigned": internal_key or "",
         "ip": ip_hash,
@@ -284,10 +315,6 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         "payment_method": payment_method,
         "txn_id": txn_id.strip(),
         "has_screenshot": bool(screenshot_b64),
-        # Kept in the request record itself now (not just relayed once via
-        # the admin notification email) so it's still reviewable later in
-        # /admin/requests — previously the ONLY copy was whatever landed in
-        # that one email, gone from the app itself the moment it was sent.
         "screenshot_b64": screenshot_b64,
         "screenshot_sha256": screenshot_hash,
         "duplicate_txn": duplicate_txn,
@@ -296,16 +323,26 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         "ocr_txn_match": ocr_txn_match,
         "ocr_amount_match": ocr_amount_match,
         "auto_approved": auto_approved,
+        "auto_rejected": auto_rejected,
+        "reject_reason": reject_reason,
         "grace_expires": (dt.datetime.now() + dt.timedelta(hours=grace_hours)).strftime("%Y-%m-%d %H:%M") if auto_approved else "",
         "plan_requested": plan,
         "billing_requested": billing,
     }
     reqs.insert(0, new_req)
-    notified = notifications.notify_admin_new_request(name, email, phone, req_id,
-                                                        payment_method=payment_method,
-                                                        txn_id=txn_id, screenshot_b64=screenshot_b64,
-                                                        site_url=request.url_root)
+
+    # Only notify admin for cases that still need a human (not auto-approved,
+    # not auto-rejected). This is the main inbox-load reduction.
+    notified = False
+    if not auto_approved and not auto_rejected:
+        notified = notifications.notify_admin_new_request(
+            name, email, phone, req_id,
+            payment_method=payment_method,
+            txn_id=txn_id, screenshot_b64=screenshot_b64,
+            site_url=request.url_root,
+        )
     new_req["notified"] = notified
+
     if auto_approved and email:
         notifications.send_key_email(email, name, internal_key)
 
@@ -315,6 +352,8 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
             "success": True, "id": req_id, "notified": notified,
             "auto_approved": auto_approved, "license_key": internal_key,
             "grace_hours": grace_hours if auto_approved else None,
+            "auto_rejected": auto_rejected,
+            "reject_reason": reject_reason,
         }
     return {"success": False, "error": err}
 

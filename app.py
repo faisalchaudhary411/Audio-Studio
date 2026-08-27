@@ -883,6 +883,12 @@ def upgrade():
                     r["promo_discount_percent"] = promo_info["discount_percent"]
                     break
             persistence.save_requests(reqs)
+        if result.get("auto_rejected"):
+            return render_template(
+                "upgrade.html",
+                error=result.get("reject_reason") or "This submission could not be accepted. Please fix and try again.",
+                **upgrade_ctx,
+            )
         if result.get("auto_approved") and result.get("license_key") and not already_pro:
             session["license_key"] = result["license_key"]  # instant unlock on this device
         return render_template("upgrade.html", submitted=True, req_id=result["id"],
@@ -1148,6 +1154,17 @@ def contact():
     if errors:
         return render_template("contact.html", errors=errors, name=name, email=email,
                                 topic=topic, message=message)
+
+    # Route common support topics to self-serve pages — no admin email.
+    topic_l = topic.lower()
+    if any(k in topic_l for k in ("missing key", "resend key", "lost key", "where is my key")):
+        return redirect(url_for("resend_key"))
+    if any(k in topic_l for k in ("device", "unlock", "another device", "new phone", "new device")):
+        return redirect(url_for("unlock_device"))
+    if any(k in topic_l for k in ("payment status", "request status", "pending payment", "not approved")):
+        return redirect(url_for("request_status"))
+    if any(k in topic_l for k in ("promo", "redeem code", "free trial")):
+        return redirect(url_for("redeem_promo"))
 
     req_id = secrets.token_hex(4)
     sent = notifications.notify_contact_message(name, email, topic, message, req_id=req_id,
@@ -1785,6 +1802,64 @@ def resend_key():
         return render_template("resend_key.html", success="You have an active API key on this email. For security the full key cannot be re-displayed; contact support if you lost it.")
     # Always show generic success to avoid email enumeration
     return render_template("resend_key.html", success="If a matching active license was found, the key has been re-sent to your email.")
+
+
+@app.route("/request-status", methods=["GET", "POST"])
+def request_status():
+    """Self-serve: customer checks payment / pro-request status without emailing admin."""
+    if request.method == "GET":
+        return render_template("request_status.html")
+
+    email = (request.form.get("email") or "").strip().lower()
+    hint = (request.form.get("hint") or "").strip()
+    if not email or "@" not in email:
+        return render_template("request_status.html", error="Enter the email you used when paying.")
+    if len(hint) < 4:
+        return render_template(
+            "request_status.html",
+            error="Enter your request ID (REQ-…) or at least 4 characters of the transaction ID.",
+            email=email,
+        )
+
+    matches = []
+    for r in persistence.load_requests():
+        if (r.get("email") or "").strip().lower() != email:
+            continue
+        rid = (r.get("id") or "")
+        txn = (r.get("txn_id") or "")
+        if hint.upper() in rid.upper() or hint.lower() in txn.lower() or txn.lower().endswith(hint.lower()):
+            matches.append(r)
+
+    if not matches:
+        # Generic — avoid confirming whether email exists
+        return render_template(
+            "request_status.html",
+            not_found=True,
+            email=email,
+        )
+
+    # Newest first
+    matches.sort(key=lambda x: x.get("date", ""), reverse=True)
+    results = []
+    for r in matches[:5]:
+        status = r.get("status", "pending")
+        if status == "approved":
+            msg = "Approved — your license key was emailed. Activate it on the Activate page."
+        elif status == "rejected":
+            msg = r.get("reject_reason") or "Rejected. Fix the issue and submit a new payment request."
+        elif status in ("pending", "payment_pending"):
+            msg = "Under review. You’ll get an email when it’s approved (usually within a day)."
+        else:
+            msg = f"Status: {status}"
+        results.append({
+            "id": r.get("id"),
+            "date": r.get("date"),
+            "status": status,
+            "plan": r.get("plan_requested", "pro"),
+            "message": msg,
+            "auto_approved": r.get("auto_approved"),
+        })
+    return render_template("request_status.html", results=results, email=email)
 
 
 @app.route("/unlock-device", methods=["GET", "POST"])
