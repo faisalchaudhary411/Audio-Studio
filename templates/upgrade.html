@@ -117,7 +117,8 @@
           <option value="Other">Other</option>
         </select>
         <input type="text" name="txn_id" placeholder="Transaction / reference ID *" class="upgrade-field" required>
-        <input type="text" name="promo_code" placeholder="Promo / discount code (optional)" class="upgrade-field" style="text-transform:uppercase;">
+        <input type="text" name="promo_code" id="promo-code-input" placeholder="Promo / discount code (optional)" class="upgrade-field" style="text-transform:uppercase;" autocomplete="off">
+        <p id="promo-status" style="font-size:0.82rem;margin:4px 0 8px;min-height:1.2em;color:var(--text-dim);"></p>
         <label class="upgrade-file-label">Payment screenshot (recommended for faster activation)</label>
         <input type="file" name="screenshot" accept="image/*" class="file-input">
         <p class="upgrade-fine">Screenshot + transaction ID help instant activation. Without them, the request goes to manual review. Discount codes reduce the amount you should transfer — apply the same code in Freemius for card payments.</p>
@@ -232,6 +233,81 @@
     if (first) first.checked = true;
   }
   updateUpgradeUI();
+
+  // Live discount preview
+  var promoInput = document.getElementById('promo-code-input');
+  var promoStatus = document.getElementById('promo-status');
+  var promoTimer = null;
+  var basePkr = null;
+
+  function getBasePkr() {
+    var selected = document.querySelector('input[name="plan"]:checked');
+    if (!selected) return null;
+    var billing = currentBilling();
+    return parseInt(billing === 'annual'
+      ? selected.getAttribute('data-pkr-annual')
+      : selected.getAttribute('data-pkr-monthly'), 10) || null;
+  }
+
+  function applyPromoUI(percent) {
+    var amountEl = document.getElementById('voxcraft-pkr-amount');
+    var base = getBasePkr();
+    if (!amountEl || base === null) return;
+    if (percent > 0) {
+      var discounted = Math.round(base * (100 - percent) / 100);
+      amountEl.innerHTML = 'Rs ' + discounted +
+        ' <span style="text-decoration:line-through;opacity:0.6;font-size:0.85em;">Rs ' + base + '</span>' +
+        ' <span style="color:var(--jade-hi);font-size:0.85em;">(−' + percent + '%)</span>';
+    } else {
+      amountEl.textContent = 'Rs ' + base;
+    }
+  }
+
+  function checkPromo() {
+    if (!promoInput || !promoStatus) return;
+    var code = (promoInput.value || '').trim();
+    var emailEl = document.querySelector('input[name="email"]');
+    var email = emailEl ? emailEl.value.trim() : '';
+    if (!code) {
+      promoStatus.textContent = '';
+      applyPromoUI(0);
+      return;
+    }
+    promoStatus.textContent = 'Checking…';
+    promoStatus.style.color = 'var(--text-dim)';
+    fetch('{{ url_for("api_promo_validate") }}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: code, email: email})
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data.ok) {
+        promoStatus.textContent = data.message;
+        promoStatus.style.color = 'var(--jade-hi)';
+        applyPromoUI(data.discount_percent || 0);
+      } else {
+        promoStatus.textContent = data.message || 'Invalid code';
+        promoStatus.style.color = '#e88';
+        applyPromoUI(0);
+      }
+    }).catch(function () {
+      promoStatus.textContent = 'Could not validate code';
+      promoStatus.style.color = '#e88';
+    });
+  }
+
+  if (promoInput) {
+    promoInput.addEventListener('input', function () {
+      clearTimeout(promoTimer);
+      promoTimer = setTimeout(checkPromo, 400);
+    });
+    promoInput.addEventListener('blur', checkPromo);
+  }
+  // Re-apply discount when plan/billing changes
+  var origUpdate = updateUpgradeUI;
+  updateUpgradeUI = function () {
+    origUpdate();
+    if (promoInput && promoInput.value.trim()) checkPromo();
+  };
 })();
 </script>
 {% endblock %}

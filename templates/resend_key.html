@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Resend License Key — VoxCraft{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:420px;margin:0 auto;">
+  <div class="section__head" style="text-align:center;">
+    <span class="section__eyebrow">Account</span>
+    <h2 class="section__title">Resend my key</h2>
+    <p class="section__sub">Enter the email you paid with and the last 4+ characters of your transaction ID or license key. We’ll re-email any matching active key.</p>
+  </div>
+
+  {% if error %}
+  <div class="panel" style="border-color:#e88;margin-bottom:16px;">{{ error }}</div>
+  {% endif %}
+  {% if success %}
+  <div class="panel" style="border-color:var(--jade-hi);margin-bottom:16px;">{{ success }}</div>
+  {% endif %}
+
+  {% if not success %}
+  <form method="post" class="panel">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label style="display:block;margin-bottom:12px;">
+      <span style="font-size:0.82rem;color:var(--text-dim);">Email</span>
+      <input type="email" name="email" class="admin-input" required value="{{ email or '' }}"
+             style="width:100%;margin-top:4px;" placeholder="you@example.com">
+    </label>
+    <label style="display:block;margin-bottom:16px;">
+      <span style="font-size:0.82rem;color:var(--text-dim);">Last 4+ chars of txn ID or license key</span>
+      <input type="text" name="hint" class="admin-input" required minlength="4"
+             style="width:100%;margin-top:4px;" placeholder="e.g. 7X2K or VOXCRAFT-PRO-…">
+    </label>
+    <button type="submit" class="btn btn--brass" style="width:100%;">Resend key</button>
+  </form>
+  {% endif %}
+
+  <p style="text-align:center;margin-top:20px;font-size:0.85rem;color:var(--text-dim);">
+    <a href="{{ url_for('activate') }}">Activate a key</a> ·
+    <a href="{{ url_for('upgrade') }}">Upgrade</a>
+  </p>
+</section>
+{% endblock %}
