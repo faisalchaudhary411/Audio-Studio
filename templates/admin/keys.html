@@ -8,7 +8,7 @@
     <h2 class="section__title">License keys</h2>
   </div>
 
-  <form method="post" style="margin-bottom:18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <form method="post" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="create">
     <select name="plan" class="admin-input" style="width:auto;">
@@ -22,14 +22,28 @@
     <button type="submit" class="btn btn--brass btn--sm">+ Create new key</button>
   </form>
 
+  <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input type="search" id="keys-search" class="admin-input" placeholder="Search key, email, name…" style="max-width:280px;">
+    <select id="keys-status" class="admin-input" style="width:auto;">
+      <option value="">All statuses</option>
+      <option value="active">Active</option>
+      <option value="revoked">Revoked</option>
+    </select>
+    <select id="keys-plan" class="admin-input" style="width:auto;">
+      <option value="">All plans</option>
+      <option value="pro">Pro</option>
+      <option value="pro_plus">Pro+</option>
+    </select>
+  </div>
+
   <div class="panel" style="overflow-x:auto;">
-    <table class="admin-table">
+    <table class="admin-table" id="keys-table">
       <thead>
         <tr><th>Key</th><th>Customer</th><th>Plan</th><th>Status</th><th>Expires</th><th>Used</th><th>Restores</th><th></th></tr>
       </thead>
       <tbody>
         {% for row in rows %}
-        <tr>
+        <tr data-key="{{ row.key }}" data-email="{{ row.customer_email or '' }}" data-name="{{ row.customer_name or '' }}" data-status="{{ 'revoked' if row.revoked else 'active' }}" data-plan="{{ row.plan or 'pro' }}">
           <td style="font-family:var(--mono);font-size:0.78rem;">{{ row.key }}</td>
           <td class="wrap-ok" style="max-width:180px;">{{ row.customer_name or '—' }}<br><span style="color:var(--text-dim);font-size:0.78rem;">{{ row.customer_email }}</span></td>
           <td>
@@ -67,4 +81,27 @@
   </div>
   <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
 </section>
+<script>
+(function () {
+  var q = document.getElementById('keys-search');
+  var st = document.getElementById('keys-status');
+  var pl = document.getElementById('keys-plan');
+  var rows = document.querySelectorAll('#keys-table tbody tr');
+  function filter() {
+    var term = (q.value || '').toLowerCase();
+    var status = st.value;
+    var plan = pl.value;
+    rows.forEach(function (tr) {
+      var hay = (tr.getAttribute('data-key') + ' ' + tr.getAttribute('data-email') + ' ' + tr.getAttribute('data-name')).toLowerCase();
+      var ok = (!term || hay.indexOf(term) !== -1)
+        && (!status || tr.getAttribute('data-status') === status)
+        && (!plan || tr.getAttribute('data-plan') === plan);
+      tr.style.display = ok ? '' : 'none';
+    });
+  }
+  if (q) q.addEventListener('input', filter);
+  if (st) st.addEventListener('change', filter);
+  if (pl) pl.addEventListener('change', filter);
+})();
+</script>
 {% endblock %}

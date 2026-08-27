@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Admin — Audit Log{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Audit log</h2>
+    <p class="section__sub">Recent admin and system actions (last 200).</p>
+  </div>
+  <div class="panel" style="overflow-x:auto;">
+    <table class="admin-table">
+      <thead>
+        <tr><th>When</th><th>Actor</th><th>Action</th><th>Detail</th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td style="font-family:var(--mono);font-size:0.78rem;white-space:nowrap;">{{ r.at }}</td>
+          <td>{{ r.actor }}</td>
+          <td style="font-family:var(--mono);font-size:0.85rem;">{{ r.action }}</td>
+          <td class="wrap-ok" style="max-width:320px;font-size:0.85rem;">{{ r.detail }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="color:var(--text-dim);">No entries yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></p>
+</section>
+{% endblock %}

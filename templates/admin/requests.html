@@ -8,15 +8,37 @@
     <h2 class="section__title">Pro requests</h2>
   </div>
 
-  <div style="display:grid;gap:14px;">
+  <div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;">
+    <input type="search" id="req-search" class="admin-input" placeholder="Search name, email, txn ID…" style="max-width:280px;">
+    <select id="req-status" class="admin-input" style="width:auto;">
+      <option value="">All statuses</option>
+      <option value="pending">Pending</option>
+      <option value="payment_pending">Payment pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  </div>
+
+  <div style="display:grid;gap:14px;" id="req-list">
     {% for r in reqs %}
-    <div class="panel">
+    <div class="panel req-card" data-email="{{ r.email or '' }}" data-name="{{ r.name or '' }}" data-txn="{{ r.txn_id or '' }}" data-status="{{ r.status or '' }}">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;">
         <div>
           <strong style="font-family:var(--display);font-size:1.1rem;">{{ r.name }}</strong>
           <div style="color:var(--text-dim);font-size:0.85rem;">{{ r.email }} · {{ r.phone or 'no phone' }}</div>
           <div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);margin-top:4px;">{{ r.id }} · {{ r.date }}</div>
           {% if r.plan_requested %}<div style="color:var(--text-dim);font-size:0.78rem;margin-top:2px;">Plan: {{ 'Pro+' if r.plan_requested == 'pro_plus' else 'Pro' }} · {{ 'Annual' if r.billing_requested == 'annual' else 'Monthly' }} · expect ~PKR {{ (pro_plus_price_pkr * 10 if r.billing_requested == 'annual' else pro_plus_price_pkr) if r.plan_requested == 'pro_plus' else (pro_price_pkr * 10 if r.billing_requested == 'annual' else pro_price_pkr) }}</div>{% endif %}
+          {% if r.promo_code %}
+          <div style="margin-top:6px;">
+            <span style="background:rgba(232,169,60,0.15);color:var(--brass-hi);font-size:0.78rem;padding:3px 8px;border-radius:6px;font-weight:600;">
+              Promo {{ r.promo_code }} −{{ r.promo_discount_percent or '?' }}%
+              {% set base = (pro_plus_price_pkr * 10 if r.billing_requested == 'annual' else pro_plus_price_pkr) if r.plan_requested == 'pro_plus' else (pro_price_pkr * 10 if r.billing_requested == 'annual' else pro_price_pkr) %}
+              {% if r.promo_discount_percent and base %}
+              · expect ~PKR {{ ((base * (100 - r.promo_discount_percent)) / 100)|int }}
+              {% endif %}
+            </span>
+          </div>
+          {% endif %}
           {% if r.payment_method %}<div style="margin-top:6px;"><span class="voice-card__tag">{{ r.payment_method }}</span> {% if r.txn_id %}<span style="color:var(--text-dim);font-size:0.8rem;">ref: {{ r.txn_id }}</span>{% endif %}</div>{% endif %}
           {% if r.duplicate_txn or r.duplicate_screenshot %}
           <div style="margin-top:8px;background:rgba(232,136,136,0.1);border:1px solid rgba(232,136,136,0.3);border-radius:8px;padding:8px 10px;">
@@ -54,4 +76,22 @@
   </div>
   <div style="margin-top:16px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Dashboard</a></div>
 </section>
+<script>
+(function () {
+  var q = document.getElementById('req-search');
+  var st = document.getElementById('req-status');
+  var cards = document.querySelectorAll('.req-card');
+  function filter() {
+    var term = (q.value || '').toLowerCase();
+    var status = st.value;
+    cards.forEach(function (c) {
+      var hay = (c.getAttribute('data-name') + ' ' + c.getAttribute('data-email') + ' ' + c.getAttribute('data-txn')).toLowerCase();
+      var ok = (!term || hay.indexOf(term) !== -1) && (!status || c.getAttribute('data-status') === status);
+      c.style.display = ok ? '' : 'none';
+    });
+  }
+  if (q) q.addEventListener('input', filter);
+  if (st) st.addEventListener('change', filter);
+})();
+</script>
 {% endblock %}

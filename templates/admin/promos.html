@@ -16,6 +16,29 @@
   <div class="panel" style="border-color:var(--jade-hi);margin-bottom:16px;">{{ success }}</div>
   {% endif %}
 
+  {% set ns = namespace(expiring=0, maxed=0, active=0) %}
+  {% for p in promos %}
+    {% if p.active and (not p.expires_at or p.expires_at >= today) %}
+      {% set ns.active = ns.active + 1 %}
+      {% if p.expires_at and p.expires_at <= soon %}{% set ns.expiring = ns.expiring + 1 %}{% endif %}
+      {% if p.max_uses and p.uses_count >= p.max_uses %}{% set ns.maxed = ns.maxed + 1 %}{% endif %}
+    {% endif %}
+  {% endfor %}
+  <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+    <div class="panel" style="flex:1;min-width:140px;padding:12px 16px;">
+      <span class="panel__label">Active codes</span>
+      <div style="font-family:var(--display);font-size:1.6rem;">{{ ns.active }}</div>
+    </div>
+    <div class="panel" style="flex:1;min-width:140px;padding:12px 16px;">
+      <span class="panel__label">Expiring ≤7 days</span>
+      <div style="font-family:var(--display);font-size:1.6rem;{% if ns.expiring %}color:#e8a93c;{% endif %}">{{ ns.expiring }}</div>
+    </div>
+    <div class="panel" style="flex:1;min-width:140px;padding:12px 16px;">
+      <span class="panel__label">Hit max uses</span>
+      <div style="font-family:var(--display);font-size:1.6rem;{% if ns.maxed %}color:#e88;{% endif %}">{{ ns.maxed }}</div>
+    </div>
+  </div>
+
   <form method="post" class="panel" style="margin-bottom:24px;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="create">
