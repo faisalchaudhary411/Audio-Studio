@@ -117,9 +117,10 @@
           <option value="Other">Other</option>
         </select>
         <input type="text" name="txn_id" placeholder="Transaction / reference ID *" class="upgrade-field" required>
+        <input type="text" name="promo_code" placeholder="Promo / discount code (optional)" class="upgrade-field" style="text-transform:uppercase;">
         <label class="upgrade-file-label">Payment screenshot (recommended for faster activation)</label>
         <input type="file" name="screenshot" accept="image/*" class="file-input">
-        <p class="upgrade-fine">Screenshot + transaction ID help instant activation. Without them, the request goes to manual review.</p>
+        <p class="upgrade-fine">Screenshot + transaction ID help instant activation. Without them, the request goes to manual review. Discount codes reduce the amount you should transfer — apply the same code in Freemius for card payments.</p>
         <button type="submit" class="btn btn--brass btn--block">Submit for verification</button>
       </form>
     {% endif %}
