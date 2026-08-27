@@ -1652,10 +1652,12 @@ def admin_promos():
         action = request.form.get("action")
         code = request.form.get("code", "")
         if action == "create":
+            # Multi-select plans (checkboxes name="plans"); fall back to single "plan"
+            selected_plans = request.form.getlist("plans") or [request.form.get("plan", "pro")]
             ok, msg, rec = promo.create_promo(
                 code=request.form.get("code", ""),
                 promo_type=request.form.get("promo_type", "free"),
-                plan=request.form.get("plan", "pro"),
+                plan=selected_plans,
                 duration_months=request.form.get("duration_months", 1),
                 discount_percent=request.form.get("discount_percent", 0),
                 expires_at=request.form.get("expires_at", ""),

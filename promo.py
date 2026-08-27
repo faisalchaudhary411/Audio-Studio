@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import datetime as dt
 import random
+import re
 import string
 import uuid
 
@@ -40,8 +41,31 @@ import notifications
 from usage_tracking import get_client_ip, hash_ip, get_browser_fingerprint
 
 
-VALID_FREE_PLANS = ("pro", "pro_plus", "api_starter", "api_pro", "all")
+# Individual selectable plans for free promos. Multiple may be combined
+# on one code (e.g. pro + api_starter). "all" is a shortcut for every plan.
+VALID_FREE_PLANS = ("pro", "pro_plus", "api_starter", "api_pro")
+VALID_FREE_PLAN_SET = set(VALID_FREE_PLANS) | {"all"}
 VALID_DURATIONS = (1, 2, 3)
+
+
+def _normalize_plans(plan) -> list:
+    """Accept a string, comma-separated string, or list; return sorted unique plan list."""
+    if plan is None:
+        return []
+    if isinstance(plan, (list, tuple, set)):
+        raw = list(plan)
+    else:
+        raw = re.split(r"[\s,]+", str(plan).strip().lower()) if str(plan).strip() else []
+    out = []
+    for p in raw:
+        p = (p or "").strip().lower()
+        if not p:
+            continue
+        if p == "all":
+            return list(VALID_FREE_PLANS)
+        if p in VALID_FREE_PLAN_SET and p not in out:
+            out.append(p)
+    return out
 
 
 def _now_iso() -> str:
@@ -87,10 +111,14 @@ def create_promo(
     if promo_type not in ("free", "discount"):
         return False, "Type must be 'free' or 'discount'.", {}
 
+    plans = []
     if promo_type == "free":
-        plan = (plan or "pro").strip().lower()
-        if plan not in VALID_FREE_PLANS:
-            return False, f"Plan must be one of {VALID_FREE_PLANS}.", {}
+        plans = _normalize_plans(plan)
+        if not plans:
+            return False, "Select at least one plan (Pro, Pro+, API Starter, and/or API Pro).", {}
+        bad = [p for p in plans if p not in VALID_FREE_PLANS]
+        if bad:
+            return False, f"Invalid plan(s): {bad}. Choose from {VALID_FREE_PLANS}.", {}
         try:
             duration_months = int(duration_months)
         except (TypeError, ValueError):
@@ -99,7 +127,7 @@ def create_promo(
             return False, "Duration must be 1, 2 or 3 months.", {}
         discount_percent = 0
     else:
-        plan = ""
+        plans = []
         duration_months = 0
         try:
             discount_percent = int(discount_percent)
@@ -110,7 +138,6 @@ def create_promo(
 
     expires_at = (expires_at or "").strip()
     if expires_at:
-        # Accept YYYY-MM-DD or full datetime; normalise to date for comparison
         try:
             dt.datetime.strptime(expires_at[:10], "%Y-%m-%d")
         except ValueError:
@@ -124,7 +151,9 @@ def create_promo(
     record = {
         "code": code,
         "type": promo_type,
-        "plan": plan,
+        # plans = list for multi-select; plan = comma string for older UI/display
+        "plans": plans,
+        "plan": ",".join(plans) if plans else "",
         "duration_months": duration_months,
         "discount_percent": discount_percent,
         "expires_at": expires_at[:10] if expires_at else "",
@@ -318,14 +347,17 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
     if blocked:
         return False, blocked, {}
 
-    plan = rec.get("plan", "pro")
+    # Support multi-plan codes (plans list) and legacy single "plan" string
+    plans = rec.get("plans") or _normalize_plans(rec.get("plan", "pro"))
+    if not plans:
+        plans = ["pro"]
     months = int(rec.get("duration_months", 1) or 1)
-    # Approximate months as 30-day blocks (matches existing monthly logic)
     days = months * 30
     expires_at = (dt.datetime.now() + dt.timedelta(days=days)).strftime("%Y-%m-%d")
 
     result = {
-        "plan": plan,
+        "plan": ",".join(plans),
+        "plans": plans,
         "duration_months": months,
         "expires_at": expires_at,
         "is_new_account": False,
@@ -333,21 +365,21 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
         "raw_key": "",
         "message": "",
     }
+    msg_parts = []
 
-    # ---- Issue the entitlement ----
-    if plan in ("pro", "pro_plus", "all"):
-        # For "all" we grant pro_plus (highest browser tier)
-        grant_plan = "pro_plus" if plan == "all" else plan
+    # ---- Browser app licenses (pro / pro_plus) ----
+    # If both pro and pro_plus selected, grant the higher tier only once.
+    app_plans = [p for p in plans if p in ("pro", "pro_plus")]
+    if app_plans:
+        grant_plan = "pro_plus" if "pro_plus" in app_plans else "pro"
         key = licensing.create_subscription_key(
             customer_name=name,
             customer_email=email,
-            subscription_type="monthly",  # duration controlled by expires_at
+            subscription_type="monthly",
             expires_at=expires_at,
             amount_paid=0,
             plan=grant_plan,
         )
-        # Force the exact expiry we calculated (create_subscription_key may
-        # resolve monthly to +30d; we already pass expires_at so it should win)
         keys = persistence.load_license_keys()
         if key in keys:
             keys[key]["expires_at"] = expires_at
@@ -356,19 +388,19 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
             keys[key]["promo_code"] = code
             persistence.save_license_keys(keys)
         result["key"] = key
-        result["plan"] = grant_plan
-        result["message"] = f"Free {grant_plan.replace('_', '+').title()} access for {months} month(s)."
+        result["app_plan"] = grant_plan
+        msg_parts.append(f"{grant_plan.replace('_', '+').title()} for {months} month(s)")
 
-    if plan in ("api_starter", "api_pro", "all"):
-        # Look up quotas from limits (same source the rest of the app uses)
-        lim = persistence.load_limits()
-        if plan == "api_pro" or plan == "all":
-            api_plan = "api_pro"
-            quota = int(lim.get("API_PRO_QUOTA", 1000000))
-        else:
-            api_plan = "api_starter"
-            quota = int(lim.get("API_STARTER_QUOTA", 200000))
-
+    # ---- API keys (can grant both starter and pro if both selected) ----
+    lim = persistence.load_limits()
+    api_keys_issued = []
+    for api_plan in ("api_starter", "api_pro"):
+        if api_plan not in plans:
+            continue
+        quota = int(lim.get(
+            "API_PRO_QUOTA" if api_plan == "api_pro" else "API_STARTER_QUOTA",
+            1000000 if api_plan == "api_pro" else 200000,
+        ))
         created = api_keys.create_api_key(
             customer_name=name,
             customer_email=email,
@@ -376,21 +408,25 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
             monthly_char_quota=quota,
         )
         raw_key = created.get("raw_key", "")
-        # Tag the record
         all_api = persistence.load_api_keys()
         for ak in all_api:
             if ak.get("key_hash") == created["record"].get("key_hash"):
                 ak["promo_code"] = code
-                ak["expires_at"] = expires_at  # informational; quota still monthly
+                ak["expires_at"] = expires_at
                 break
         persistence.save_api_keys(all_api)
+        api_keys_issued.append({"plan": api_plan, "raw_key": raw_key})
+        msg_parts.append(f"{api_plan} API for {months} month(s)")
+        # Show the last (or only) raw key on the success page; if both, prefer pro
         result["raw_key"] = raw_key
         result["api_plan"] = api_plan
-        if plan == "all":
-            result["message"] += f" Plus free {api_plan} API key."
-        else:
-            result["message"] = f"Free {api_plan} API access for {months} month(s)."
-            result["plan"] = api_plan
+
+    if len(api_keys_issued) > 1:
+        result["api_keys"] = api_keys_issued  # both keys when multiple API plans
+
+    result["message"] = "Free access granted: " + "; ".join(msg_parts) + "."
+    if not msg_parts:
+        return False, "This promo has no valid plans configured.", {}
 
     # ---- Account + email ----
     record, is_new = accounts.find_or_create_user(email, name)
