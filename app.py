@@ -54,6 +54,24 @@ CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
 os.makedirs(CLONE_UPLOAD_DIR, exist_ok=True)
 CLONE_CHAR_LIMIT = 6000  # aligned with Modal worker MAX_TOTAL_CHARS for stable commercial quality
 
+# Persistent (survives redeploy/restart, unlike CLONE_UPLOAD_DIR's /tmp) home
+# for reference clips a customer has explicitly chosen to save for reuse.
+# Only ever populated via /api/clone/voices/save after the consent check —
+# never write here directly from the plain upload/generate flow.
+VOICE_REFS_DIR = os.environ.get("VOICE_REFS_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "voice_refs"))
+os.makedirs(VOICE_REFS_DIR, exist_ok=True)
+MAX_SAVED_VOICES_PER_LICENSE = 5
+
+# Bump this if the consent wording materially changes, so old consent
+# records in persistence.voice_consents stay attributable to the version of
+# the text the customer actually agreed to.
+VOICE_CONSENT_VERSION = "v1"
+VOICE_CONSENT_TEXT = (
+    "I confirm I own this voice or have the speaker's explicit permission to "
+    "clone it, and I grant VoxCraft a license to store and use this voice "
+    "sample to generate speech on my request."
+)
+
 # Reference clips uploaded to CLONE_UPLOAD_DIR (via /api/clone/upload) had no
 # expiry at all — every clip ever uploaded sat on disk permanently, only
 # cleared by a full service restart (PrivateTmp=true in voxcraft.service
@@ -2939,6 +2957,111 @@ def api_clone_upload():
     return jsonify({"reference_id": ref_id})
 
 
+@app.route("/api/clone/voices/save", methods=["POST"])
+def api_clone_voice_save():
+    """Pro+-only: permanently save a just-uploaded reference clip as a
+    reusable voice, gated on the customer explicitly checking the consent
+    popup (they own/have permission for this voice and license it to us).
+    Without consent == true this refuses outright — no partial save."""
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+
+    license_key = session.get("license_key")
+    if not license_key:
+        return jsonify({"error": "Session expired — please re-activate your license."}), 401
+
+    data = request.get_json(force=True) or {}
+    reference_id = data.get("reference_id")
+    name = (data.get("name") or "").strip()
+    consent = data.get("consent") is True
+
+    if not reference_id:
+        return jsonify({"error": "Upload a reference clip first."}), 400
+    if not name:
+        return jsonify({"error": "Give this voice a name."}), 400
+    if not consent:
+        return jsonify({"error": "You must confirm the consent statement to save a voice."}), 400
+
+    src_path = os.path.join(CLONE_UPLOAD_DIR, reference_id)
+    if not os.path.exists(src_path):
+        return jsonify({"error": "Reference clip not found — please re-upload."}), 400
+
+    if persistence.count_voices_for_license(license_key) >= MAX_SAVED_VOICES_PER_LICENSE:
+        return jsonify({"error": f"You can save up to {MAX_SAVED_VOICES_PER_LICENSE} voices. Delete one first."}), 400
+
+    import uuid
+    import shutil
+    ext = os.path.splitext(reference_id)[1].lower() or ".wav"
+    voice_id = uuid.uuid4().hex
+    dest_filename = f"{voice_id}{ext}"
+    dest_path = os.path.join(VOICE_REFS_DIR, dest_filename)
+    shutil.copy2(src_path, dest_path)
+
+    now_iso = dt.datetime.utcnow().isoformat() + "Z"
+    persistence.save_voice(voice_id, license_key, {
+        "name": name[:80],
+        "filename": dest_filename,
+        "created_at": now_iso,
+    })
+
+    # Permanent, never-pruned evidence trail — kept even if the voice is
+    # later deleted by the customer.
+    ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
+    persistence.record_voice_consent({
+        "voice_id": voice_id,
+        "license_key": license_key,
+        "ip_hash": ip_hash,
+        "consented_at": now_iso,
+        "consent_version": VOICE_CONSENT_VERSION,
+        "consent_text": VOICE_CONSENT_TEXT,
+    })
+
+    return jsonify({"id": voice_id, "name": name[:80], "created_at": now_iso})
+
+
+@app.route("/api/clone/voices", methods=["GET"])
+def api_clone_voices_list():
+    """Pro+-only: list the current license's saved voices for a picker UI."""
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+    license_key = session.get("license_key")
+    if not license_key:
+        return jsonify({"error": "Session expired — please re-activate your license."}), 401
+
+    voices = persistence.load_voices_for_license(license_key)
+    return jsonify({
+        "voices": [
+            {"id": v["id"], "name": v.get("name", "Untitled voice"), "created_at": v.get("created_at", "")}
+            for v in voices
+        ]
+    })
+
+
+@app.route("/api/clone/voices/<voice_id>", methods=["DELETE"])
+def api_clone_voice_delete(voice_id):
+    """Pro+-only: delete a saved voice. Ownership-checked — deleting someone
+    else's voice_id (or a stale/mistyped one) is a no-op 404, not a leak."""
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+    license_key = session.get("license_key")
+    if not license_key:
+        return jsonify({"error": "Session expired — please re-activate your license."}), 401
+
+    voice = persistence.get_voice(voice_id)
+    if not voice or voice.get("license_key") != license_key:
+        return jsonify({"error": "Saved voice not found."}), 404
+
+    deleted = persistence.delete_voice(voice_id, license_key)
+    if deleted:
+        path = os.path.join(VOICE_REFS_DIR, voice["filename"])
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass  # DB row is already gone; an orphaned file isn't harmful, just wasted disk
+    return jsonify({"deleted": deleted})
+
+
 @app.route("/api/clone/generate", methods=["POST"])
 def api_clone_generate():
     if not has_clone_and_music():
@@ -2947,18 +3070,28 @@ def api_clone_generate():
     data = request.get_json(force=True) or {}
     text = (data.get("text") or "").strip()
     reference_id = data.get("reference_id")
+    saved_voice_id = data.get("saved_voice_id")
     language_id = (data.get("language_id") or "en").strip().lower()
 
     if not text:
         return jsonify({"error": "Please enter some text first."}), 400
     if len(text) > CLONE_CHAR_LIMIT:
         return jsonify({"error": f"Cloned-voice generations are capped at {CLONE_CHAR_LIMIT} characters."}), 400
-    if not reference_id:
-        return jsonify({"error": "Upload a reference clip first."}), 400
+    if not reference_id and not saved_voice_id:
+        return jsonify({"error": "Upload a reference clip or pick a saved voice first."}), 400
 
-    path = os.path.join(CLONE_UPLOAD_DIR, reference_id)
-    if not os.path.exists(path):
-        return jsonify({"error": "Reference clip not found — please re-upload."}), 400
+    if saved_voice_id:
+        voice = persistence.get_voice(saved_voice_id)
+        license_key = session.get("license_key")
+        if not voice or voice.get("license_key") != license_key:
+            return jsonify({"error": "Saved voice not found."}), 404
+        path = os.path.join(VOICE_REFS_DIR, voice["filename"])
+        if not os.path.exists(path):
+            return jsonify({"error": "Saved voice's audio file is missing — please re-save it."}), 400
+    else:
+        path = os.path.join(CLONE_UPLOAD_DIR, reference_id)
+        if not os.path.exists(path):
+            return jsonify({"error": "Reference clip not found — please re-upload."}), 400
 
     # Language ID is passed through to clone_engine, which handles
     # Urdu transliteration internally via urdu_transliteration.prepare_text_for_tts().

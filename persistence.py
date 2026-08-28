@@ -187,6 +187,17 @@ def init_db():
                     id   TEXT PRIMARY KEY,
                     data TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS saved_voices (
+                    id          TEXT PRIMARY KEY,
+                    license_key TEXT NOT NULL,
+                    data        TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_saved_voices_license
+                    ON saved_voices(license_key);
+                CREATE TABLE IF NOT EXISTS voice_consents (
+                    id   TEXT PRIMARY KEY,
+                    data TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -871,6 +882,122 @@ def load_audit_log(limit: int = 100) -> list:
         rows = conn.execute("SELECT data FROM audit_log").fetchall()
         items = [json.loads(r[0]) for r in rows]
         items.sort(key=lambda x: x.get("at", ""), reverse=True)
+        return items[:limit]
+    finally:
+        conn.close()
+
+
+# ---- Saved (reusable) cloned voices ----------------------------------------
+# One row per voice a Pro+ customer has chosen to keep for reuse. Kept
+# separate from the license_keys blob since a license can own several
+# voices — a proper table with an indexed license_key column is the right
+# shape here, not another single-JSON-per-key record.
+def save_voice(voice_id: str, license_key: str, data: dict) -> None:
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO saved_voices(id, license_key, data) VALUES (?, ?, ?)",
+                (voice_id, license_key, json.dumps(data, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def load_voices_for_license(license_key: str) -> list:
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, data FROM saved_voices WHERE license_key = ?",
+            (license_key,),
+        ).fetchall()
+        items = []
+        for voice_id, data in rows:
+            rec = json.loads(data)
+            rec["id"] = voice_id
+            items.append(rec)
+        items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return items
+    finally:
+        conn.close()
+
+
+def count_voices_for_license(license_key: str) -> int:
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM saved_voices WHERE license_key = ?",
+            (license_key,),
+        ).fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
+
+
+def get_voice(voice_id: str) -> dict:
+    """Returns the record (with 'id' and 'license_key' merged in) or None.
+    Callers MUST check the returned license_key against the requesting
+    session before using the file — this does not itself enforce ownership."""
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT license_key, data FROM saved_voices WHERE id = ?",
+            (voice_id,),
+        ).fetchone()
+        if not row:
+            return None
+        rec = json.loads(row[1])
+        rec["id"] = voice_id
+        rec["license_key"] = row[0]
+        return rec
+    finally:
+        conn.close()
+
+
+def delete_voice(voice_id: str, license_key: str) -> bool:
+    """Deletes only if license_key matches the voice's owner. Returns True
+    if a row was actually deleted."""
+    with _write_lock:
+        conn = _connect()
+        try:
+            cur = conn.execute(
+                "DELETE FROM saved_voices WHERE id = ? AND license_key = ?",
+                (voice_id, license_key),
+            )
+            conn.commit()
+            return cur.rowcount > 0
+        finally:
+            conn.close()
+
+
+# ---- Voice-cloning consent records -----------------------------------------
+# Append-only, never pruned (unlike audit_log's 500-row cap) — this is the
+# evidence trail that the uploader affirmed they had rights to the voice and
+# licensed it to us, kept even if the voice itself is later deleted.
+def record_voice_consent(record: dict) -> None:
+    import uuid
+    entry_id = str(uuid.uuid4())
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO voice_consents(id, data) VALUES (?, ?)",
+                (entry_id, json.dumps(record, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def load_voice_consents(voice_id: str = None, limit: int = 200) -> list:
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT data FROM voice_consents").fetchall()
+        items = [json.loads(r[0]) for r in rows]
+        if voice_id:
+            items = [i for i in items if i.get("voice_id") == voice_id]
+        items.sort(key=lambda x: x.get("consented_at", ""), reverse=True)
         return items[:limit]
     finally:
         conn.close()
