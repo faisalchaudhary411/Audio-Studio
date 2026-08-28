@@ -14,6 +14,7 @@
   <h2>How it works</h2><ol>{% for step in page.steps %}<li>{{ step }}</li>{% endfor %}</ol>
   <h2>Useful for</h2><div class="use-grid">{% for name, text in page.use_cases %}<article class="use-card"><h3>{{ name }}</h3><p>{{ text }}</p></article>{% endfor %}</div>
   <h2>Questions people ask</h2>{% for q, a in page.faq %}<details class="faq-item"><summary>{{ q }}</summary><p>{{ a }}</p></details>{% endfor %}
+  {% if page.related_links %}<h2>Explore related VoxCraft tools</h2><ul>{% for label, href in page.related_links %}<li><a href="{{ href }}">{{ label }}</a></li>{% endfor %}</ul>{% endif %}
   <div class="final-cta"><h2>Ready to try VoxCraft?</h2><p>Use the live product pages to see the current tools, voices and plan details.</p><a href="{{ cta_url }}" class="btn btn--brass">{{ page.cta_label }} →</a></div>
 </div></section>
 {% endblock %}
