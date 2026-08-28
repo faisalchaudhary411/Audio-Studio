@@ -47,6 +47,17 @@
   const cloneBtn = document.getElementById('generate-clone-btn');
   const cloneCharCount = document.getElementById('clone-char-count');
   const cloneLangDetect = document.getElementById('clone-lang-detect');
+  const cloneVoiceSelect = document.getElementById('clone-voice-select');
+  const cloneDeleteBtn = document.getElementById('clone-delete-voice-btn');
+  const cloneUploadRow = document.getElementById('clone-upload-row');
+  const cloneSaveBtn = document.getElementById('clone-save-voice-btn');
+  const cloneSaveHint = document.getElementById('clone-save-hint');
+  const consentModal = document.getElementById('clone-consent-modal');
+  const consentNameInput = document.getElementById('clone-voice-name');
+  const consentCheckbox = document.getElementById('clone-consent-checkbox');
+  const consentConfirmBtn = document.getElementById('clone-consent-confirm');
+  const consentCancelBtn = document.getElementById('clone-consent-cancel');
+  const consentError = document.getElementById('clone-consent-error');
 
   if (cloneText && cloneCharCount) {
     const limit = parseInt(cloneText.getAttribute('maxlength'), 10) || 2000;
@@ -61,10 +72,169 @@
   const cloneStatus = document.querySelector('[data-clone-status]');
   const cloneResult = document.getElementById('clone-result');
 
+  // Tracks the reference_id from the most recent /api/clone/upload call for
+  // the file currently sitting in cloneRefInput, so "Save this voice" and
+  // "Clone & generate" don't each upload the same clip separately.
+  let pendingReferenceId = null;
+
+  async function refreshSavedVoices(selectId) {
+    if (!cloneVoiceSelect) return;
+    try {
+      const res = await fetch('/api/clone/voices');
+      if (!res.ok) return;
+      const data = await res.json();
+      const voices = data.voices || [];
+      cloneVoiceSelect.innerHTML = '<option value="">Upload a new reference clip…</option>';
+      voices.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name;
+        cloneVoiceSelect.appendChild(opt);
+      });
+      if (selectId) cloneVoiceSelect.value = selectId;
+    } catch (e) {
+      // Saved-voice list is a convenience, not required for cloning to
+      // work — a failed fetch here shouldn't block the upload flow.
+    }
+  }
+  refreshSavedVoices();
+
+  function usingSavedVoice() {
+    return cloneVoiceSelect && cloneVoiceSelect.value !== '';
+  }
+
+  if (cloneVoiceSelect && cloneUploadRow) {
+    cloneVoiceSelect.addEventListener('change', () => {
+      cloneUploadRow.style.display = usingSavedVoice() ? 'none' : '';
+      if (cloneDeleteBtn) cloneDeleteBtn.style.display = usingSavedVoice() ? '' : 'none';
+      cloneStatus.textContent = '';
+    });
+  }
+
+  if (cloneDeleteBtn) {
+    cloneDeleteBtn.addEventListener('click', async () => {
+      const voiceId = cloneVoiceSelect.value;
+      if (!voiceId) return;
+      const voiceName = cloneVoiceSelect.options[cloneVoiceSelect.selectedIndex].textContent;
+      if (!window.confirm(`Delete "${voiceName}"? This can't be undone.`)) return;
+      cloneDeleteBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/clone/voices/${voiceId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok || !data.deleted) {
+          cloneStatus.textContent = data.error || 'Could not delete this voice.';
+          return;
+        }
+        cloneDeleteBtn.style.display = 'none';
+        cloneUploadRow.style.display = '';
+        cloneStatus.textContent = `Deleted "${voiceName}".`;
+        await refreshSavedVoices();
+      } catch (e) {
+        cloneStatus.textContent = 'Network error — check your connection.';
+      } finally {
+        cloneDeleteBtn.disabled = false;
+      }
+    });
+  }
+
+  if (cloneRefInput && cloneSaveBtn) {
+    cloneRefInput.addEventListener('change', () => {
+      pendingReferenceId = null;
+      cloneSaveBtn.disabled = !cloneRefInput.files.length;
+      if (cloneSaveHint) cloneSaveHint.textContent = cloneRefInput.files.length
+        ? 'Uploads the clip, then asks for your consent before saving.'
+        : 'Upload a clip first, then save it to reuse later.';
+    });
+  }
+
+  function openConsentModal() {
+    if (!consentModal) return;
+    consentNameInput.value = '';
+    consentCheckbox.checked = false;
+    consentConfirmBtn.disabled = true;
+    consentError.textContent = '';
+    consentModal.style.display = 'flex';
+  }
+  function closeConsentModal() {
+    if (consentModal) consentModal.style.display = 'none';
+  }
+  if (consentCheckbox && consentConfirmBtn) {
+    consentCheckbox.addEventListener('change', () => {
+      consentConfirmBtn.disabled = !consentCheckbox.checked;
+    });
+  }
+  if (consentCancelBtn) consentCancelBtn.addEventListener('click', closeConsentModal);
+
+  if (cloneSaveBtn) {
+    cloneSaveBtn.addEventListener('click', async () => {
+      if (!cloneRefInput.files.length) return;
+      cloneSaveBtn.disabled = true;
+      const originalHint = cloneSaveHint ? cloneSaveHint.textContent : '';
+      if (cloneSaveHint) cloneSaveHint.textContent = 'Uploading…';
+      try {
+        if (!pendingReferenceId) {
+          const form = new FormData();
+          form.append('reference_audio', cloneRefInput.files[0]);
+          const uploadRes = await fetch('/api/clone/upload', { method: 'POST', body: form });
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok) {
+            if (cloneSaveHint) cloneSaveHint.textContent = uploadData.error || 'Upload failed.';
+            return;
+          }
+          pendingReferenceId = uploadData.reference_id;
+        }
+        if (cloneSaveHint) cloneSaveHint.textContent = originalHint;
+        openConsentModal();
+      } catch (e) {
+        if (cloneSaveHint) cloneSaveHint.textContent = 'Network error — check your connection.';
+      } finally {
+        cloneSaveBtn.disabled = false;
+      }
+    });
+  }
+
+  if (consentConfirmBtn) {
+    consentConfirmBtn.addEventListener('click', async () => {
+      const name = consentNameInput.value.trim();
+      if (!name) {
+        consentError.textContent = 'Give this voice a name.';
+        return;
+      }
+      if (!consentCheckbox.checked || !pendingReferenceId) {
+        consentError.textContent = 'Please confirm the consent statement above.';
+        return;
+      }
+      consentConfirmBtn.disabled = true;
+      consentError.textContent = '';
+      try {
+        const res = await fetch('/api/clone/voices/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reference_id: pendingReferenceId, name, consent: true }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          consentError.textContent = data.error || 'Could not save this voice.';
+          consentConfirmBtn.disabled = false;
+          return;
+        }
+        closeConsentModal();
+        await refreshSavedVoices(data.id);
+        cloneUploadRow.style.display = 'none';
+        if (cloneDeleteBtn) cloneDeleteBtn.style.display = '';
+        cloneStatus.textContent = `Saved as "${data.name}" — selected for generation.`;
+      } catch (e) {
+        consentError.textContent = 'Network error — check your connection.';
+        consentConfirmBtn.disabled = false;
+      }
+    });
+  }
+
   if (cloneBtn) {
     cloneBtn.addEventListener('click', async () => {
-      if (!cloneRefInput.files.length) {
-        cloneStatus.textContent = 'Upload a reference clip first.';
+      const savedVoiceId = usingSavedVoice() ? cloneVoiceSelect.value : null;
+      if (!savedVoiceId && !cloneRefInput.files.length) {
+        cloneStatus.textContent = 'Upload a reference clip or pick a saved voice first.';
         return;
       }
       if (!cloneText.value.trim()) {
@@ -73,22 +243,34 @@
       }
       cloneBtn.disabled = true;
       cloneResult.innerHTML = '';
-      cloneStatus.textContent = 'Uploading reference clip…';
       try {
-        const form = new FormData();
-        form.append('reference_audio', cloneRefInput.files[0]);
-        const uploadRes = await fetch('/api/clone/upload', { method: 'POST', body: form });
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok) {
-          cloneStatus.textContent = uploadData.error || 'Upload failed.';
-          return;
+        let referenceId = null;
+        if (!savedVoiceId) {
+          cloneStatus.textContent = 'Uploading reference clip…';
+          if (pendingReferenceId) {
+            referenceId = pendingReferenceId;
+          } else {
+            const form = new FormData();
+            form.append('reference_audio', cloneRefInput.files[0]);
+            const uploadRes = await fetch('/api/clone/upload', { method: 'POST', body: form });
+            const uploadData = await uploadRes.json();
+            if (!uploadRes.ok) {
+              cloneStatus.textContent = uploadData.error || 'Upload failed.';
+              return;
+            }
+            referenceId = uploadData.reference_id;
+          }
         }
 
         cloneStatus.textContent = 'Submitting cloning job…';
         const genRes = await fetch('/api/clone/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: cloneText.value.trim(), reference_id: uploadData.reference_id }),
+          body: JSON.stringify(
+            savedVoiceId
+              ? { text: cloneText.value.trim(), saved_voice_id: savedVoiceId }
+              : { text: cloneText.value.trim(), reference_id: referenceId }
+          ),
         });
         const genData = await genRes.json();
         if (!genRes.ok) {
