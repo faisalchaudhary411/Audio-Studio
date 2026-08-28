@@ -417,12 +417,11 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
         persistence.save_api_keys(all_api)
         api_keys_issued.append({"plan": api_plan, "raw_key": raw_key})
         msg_parts.append(f"{api_plan} API for {months} month(s)")
-        # Show the last (or only) raw key on the success page; if both, prefer pro
         result["raw_key"] = raw_key
         result["api_plan"] = api_plan
 
-    if len(api_keys_issued) > 1:
-        result["api_keys"] = api_keys_issued  # both keys when multiple API plans
+    if api_keys_issued:
+        result["api_keys"] = api_keys_issued
 
     result["message"] = "Free access granted: " + "; ".join(msg_parts) + "."
     if not msg_parts:
@@ -432,8 +431,27 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
     record, is_new = accounts.find_or_create_user(email, name)
     result["is_new_account"] = is_new
 
+    def _email_all_keys():
+        if result.get("key"):
+            notifications.send_key_email(email, name, result["key"])
+        lim_now = persistence.load_limits()
+        for ak in (result.get("api_keys") or []):
+            quota = int(lim_now.get(
+                "API_PRO_QUOTA" if ak.get("plan") == "api_pro" else "API_STARTER_QUOTA",
+                200000,
+            ))
+            notifications.send_api_key_email(email, name, ak["raw_key"], ak.get("plan", "api_starter"), quota)
+        if not result.get("api_keys") and result.get("raw_key"):
+            notifications.send_api_key_email(
+                email, name, result["raw_key"],
+                result.get("api_plan", "api_starter"),
+                int(lim_now.get(
+                    "API_PRO_QUOTA" if result.get("api_plan") == "api_pro" else "API_STARTER_QUOTA",
+                    200000,
+                )),
+            )
+
     if is_new:
-        # Create set-password token and email it (same path as paid flow)
         import secrets
         token = secrets.token_urlsafe(32)
         expires = (dt.datetime.now() + dt.timedelta(hours=accounts.SET_PASSWORD_EXPIRES_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
@@ -445,32 +463,10 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
         set_url = f"{site_url.rstrip('/')}/set-password?token={token}" if site_url else f"/set-password?token={token}"
         product_label = result.get("message") or "Promo plan"
         notifications.send_account_setup_email(email, name, set_url, product_label)
-        # Also send the key(s) so they have them even before setting password
-        if result.get("key"):
-            notifications.send_key_email(email, name, result["key"])
-        if result.get("raw_key"):
-            notifications.send_api_key_email(
-                email, name, result["raw_key"],
-                result.get("api_plan", "api_starter"),
-                int(persistence.load_limits().get(
-                    "API_PRO_QUOTA" if result.get("api_plan") == "api_pro" else "API_STARTER_QUOTA",
-                    200000,
-                )),
-            )
+        _email_all_keys()
         result["message"] += " Check your email for the set-password link and your key(s)."
     else:
-        # Existing account → show key(s) immediately; still email a copy
-        if result.get("key"):
-            notifications.send_key_email(email, name, result["key"])
-        if result.get("raw_key"):
-            notifications.send_api_key_email(
-                email, name, result["raw_key"],
-                result.get("api_plan", "api_starter"),
-                int(persistence.load_limits().get(
-                    "API_PRO_QUOTA" if result.get("api_plan") == "api_pro" else "API_STARTER_QUOTA",
-                    200000,
-                )),
-            )
+        _email_all_keys()
         result["message"] += " Your key is shown below (and emailed)."
 
     # ---- Record the redemption (atomic-ish: after success) ----
@@ -481,7 +477,7 @@ def redeem_free(code: str, email: str, name: str, request, site_url: str = "") -
         "email": email,
         "ip_hash": ip_hash,
         "fingerprint": fp,
-        "plan": result.get("plan", plan),
+        "plan": result.get("plan", ",".join(plans)),
         "duration_months": months,
         "key": result.get("key", ""),
         "redeemed_at": _now_iso(),
