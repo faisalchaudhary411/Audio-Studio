@@ -1,10 +1,10 @@
 """
-modal_client.py — VoxCraft Multi-Model Router & Parallel Execution Engine
+modal_client.py — VoxCraft Multi-Model Parallel Dispatcher
 
-Rules:
-- Length < 2000 Chars  -> Chatterbox Worker (Single Worker execution)
-- Length >= 2000 Chars -> F5-TTS Workers (Multi-Worker Parallel execution)
-- Fallback System      -> Cartesia API (Triggers automatically if enabled on VPS env)
+Routes:
+- Script < 2000 chars  -> Multi-Worker Chatterbox (Modal Parallel GPUs)
+- Script >= 2000 chars -> Multi-Worker F5-TTS (Modal Parallel GPUs)
+- Fallback System      -> Cartesia API (Triggers automatically if CARTESIA_API_KEY is active)
 """
 
 import os
@@ -18,19 +18,18 @@ from pydub import AudioSegment
 CHATTERBOX_ENDPOINT_URL = os.environ.get("MODAL_CLONE_ENDPOINT_URL", "").strip()
 F5TTS_ENDPOINT_URL = os.environ.get("MODAL_F5TTS_ENDPOINT_URL", "").strip()
 
-# Cartesia Fallback Config
 CARTESIA_API_KEY = os.environ.get("CARTESIA_API_KEY", "").strip()
 CARTESIA_VOICE_ID = os.environ.get("CARTESIA_VOICE_ID", "a0e16877-e166-415c-9d66-8d0092ad3624").strip()
 
 _TIMEOUT_SEC = 650
-MAX_PARALLEL_WORKERS = 4 
+MAX_PARALLEL_WORKERS = 4
 
 
 def is_configured() -> bool:
     return bool(CHATTERBOX_ENDPOINT_URL or F5TTS_ENDPOINT_URL or CARTESIA_API_KEY)
 
 
-def _split_into_chunks(text: str, max_chars: int = 300) -> list:
+def _split_into_chunks(text: str, max_chars: int = 180) -> list:
     sentences = re.split(r'(?<=[.!?۔؟।])\s+', text.strip())
     chunks = []
     current = ""
@@ -72,19 +71,22 @@ def _call_cartesia_fallback(text: str) -> dict:
         return {"success": False, "error": f"Cartesia call failed: {str(e)}"}
 
 
-def _process_f5tts_chunk(chunk_tuple):
-    index, chunk_text, ref_b64, url = chunk_tuple
+def _process_chunk_worker(chunk_tuple):
+    index, chunk_text, ref_b64, lang_id, url, is_f5 = chunk_tuple
     payload = {
         "chunk_text": chunk_text,
         "reference_audio_b64": ref_b64
     }
+    if not is_f5:
+        payload["language_id"] = lang_id
+
     try:
         r = requests.post(url, json=payload, timeout=_TIMEOUT_SEC)
         if r.status_code == 200:
             res = r.json()
             if res.get("success") and res.get("audio_b64"):
                 return (index, True, base64.b64decode(res["audio_b64"]))
-            return (index, False, res.get("error", "Empty chunk result"))
+            return (index, False, res.get("error", "Empty audio worker response"))
         return (index, False, f"HTTP {r.status_code}")
     except Exception as e:
         return (index, False, str(e))
@@ -94,57 +96,44 @@ def generate(text: str, reference_audio_b64: str, language_id: str = "en") -> di
     char_count = len(text.strip())
 
     if char_count < 2000:
-        if CHATTERBOX_ENDPOINT_URL:
-            try:
-                payload = {"text": text, "reference_audio_b64": reference_audio_b64, "language_id": language_id}
-                r = requests.post(CHATTERBOX_ENDPOINT_URL, json=payload, timeout=_TIMEOUT_SEC)
-                if r.status_code == 200:
-                    data = r.json()
-                    if data.get("success") and data.get("audio_b64"):
-                        return {"success": True, "audio_b64": data["audio_b64"], "provider": "chatterbox"}
-                    err = data.get("error", "Chatterbox returned empty audio.")
-                else:
-                    err = f"Chatterbox HTTP {r.status_code}"
-            except Exception as e:
-                err = f"Chatterbox exception: {str(e)}"
-        else:
-            err = "CHATTERBOX_ENDPOINT_URL missing."
-
-        if CARTESIA_API_KEY:
-            fallback = _call_cartesia_fallback(text)
-            if fallback.get("success"):
-                return fallback
-        return {"success": False, "error": f"Chatterbox Failed ({err})"}
-
+        target_url = CHATTERBOX_ENDPOINT_URL
+        max_chars = 150
+        is_f5 = False
+        provider_name = "chatterbox_parallel"
     else:
-        if not F5TTS_ENDPOINT_URL:
+        target_url = F5TTS_ENDPOINT_URL
+        max_chars = 300
+        is_f5 = True
+        provider_name = "f5tts_parallel"
+
+    if not target_url:
+        if CARTESIA_API_KEY:
+            return _call_cartesia_fallback(text)
+        return {"success": False, "error": f"Target endpoint not configured for provider: {provider_name}"}
+
+    chunks = _split_into_chunks(text, max_chars=max_chars)
+    tasks = [(i, chunk, reference_audio_b64, language_id, target_url, is_f5) for i, chunk in enumerate(chunks)]
+
+    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
+        results = list(executor.map(_process_chunk_worker, tasks))
+
+    results.sort(key=lambda x: x[0])
+
+    audio_segments = []
+    for index, success, data in results:
+        if not success:
             if CARTESIA_API_KEY:
                 return _call_cartesia_fallback(text)
-            return {"success": False, "error": "F5TTS Endpoint not configured."}
+            return {"success": False, "error": f"Parallel Chunk {index+1} failed ({data})"}
+        audio_segments.append(data)
 
-        chunks = _split_into_chunks(text, max_chars=300)
-        tasks = [(i, chunk, reference_audio_b64, F5TTS_ENDPOINT_URL) for i, chunk in enumerate(chunks)]
-        
-        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
-            results = list(executor.map(_process_f5tts_chunk, tasks))
+    combined = AudioSegment.empty()
+    for b in audio_segments:
+        seg = AudioSegment.from_file(io.BytesIO(b), format="wav")
+        combined = combined.append(seg, crossfade=40) if len(combined) > 0 else seg
 
-        results.sort(key=lambda x: x[0])
+    out_buf = io.BytesIO()
+    combined.export(out_buf, format="wav")
+    audio_b64 = base64.b64encode(out_buf.getvalue()).decode("ascii")
 
-        audio_segments = []
-        for index, success, data in results:
-            if not success:
-                if CARTESIA_API_KEY:
-                    return _call_cartesia_fallback(text)
-                return {"success": False, "error": f"F5-TTS Parallel Chunk {index+1} failed: {data}"}
-            audio_segments.append(data)
-
-        combined = AudioSegment.empty()
-        for b in audio_segments:
-            seg = AudioSegment.from_file(io.BytesIO(b), format="wav")
-            combined = combined.append(seg, crossfade=50) if len(combined) > 0 else seg
-
-        out_buf = io.BytesIO()
-        combined.export(out_buf, format="wav")
-        audio_b64 = base64.b64encode(out_buf.getvalue()).decode("ascii")
-
-        return {"success": True, "audio_b64": audio_b64, "provider": "f5tts_parallel"}
+    return {"success": True, "audio_b64": audio_b64, "provider": provider_name}
