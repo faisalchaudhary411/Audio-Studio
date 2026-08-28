@@ -7,7 +7,25 @@
     </div>
     <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:4px;">Upload a clear reference clip and generate new speech in that voice.</p>
     <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:12px;">Write in English, Hindi (Devanagari), or Urdu (Nastaliq) — language is detected automatically. Urdu text is converted to spoken Hindi pronunciation behind the scenes (there's no separate Urdu voice model yet, but Urdu and Hindi sound the same when spoken — only the script differs). Clean audio with a single speaker and minimal background noise gives the best voice match.</p>
-    <input type="file" class="file-input" id="clone-ref-audio" accept="audio/*" style="margin-bottom:12px;">
+
+    <div style="margin-bottom:12px;">
+      <label style="display:block;color:var(--text-dim);font-size:0.75rem;margin-bottom:4px;">Voice source</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select class="script-input" id="clone-voice-select" style="min-height:auto;padding:8px 10px;flex:1;">
+          <option value="">Upload a new reference clip…</option>
+        </select>
+        <button class="btn btn--ghost btn--sm" id="clone-delete-voice-btn" type="button" style="display:none;white-space:nowrap;" title="Delete this saved voice">Delete</button>
+      </div>
+    </div>
+
+    <div id="clone-upload-row">
+      <input type="file" class="file-input" id="clone-ref-audio" accept="audio/*" style="margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <button class="btn btn--ghost btn--sm" id="clone-save-voice-btn" type="button" disabled>Save this voice for reuse</button>
+        <span style="color:var(--text-dim);font-size:0.72rem;" id="clone-save-hint">Upload a clip first, then save it to reuse later.</span>
+      </div>
+    </div>
+
     <textarea class="script-input" id="clone-text" placeholder="اردو، हिंदी، or English…" maxlength="{{ clone_char_limit }}" style="min-height:100px;"></textarea>
     <div style="display:flex;justify-content:space-between;margin-top:4px;flex-wrap:wrap;gap:4px;">
       <span style="color:var(--jade-hi);font-size:0.75rem;" id="clone-lang-detect"></span>
@@ -19,6 +37,25 @@
     </div>
     <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;">Voice cloning runs on a GPU and can take 30–90 seconds — don't close this tab while it's working. Longer text is automatically split into shorter pieces and stitched back together for better quality.</p>
     <div id="clone-result" style="margin-top:16px;"></div>
+
+    <!-- Consent modal — shown before any voice is ever saved for reuse.
+         Saving is refused server-side without consent:true, this is just
+         the UI gate; see /api/clone/voices/save in app.py. -->
+    <div id="clone-consent-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;padding:16px;">
+      <div class="panel" style="max-width:420px;width:100%;">
+        <span class="panel__label">Save this voice</span>
+        <input type="text" class="script-input" id="clone-voice-name" placeholder="Name this voice (e.g. Narrator, Client A)" maxlength="80" style="min-height:auto;padding:8px 10px;margin:10px 0;">
+        <label style="display:flex;gap:8px;align-items:flex-start;color:var(--text-mid);font-size:0.82rem;line-height:1.4;margin-bottom:14px;cursor:pointer;">
+          <input type="checkbox" id="clone-consent-checkbox" style="margin-top:3px;">
+          <span>I confirm I own this voice or have the speaker's explicit permission to clone it, and I grant VoxCraft a license to store and use this voice sample to generate speech on my request.</span>
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn--ghost btn--sm" id="clone-consent-cancel" type="button">Cancel</button>
+          <button class="btn btn--brass btn--sm" id="clone-consent-confirm" type="button" disabled>Save voice</button>
+        </div>
+        <span style="display:block;margin-top:8px;color:var(--brass-hi);font-size:0.75rem;" id="clone-consent-error"></span>
+      </div>
+    </div>
     {% else %}
     {% include "partials/pro_plus_upsell.html" %}
     {% endif %}
