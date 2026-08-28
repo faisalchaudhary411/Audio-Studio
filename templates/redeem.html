@@ -17,17 +17,24 @@
   <div class="panel" style="border-color:var(--jade-hi);margin-bottom:16px;">
     <p style="margin:0 0 8px;">{{ success }}</p>
     {% if result.key %}
-    <p style="margin:8px 0 4px;font-size:0.85rem;color:var(--text-dim);">License key</p>
+    <p style="margin:8px 0 4px;font-size:0.85rem;color:var(--text-dim);">License key{% if result.app_plan %} ({{ result.app_plan }}){% endif %}</p>
     <div style="font-family:var(--mono);font-size:0.95rem;word-break:break-all;background:var(--bg-elevated);padding:10px 12px;border-radius:8px;">{{ result.key }}</div>
     {% endif %}
-    {% if result.raw_key %}
-    <p style="margin:12px 0 4px;font-size:0.85rem;color:var(--text-dim);">API key (copy now — shown once)</p>
+    {% if result.api_keys %}
+      {% for ak in result.api_keys %}
+      <p style="margin:12px 0 4px;font-size:0.85rem;color:var(--text-dim);">API key — {{ ak.plan }} (copy now — shown once)</p>
+      <div style="font-family:var(--mono);font-size:0.9rem;word-break:break-all;background:var(--bg-elevated);padding:10px 12px;border-radius:8px;">{{ ak.raw_key }}</div>
+      {% endfor %}
+    {% elif result.raw_key %}
+    <p style="margin:12px 0 4px;font-size:0.85rem;color:var(--text-dim);">API key{% if result.api_plan %} — {{ result.api_plan }}{% endif %} (copy now — shown once)</p>
     <div style="font-family:var(--mono);font-size:0.9rem;word-break:break-all;background:var(--bg-elevated);padding:10px 12px;border-radius:8px;">{{ result.raw_key }}</div>
     {% endif %}
     {% if result.is_new_account %}
     <p style="margin-top:12px;font-size:0.88rem;">We also emailed you a link to set your account password.</p>
     {% endif %}
+    {% if result.key %}
     <p style="margin-top:12px;"><a href="{{ url_for('activate') }}" class="btn btn--brass btn--sm">Activate license key</a></p>
+    {% endif %}
   </div>
   {% else %}
 
