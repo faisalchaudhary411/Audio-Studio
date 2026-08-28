@@ -39,6 +39,7 @@ import music_engine
 import audio_tools
 import persistence
 import tool_pages
+import seo_pages
 import licensing
 import usage_tracking
 import api_keys
@@ -1060,6 +1061,18 @@ def blog_detail(post_id):
 # ---------------------------------------------------------------------------
 # Static content pages
 # ---------------------------------------------------------------------------
+@app.route("/<slug>")
+def seo_landing_page(slug):
+    """Dedicated informational landing pages for specific search intents.
+    Unknown slugs return a normal 404 and do not interfere with existing routes.
+    """
+    page = seo_pages.SEO_PAGES.get(slug)
+    if not page:
+        return (render_template("404.html"), 404) if os.path.exists(os.path.join(app.root_path, "templates", "404.html")) else ("Page not found.", 404)
+    cta_url = url_for("tools_hub") if slug == "audio-tools-for-youtubers" else url_for("studio")
+    return render_template("seo_page.html", page=page, cta_url=cta_url)
+
+
 @app.route("/sitemap.xml")
 def sitemap():
     """Dynamically generated — includes every public page plus every
@@ -1072,6 +1085,7 @@ def sitemap():
         ("/studio", "0.9", "weekly"),
         ("/voice-cloning", "0.85", "monthly"),
         ("/tools", "0.9", "weekly"),
+        *[(f"/{slug}", "0.75", "monthly") for slug in seo_pages.SEO_PAGES],
         *[(f"/tools/{slug}", "0.75", "monthly") for slug in tool_pages.TOOL_PAGES],
         ("/pricing", "0.8", "monthly"),
         ("/developers", "0.7", "monthly"),

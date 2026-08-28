@@ -1,0 +1,92 @@
+"""Content for VoxCraft's dedicated SEO landing pages.
+
+These pages are informational entry points only. They reuse existing public
+routes and tools, so adding or editing a page here cannot change audio, TTS,
+payments, accounts, or usage-limit behaviour.
+"""
+SEO_PAGES = {
+    "urdu-text-to-speech": {
+        "title": "Urdu Text to Speech — Create Urdu AI Voice Online | VoxCraft",
+        "meta_description": "Create Urdu AI voiceovers from text online with VoxCraft. Choose a voice, adjust rate and pitch, and generate narration for videos and other projects.",
+        "eyebrow": "Urdu AI Voice",
+        "h1": "Create an Urdu voiceover from text",
+        "intro": [
+            "Turn written Urdu into spoken narration with VoxCraft Voice Studio. Choose from the available Urdu voices, enter your script, then generate audio you can review and use in your project.",
+            "For better results, write names, numbers and punctuation clearly, then listen to the generated audio before publishing. Pronunciation can vary depending on the text and voice you choose."
+        ],
+        "steps": ["Open Voice Studio.", "Select Urdu from the language list and choose a voice.", "Paste or write your script, then adjust rate or pitch if needed.", "Generate the audio, listen carefully, and revise the text if a word needs a different pronunciation."],
+        "use_cases": [("YouTube narration", "Create narration for explainers, documentaries and faceless videos."), ("Learning content", "Turn written lessons or notes into audio for listening practice."), ("Creator workflows", "Draft and test narration before recording a human version.")],
+        "faq": [("Is the Urdu text-to-speech tool free to try?", "Yes. VoxCraft offers free-tier access without requiring an account, subject to the current usage limits."), ("Which Urdu voice is best?", "The best choice depends on your script and intended audience. Listen to the available voice previews and test a short sample before generating a full project."), ("Can I use Urdu text with English words?", "Mixed-language scripts can be harder for any text-to-speech system. Test names and English terms in context and adjust spelling or punctuation when needed.")],
+        "cta_label": "Try Urdu voices in Voice Studio",
+    },
+    "hindi-text-to-speech": {
+        "title": "Hindi Text to Speech — Create Hindi AI Voice Online | VoxCraft",
+        "meta_description": "Create Hindi AI voiceovers from text online with VoxCraft. Select a Hindi voice, adjust delivery, and generate narration for videos and other projects.",
+        "eyebrow": "Hindi AI Voice", "h1": "Create a Hindi voiceover from text",
+        "intro": ["VoxCraft Voice Studio lets you turn written Hindi into spoken narration using the Hindi voices currently available in the voice library.", "Test your script with the voice you prefer before creating a longer narration. Clear punctuation and natural sentence structure usually make the output easier to review."],
+        "steps": ["Open Voice Studio.", "Select Hindi and choose an available voice.", "Enter your script and adjust rate or pitch if needed.", "Generate, listen, and revise before using the final audio."],
+        "use_cases": [("Video narration", "Prepare Hindi narration for explainers and creator videos."), ("Educational content", "Create audio versions of written lessons or study material."), ("Script testing", "Hear how a draft sounds before recording or publishing.")],
+        "faq": [("Can I try Hindi text to speech for free?", "Yes, within the current free-tier limits."), ("Should I test a long script first?", "A short test is safer. It helps you check pronunciation, pacing and voice fit before generating a larger project."), ("Can I change speaking speed?", "Voice Studio provides controls for adjusting delivery settings where available.")],
+        "cta_label": "Try Hindi voices in Voice Studio",
+    },
+    "punjabi-text-to-speech": {
+        "title": "Punjabi Text to Speech — Create Punjabi AI Voice Online | VoxCraft",
+        "meta_description": "Create Punjabi AI voiceovers from text online with VoxCraft. Explore the available voice options and generate narration for creator projects.",
+        "eyebrow": "Punjabi AI Voice", "h1": "Turn Punjabi text into spoken narration",
+        "intro": ["Use VoxCraft Voice Studio to test Punjabi text with the Punjabi voice options currently available in the library.", "Because pronunciation depends on the exact text and voice, listen to a short sample before relying on generated audio for an important project."],
+        "steps": ["Open Voice Studio.", "Choose Punjabi and select a voice.", "Enter a short test script first.", "Review the result, then generate your full narration when you are satisfied."],
+        "use_cases": [("Regional content", "Create narration for videos aimed at Punjabi-speaking audiences."), ("Script review", "Hear a written script before a final recording session."), ("Creative projects", "Experiment with pacing and narration style.")],
+        "faq": [("Is Punjabi available in VoxCraft?", "Check the live voice library in Voice Studio for the current Punjabi options."), ("How can I improve pronunciation?", "Use clear spelling and punctuation, then test difficult names and terms in short samples."), ("Do I need an account to start?", "No account is required for the free-tier workflow.")],
+        "cta_label": "Open Punjabi voices",
+    },
+    "bengali-text-to-speech": {
+        "title": "Bengali Text to Speech — Create Bengali AI Voice Online | VoxCraft",
+        "meta_description": "Create Bengali AI voiceovers from text online with VoxCraft. Select an available voice and generate narration for videos, learning and creator projects.",
+        "eyebrow": "Bengali AI Voice", "h1": "Create Bengali narration from text",
+        "intro": ["VoxCraft Voice Studio gives you a simple way to test written Bengali with the Bengali voices currently available in the library.", "Start with a short section of your script so you can review pronunciation and pacing before producing a longer piece."],
+        "steps": ["Open Voice Studio.", "Select Bengali and an available voice.", "Paste a short sample of your script.", "Generate and review before continuing with the full narration."],
+        "use_cases": [("YouTube videos", "Create Bengali narration for explainers and creator content."), ("Learning material", "Listen to written material in an audio format."), ("Content drafts", "Check how a script sounds before publishing.")],
+        "faq": [("Can I test Bengali voices before a long project?", "Yes. A short test is recommended for checking pronunciation and delivery."), ("Is the tool browser-based?", "VoxCraft runs through the web interface, so you do not need to install a desktop editor for this workflow."), ("Where do I see current voices?", "Open Voice Studio and check the voice and language selectors.")],
+        "cta_label": "Try Bengali voices",
+    },
+    "text-to-speech-for-youtube": {
+        "title": "Text to Speech for YouTube Videos — AI Voiceover Workflow | VoxCraft",
+        "meta_description": "Learn a practical text-to-speech workflow for YouTube videos: prepare a script, test voices, review pronunciation, and create narration with VoxCraft.",
+        "eyebrow": "YouTube Voiceover", "h1": "Use text to speech for YouTube narration",
+        "intro": ["Text-to-speech can speed up a YouTube workflow, but the best results usually come from preparation rather than generating an entire script in one click.", "Break your script into natural sections, test the opening first, and review names, numbers and unusual words before moving on."],
+        "steps": ["Finish and proofread your script.", "Choose a voice that matches the topic and audience.", "Generate a short opening section first.", "Review pronunciation and pacing, then generate the remaining sections and assemble them in your editor."],
+        "use_cases": [("Explainers", "Use steady narration for educational and informational videos."), ("Documentaries", "Test different delivery styles against your visuals before committing to a full narration."), ("Faceless channels", "Build a repeatable voiceover workflow around scripts and editing.")],
+        "faq": [("Should I generate the whole script at once?", "For longer projects, sections are easier to review and replace if a line needs changes."), ("How do I choose a voice?", "Match the voice to the audience and topic, then judge it using a sample from your real script."), ("Can I edit the audio afterward?", "Yes. VoxCraft also provides separate tools for common audio tasks such as trimming, merging and format conversion.")],
+        "cta_label": "Create a YouTube voiceover",
+    },
+    "free-text-to-speech": {
+        "title": "Free Text to Speech Online — Try AI Voice Generation | VoxCraft",
+        "meta_description": "Try VoxCraft's free text-to-speech workflow online. Choose an available voice, enter text, and generate narration within the current free-tier limits.",
+        "eyebrow": "Free TTS", "h1": "Try text to speech online for free",
+        "intro": ["VoxCraft lets you start testing text-to-speech without creating an account. The free tier is designed for trying voices and creating smaller projects within the current usage limits.", "For the most accurate current limits and plan features, check the pricing page rather than relying on old blog posts or screenshots."],
+        "steps": ["Open Voice Studio.", "Choose a language and voice.", "Enter your text and generate a test.", "Review the audio and check pricing if your project needs more usage."],
+        "use_cases": [("Voice testing", "Compare available voices with the same short script."), ("Small projects", "Create narration within the current free-tier allowance."), ("Script review", "Hear written content before recording or editing a final version.")],
+        "faq": [("Do I need an account?", "No account is required to start with the free-tier workflow."), ("Are free limits fixed forever?", "Usage limits can change as the service evolves. Check the current pricing and product pages for the latest details."), ("Can I use generated audio commercially?", "Check VoxCraft's current terms and licensing information for the exact rules that apply to your plan and use case.")],
+        "cta_label": "Try text to speech",
+    },
+    "how-to-create-youtube-voiceover": {
+        "title": "How to Create a YouTube Voiceover — Step-by-Step Workflow | VoxCraft",
+        "meta_description": "Learn a practical YouTube voiceover workflow from script preparation and voice testing to audio review, editing and final export.",
+        "eyebrow": "Creator Guide", "h1": "How to create a YouTube voiceover",
+        "intro": ["A reliable voiceover workflow starts before you open a voice tool. A clean script, short test, and deliberate review process can prevent repeated fixes later in editing.", "The exact workflow works whether you use an AI voice or record your own voice: prepare, test, review, edit, then match the final audio to the video."],
+        "steps": ["Write for the ear, using short and natural sentences.", "Test the first 20–40 seconds before producing the full narration.", "Correct names, numbers, pacing and difficult phrases.", "Generate or record the final sections, then trim and merge them as needed.", "Listen once with the finished video before export."],
+        "use_cases": [("New creators", "Create a repeatable process instead of improvising each video."), ("Faceless videos", "Keep narration production separate from the visual edit."), ("Team workflows", "Use the script as the source of truth for revisions and replacements.")],
+        "faq": [("What should I test first?", "Test the opening and any line containing names, dates, numbers or unusual words."), ("Why split narration into sections?", "Small sections are easier to replace without regenerating or re-recording an entire project."), ("What comes after narration?", "Review the final timing against the video, then make any small edits before export.")],
+        "cta_label": "Open Voice Studio",
+    },
+    "audio-tools-for-youtubers": {
+        "title": "Audio Tools for YouTubers — Practical Online Audio Workflow | VoxCraft",
+        "meta_description": "Explore practical online audio tools for YouTubers, including transcription, trimming, merging, format conversion, noise reduction and video-to-audio extraction.",
+        "eyebrow": "Creator Toolkit", "h1": "Practical audio tools for YouTube creators",
+        "intro": ["Most YouTube projects do not need a complex audio suite for every task. Small jobs such as trimming a clip, joining narration sections or converting a file can often be handled with focused tools.", "VoxCraft groups common creator tasks in one toolkit so you can move between voice creation and basic audio processing without changing your overall workflow."],
+        "steps": ["Start with the task you actually need: transcribe, trim, merge, convert, clean or extract.", "Keep the original file before making destructive edits.", "Use one tool at a time and review the result before the next step.", "Export a compatible format for your video editor or publishing workflow."],
+        "use_cases": [("Narration cleanup", "Trim and combine sections before placing them in the video timeline."), ("Repurposing", "Transcribe spoken content into text for notes or written material."), ("Format compatibility", "Convert audio when an editor or platform requires a different file type.")],
+        "faq": [("Which tool should I use first?", "Start with the problem you need to solve rather than processing every file through every tool."), ("Should I keep the original?", "Yes. Keep an untouched original whenever you may need to redo an edit later."), ("Are all tools the same?", "Each tool is focused on a specific task. Check its dedicated page for supported formats and current limits.")],
+        "cta_label": "Explore VoxCraft audio tools",
+    },
+}
