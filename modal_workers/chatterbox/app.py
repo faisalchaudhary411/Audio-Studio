@@ -1,13 +1,14 @@
 """
-modal_workers/chatterbox/app.py — Chatterbox Multilingual voice cloning on Modal.
-Includes automated FFmpeg audio preprocessing/denoising on incoming reference audio.
+modal_workers/chatterbox/app.py — Chatterbox Multilingual Voice Cloning (Parallel Ready)
 """
 
+import base64
+import io
 import os
 import re
 import subprocess
+import tempfile
 import traceback
-
 import modal
 from pydantic import BaseModel
 
@@ -16,7 +17,7 @@ image = (
     .apt_install("git", "ffmpeg")
     .pip_install("torch==2.4.0", "torchaudio==2.4.0", "numpy", "fastapi[standard]")
     .run_commands(
-        "rm -rf \~/.cache/huggingface/hub/models--ResembleAI--chatterbox* || true",
+        "rm -rf ~/.cache/huggingface/hub/models--ResembleAI--chatterbox* || true",
         "git clone --depth 1 https://github.com/resemble-ai/chatterbox.git /opt/chatterbox",
         "cd /opt/chatterbox && sed -i '/pkuseg/d' pyproject.toml && pip install --no-cache-dir -e .",
     )
@@ -24,53 +25,27 @@ image = (
 
 app = modal.App("voxcraft-clone-worker", image=image)
 
-MAX_TOTAL_CHARS = 1400
-MAX_CHUNK_CHARS = 150
-CROSSFADE_MS = 40
-
-
-class CloneRequest(BaseModel):
-    text: str
+class SingleChunkRequest(BaseModel):
+    chunk_text: str
     reference_audio_b64: str
     language_id: str = "en"
-
 
 class CloneResponse(BaseModel):
     success: bool
     audio_b64: str = ""
     error: str = ""
-    chunks_generated: int = 0
-    duration_seconds: float = 0.0
 
-
-CFG_WEIGHT = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.0"))  # try 0.3 as a test
-
+CFG_WEIGHT = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.0"))
 
 def postprocess_output_audio(input_path: str, output_path: str, sample_rate: int = 24000) -> bool:
-    """Cleans the GENERATED clone output — mirrors preprocess_reference_audio()
-    but runs on the model's output, not the reference clip.
-    Fixes: low-frequency rumble (#7), volume inconsistency (#9), and light
-    de-essing to reduce buzz from harmonic irregularity (#3). Cannot recover
-    missing high-frequency sibilant content the vocoder never generated (#1) —
-    that needs a model/vocoder-level fix, not post-processing."""
     filter_chain = (
         "highpass=f=80,"
-        "acompressor=threshold=-24dB:ratio=2.5:attack=8:release=180,"  # tames RMS swings
+        "acompressor=threshold=-24dB:ratio=2.5:attack=8:release=180,"
         "loudnorm=I=-16:TP=-1.5:LRA=11"
     )
     cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
-        "-af", filter_chain,
-        # BUG FIX: loudnorm silently upsamples its internal processing rate
-        # (observed 24kHz -> 192kHz) and leaves the OUTPUT at that rate
-        # unless explicitly pinned back down — an 8x file-size inflation
-        # with zero audible quality benefit. Confirmed by direct
-        # reproduction: same input, same filter chain, only difference is
-        # this -ar flag, output size dropped from 21.4MB to 2.6MB for an
-        # identical 57s clip.
-        "-ar", str(sample_rate),
-        output_path,
+        "ffmpeg", "-y", "-i", input_path,
+        "-af", filter_chain, "-ar", str(sample_rate), output_path
     ]
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -83,27 +58,17 @@ def postprocess_output_audio(input_path: str, output_path: str, sample_rate: int
                 pass
         return False
 
-
 def preprocess_reference_audio(input_path: str, output_path: str, sample_rate: int = 24000) -> bool:
-    """Cleans reference audio using FFmpeg prior to TTS inference.
-    Applies high-pass filtering (80Hz), FFT denoising, silence trimming, and loudness norm."""
     filter_chain = (
-        "highpass=f=80,"
-        "afftdn=nr=10:nf=-30,"
+        "highpass=f=80,afftdn=nr=10:nf=-30,"
         "silenceremove=start_periods=1:start_duration=0.1:start_threshold=-45dB,"
         "areverse,silenceremove=start_periods=1:start_duration=0.1:start_threshold=-45dB,areverse,"
         "loudnorm=I=-16:TP=-1.5:LRA=11"
     )
-    
     cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
-        "-af", filter_chain,
-        "-ar", str(sample_rate),
-        "-ac", "1",
-        output_path
+        "ffmpeg", "-y", "-i", input_path,
+        "-af", filter_chain, "-ar", str(sample_rate), "-ac", "1", output_path
     ]
-    
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
@@ -114,42 +79,6 @@ def preprocess_reference_audio(input_path: str, output_path: str, sample_rate: i
             except Exception:
                 pass
         return False
-
-
-def _split_into_chunks(text: str, max_chars: int) -> list:
-    """Splits on sentence boundaries (including Urdu/Arabic/Devanagari stops)."""
-    sentences = re.split(r"(?<=[.!?۔؟।])\s+", text.strip())
-    chunks = []
-    current = ""
-    for sentence in sentences:
-        if not sentence:
-            continue
-        candidate = f"{current} {sentence}".strip() if current else sentence
-        if len(candidate) <= max_chars:
-            current = candidate
-            continue
-        if current:
-            chunks.append(current)
-            current = ""
-        if len(sentence) <= max_chars:
-            current = sentence
-        else:
-            words = sentence.split(" ")
-            piece = ""
-            for word in words:
-                candidate = f"{piece} {word}".strip() if piece else word
-                if len(candidate) <= max_chars:
-                    piece = candidate
-                else:
-                    if piece:
-                        chunks.append(piece)
-                    piece = word
-            if piece:
-                current = piece
-    if current:
-        chunks.append(current)
-    return [c for c in chunks if c.strip()]
-
 
 @app.cls(gpu="A10G", timeout=600, scaledown_window=300)
 class ChatterboxWorker:
@@ -162,107 +91,22 @@ class ChatterboxWorker:
 
     def _generate_chunk(self, text: str, ref_path: str, language_id: str):
         return self.model.generate(
-            text,
-            audio_prompt_path=ref_path,
-            language_id=language_id,
-            temperature=0.20,          # commercial: very stable, minimal hallucination
-            top_p=0.72,
-            repetition_penalty=1.35,
-            min_p=0.05,
-            cfg_weight=CFG_WEIGHT,      # try 0.3 via CHATTERBOX_CFG_WEIGHT env var
-            exaggeration=0.38,         # controlled expressiveness
+            text, audio_prompt_path=ref_path, language_id=language_id,
+            temperature=0.20, top_p=0.72, repetition_penalty=1.35, min_p=0.05,
+            cfg_weight=CFG_WEIGHT, exaggeration=0.38
         )
 
     def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
         min_duration_sec = 1.6
         chars = max(len(chunk_text.strip()), 1)
-        # Was chars/10.0 (assumes ~10 chars/sec) with a 1.5x multiplier and a
-        # 25s hard ceiling. Measured against real output, nearly EVERY chunk
-        # was landing at that ceiling — meaning it wasn't catching runaways,
-        # it was truncating normal careful articulation (the aspiration/
-        # gemination/retroflex detail this whole project is trying to
-        # preserve genuinely takes longer than a rushed 10 chars/sec).
-        # Widened baseline to 8 chars/sec and multiplier back to 2.0x, so
-        # this only intervenes on genuine multi-x pathological runaway, not
-        # ordinary slow, deliberate speech.
-        #
-        # NOTE: this is now a LAST-RESORT safety net only, not the primary
-        # defense against runaway/garbled generation — see
-        # _is_pathologically_long() and _has_long_silence_gap(), which run
-        # BEFORE this and trigger a retry instead of a truncate-and-accept.
-        # A chunk that gets truncated here has already passed those checks,
-        # so this should rarely actually fire in practice now.
         expected_sec = chars / 8.0
-        max_duration_sec = max(min_duration_sec, expected_sec * 2.0)
-        max_duration_sec = min(max_duration_sec, 40.0)
+        max_duration_sec = min(max(min_duration_sec, expected_sec * 2.0), 40.0)
         max_samples = int(max_duration_sec * sr)
         if wav.shape[-1] > max_samples:
             wav = wav[..., :max_samples]
         return wav
 
-    def _is_pathologically_long(self, wav, chunk_text: str, sr: int) -> bool:
-        """Flags raw (pre-truncation) output that's way beyond what any
-        legitimate careful reading of this chunk should need — a strong
-        signal of runaway/hallucinated generation, not just slow speech.
-        Tighter than _cap_runaway_generation's own ceiling on purpose: this
-        should catch bad output EARLY so it gets retried, rather than
-        truncated-and-accepted (which just chops a garbled chunk in half
-        instead of fixing it)."""
-        chars = max(len(chunk_text.strip()), 1)
-        expected_sec = chars / 8.0
-        sanity_max_sec = max(3.0, expected_sec * 2.2)
-        duration = wav.shape[-1] / sr
-        return duration > sanity_max_sec
-
-    def _has_long_silence_gap(self, wav, sr: int, max_gap_sec: float = 3.0, threshold: float = 0.01) -> bool:
-        """Detects a single contiguous near-silent stretch longer than
-        max_gap_sec anywhere INSIDE the chunk — e.g. the model going quiet
-        mid-utterance. The existing quality gate only checks mean energy
-        across the whole chunk, which a long internal silent gap can still
-        pass if the rest of the audio sounds normal."""
-        import torch
-        abs_wav = wav.abs().reshape(-1)
-        if abs_wav.numel() == 0:
-            return False
-        silent = (abs_wav <= threshold).to(torch.int32)
-        padded = torch.cat([
-            torch.zeros(1, dtype=torch.int32, device=silent.device),
-            silent,
-            torch.zeros(1, dtype=torch.int32, device=silent.device),
-        ])
-        diff = padded[1:] - padded[:-1]
-        starts = (diff == 1).nonzero(as_tuple=True)[0]
-        ends = (diff == -1).nonzero(as_tuple=True)[0]
-        if starts.numel() == 0:
-            return False
-        run_lengths = ends - starts
-        max_gap_samples = int(max_gap_sec * sr)
-        return bool((run_lengths.max() > max_gap_samples).item())
-
-    def _concat_with_crossfade(self, waveforms: list, sr: int):
-        import torch
-        if not waveforms:
-            return None
-        fade_samples = int(sr * CROSSFADE_MS / 1000)
-        result = waveforms[0]
-        for next_wav in waveforms[1:]:
-            if result.shape[-1] < fade_samples or next_wav.shape[-1] < fade_samples:
-                result = torch.cat([result, next_wav], dim=-1)
-                continue
-            fade_out = torch.linspace(1.0, 0.0, fade_samples, device=result.device, dtype=result.dtype)
-            fade_in = torch.linspace(0.0, 1.0, fade_samples, device=result.device, dtype=result.dtype)
-            tail = result[..., -fade_samples:] * fade_out
-            head = next_wav[..., :fade_samples] * fade_in
-            crossfaded = tail + head
-            result = torch.cat([
-                result[..., :-fade_samples],
-                crossfaded,
-                next_wav[..., fade_samples:],
-            ], dim=-1)
-        return result
-
     def _trim_trailing_silence(self, wav, sr: int, threshold: float = 0.01, max_trim_sec: float = 1.0):
-        import torch
         max_trim_samples = int(sr * max_trim_sec)
         abs_wav = wav.abs()
         nonsilent = (abs_wav > threshold).nonzero()
@@ -275,70 +119,35 @@ class ChatterboxWorker:
         return wav[..., :min_allowed_cutoff]
 
     @modal.fastapi_endpoint(method="POST")
-    def generate(self, req: CloneRequest):
-        import base64
-        import io
-        import tempfile
-
+    def generate(self, req: SingleChunkRequest):
         import torch
         import torchaudio as ta
 
-        text = (req.text or "").strip()
+        text = (req.chunk_text or "").strip()
         ref_b64 = req.reference_audio_b64
         language_id = req.language_id if req.language_id in ("en", "hi") else "en"
 
-        if not text:
-            return CloneResponse(success=False, error="No text provided.").model_dump()
-        if not ref_b64:
-            return CloneResponse(success=False, error="No reference_audio_b64 provided.").model_dump()
-        if len(text) > MAX_TOTAL_CHARS:
-            return CloneResponse(
-                success=False,
-                error=f"Text too long ({len(text)} chars, max {MAX_TOTAL_CHARS})."
-            ).model_dump()
+        if not text or not ref_b64:
+            return CloneResponse(success=False, error="Missing parameters.").model_dump()
 
-        tmp_path = None
-        ref_path = None
+        tmp_path = ref_path = raw_out_path = tmp_path_out = None
         try:
             try:
                 ref_bytes = base64.b64decode(ref_b64)
             except Exception:
-                return CloneResponse(success=False, error="Invalid base64 in reference_audio_b64.").model_dump()
-
-            if len(ref_bytes) == 0:
-                return CloneResponse(success=False, error="Reference audio is empty.").model_dump()
+                return CloneResponse(success=False, error="Invalid base64 in audio.").model_dump()
 
             with tempfile.NamedTemporaryFile(suffix=".upload", delete=False) as f:
                 f.write(ref_bytes)
                 tmp_path = f.name
 
-            # ── Clean & Denoise Reference Audio via FFmpeg ──────────────
             clean_tmp_path = tmp_path + "_clean.wav"
             if preprocess_reference_audio(tmp_path, clean_tmp_path, sample_rate=self.model.sr):
                 if os.path.exists(tmp_path):
                     os.remove(tmp_path)
                 tmp_path = clean_tmp_path
 
-            # ── Load and validate reference ────────────────────────────
-            try:
-                waveform, sr = ta.load(tmp_path)
-            except Exception as e:
-                return CloneResponse(success=False, error=f"Cannot load reference audio: {e}").model_dump()
-
-            duration = waveform.shape[1] / sr
-            if duration < 3:
-                return CloneResponse(
-                    success=False,
-                    error=f"Reference too short ({duration:.1f}s). Minimum required is 3 seconds."
-                ).model_dump()
-
-            if duration > 10:
-                max_samples = int(10 * sr)
-                waveform = waveform[:, :max_samples]
-
-            if waveform.shape[0] > 1:
-                waveform = waveform.mean(dim=0, keepdim=True)
-
+            waveform, sr = ta.load(tmp_path)
             if sr != self.model.sr:
                 resampler = ta.transforms.Resample(sr, self.model.sr)
                 waveform = resampler(waveform)
@@ -347,143 +156,39 @@ class ChatterboxWorker:
                 ref_path = f.name
             ta.save(ref_path, waveform, self.model.sr, format="wav")
 
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-                tmp_path = None
+            candidate = self._generate_chunk(text, ref_path, language_id)
+            if not isinstance(candidate, torch.Tensor):
+                candidate = torch.tensor(candidate)
+            while candidate.dim() > 2:
+                candidate = candidate.squeeze(0)
+            if candidate.dim() == 1:
+                candidate = candidate.unsqueeze(0)
 
-            # ── Chunk and generate ─────────────────────────────────────
-            chunks = _split_into_chunks(text, MAX_CHUNK_CHARS)
-            if not chunks:
-                return CloneResponse(success=False, error="Text produced no valid chunks.").model_dump()
+            candidate = self._cap_runaway_generation(candidate, text, self.model.sr)
+            candidate = self._trim_trailing_silence(candidate, self.model.sr)
+            candidate = torch.clamp(candidate, -1.0, 1.0)
 
-            waveforms = []
-            for i, chunk_text in enumerate(chunks):
-                wav = None
-                last_error = None
-                # Commercial: try up to 2 times if chunk is mostly silent / too short
-                for attempt in range(2):
-                    try:
-                        candidate = self._generate_chunk(chunk_text, ref_path, language_id)
-                    except Exception as e:
-                        last_error = e
-                        continue
+            with tempfile.NamedTemporaryFile(suffix="_raw.wav", delete=False) as f:
+                raw_out_path = f.name
+            ta.save(raw_out_path, candidate, self.model.sr, format="wav")
 
-                    if not isinstance(candidate, torch.Tensor):
-                        candidate = torch.tensor(candidate)
-                    while candidate.dim() > 2:
-                        candidate = candidate.squeeze(0)
-                    if candidate.dim() == 1:
-                        candidate = candidate.unsqueeze(0)
-                    elif candidate.dim() == 2 and candidate.shape[0] > 2:
-                        candidate = candidate[0:1, :]
-
-                    raw_duration = candidate.shape[-1] / self.model.sr
-                    chars = max(len(chunk_text.strip()), 1)
-                    expected_sec = chars / 8.0
-                    print(
-                        f"[chunk {i+1}/{len(chunks)} attempt {attempt+1}] "
-                        f"chars={chars} expected~{expected_sec:.1f}s raw_duration={raw_duration:.1f}s "
-                        f"ratio={raw_duration/expected_sec:.2f}x"
-                    )
-
-                    # Check the RAW (pre-truncation) output for signs of a
-                    # pathological/runaway generation. Catching this here
-                    # and retrying is what actually fixes garbling — the old
-                    # approach of truncating a bad chunk just chopped it,
-                    # it didn't un-garble it.
-                    if self._is_pathologically_long(candidate, chunk_text, self.model.sr):
-                        print(f"[chunk {i+1}/{len(chunks)}] REJECTED — pathologically long, retrying")
-                        last_error = "generation ran away (pathologically long output)"
-                        continue
-                    if self._has_long_silence_gap(candidate, self.model.sr):
-                        print(f"[chunk {i+1}/{len(chunks)}] REJECTED — long internal silence gap, retrying")
-                        last_error = "generation contained a long internal silent gap"
-                        continue
-
-                    pre_cap_duration = raw_duration
-                    candidate = self._cap_runaway_generation(candidate, chunk_text, self.model.sr)
-                    post_cap_duration = candidate.shape[-1] / self.model.sr
-                    if post_cap_duration < pre_cap_duration - 0.05:
-                        print(
-                            f"[chunk {i+1}/{len(chunks)}] TRUNCATED by safety-net cap: "
-                            f"{pre_cap_duration:.1f}s -> {post_cap_duration:.1f}s "
-                            f"(this should be rare — if you're seeing this often, the "
-                            f"pathological-check threshold needs to come down, not the cap itself)"
-                        )
-
-                    # Quality gate: reject near-silent or extremely short chunks
-                    duration = candidate.shape[-1] / self.model.sr
-                    energy = float(candidate.abs().mean())
-                    min_expected = max(1.2, len(chunk_text.strip()) / 14.0)
-
-                    if duration >= min_expected * 0.55 and energy > 0.006:
-                        wav = candidate
-                        print(f"[chunk {i+1}/{len(chunks)}] ACCEPTED: duration={duration:.1f}s energy={energy:.4f}")
-                        break
-                    print(f"[chunk {i+1}/{len(chunks)}] REJECTED by quality gate: duration={duration:.1f}s energy={energy:.4f}, retrying")
-                    # otherwise retry once
-
-                if wav is None:
-                    return CloneResponse(
-                        success=False,
-                        error=f"Chunk {i+1}/{len(chunks)} failed after retries: {last_error or 'low quality / silent output'}"
-                    ).model_dump()
-
-                waveforms.append(wav)
-
-            if len(waveforms) == 1:
-                wav = waveforms[0]
+            tmp_path_out = raw_out_path + "_post.wav"
+            if postprocess_output_audio(raw_out_path, tmp_path_out, sample_rate=self.model.sr):
+                with open(tmp_path_out, "rb") as f:
+                    final_bytes = f.read()
             else:
-                wav = self._concat_with_crossfade(waveforms, self.model.sr)
-
-            if wav is None:
-                return CloneResponse(success=False, error="Audio generation produced no output.").model_dump()
-
-            wav = self._trim_trailing_silence(wav, self.model.sr)
-            wav = torch.clamp(wav, -1.0, 1.0)
-
-            # ── Post-process the GENERATED output (was previously only ──
-            # ── applied to the reference clip, never to the final audio) ──
-            raw_out_path = tmp_path_out = None
-            try:
-                with tempfile.NamedTemporaryFile(suffix="_raw.wav", delete=False) as f:
-                    raw_out_path = f.name
-                ta.save(raw_out_path, wav, self.model.sr, format="wav")
-
-                tmp_path_out = raw_out_path + "_post.wav"
-                if postprocess_output_audio(raw_out_path, tmp_path_out, sample_rate=self.model.sr):
-                    with open(tmp_path_out, "rb") as f:
-                        final_bytes = f.read()
-                else:
-                    with open(raw_out_path, "rb") as f:
-                        final_bytes = f.read()
-            finally:
-                for p in (raw_out_path, tmp_path_out):
-                    if p and os.path.exists(p):
-                        try:
-                            os.remove(p)
-                        except Exception:
-                            pass
+                with open(raw_out_path, "rb") as f:
+                    final_bytes = f.read()
 
             audio_b64 = base64.b64encode(final_bytes).decode("ascii")
-
-            duration_sec = wav.shape[-1] / self.model.sr
-
-            return CloneResponse(
-                success=True,
-                audio_b64=audio_b64,
-                chunks_generated=len(chunks),
-                duration_seconds=round(duration_sec, 2)
-            ).model_dump()
+            return CloneResponse(success=True, audio_b64=audio_b64).model_dump()
 
         except Exception as exc:
-            tb = traceback.format_exc()
-            return CloneResponse(
-                success=False,
-                error=f"{exc}\n\n{tb}"
-            ).model_dump()
+            return CloneResponse(success=False, error=str(exc)).model_dump()
         finally:
-            if tmp_path and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            if ref_path and os.path.exists(ref_path):
-                os.remove(ref_path)
+            for p in (tmp_path, ref_path, raw_out_path, tmp_path_out):
+                if p and os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
