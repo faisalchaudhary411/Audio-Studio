@@ -39,7 +39,6 @@ import music_engine
 import audio_tools
 import persistence
 import tool_pages
-import seo_pages
 import licensing
 import usage_tracking
 import api_keys
@@ -567,7 +566,7 @@ def landing():
         v["audio_slug"] = v["voice_id"].lower()
 
     all_posts = persistence.load_blogs()
-    recent_posts = [p for p in all_posts if p.get("published")][:3]
+    recent_posts = [p for p in all_posts if _blog_is_public(p)][:3]
 
     # Keep marketing numbers in sync with voices.py (single source of truth).
     voice_count = sum(len(v) for v in VOICES.values())
@@ -926,11 +925,26 @@ def how_we_test():
 
 
 # ---------------------------------------------------------------------------
+# Blog publication scheduling
+# ---------------------------------------------------------------------------
+def _blog_is_public(post):
+    """A post is public only when published and its optional publish_date has arrived.
+    Older posts without publish_date remain fully compatible.
+    Dates use the server calendar (YYYY-MM-DD).
+    """
+    if not post.get("published"):
+        return False
+    publish_date = (post.get("publish_date") or "").strip()
+    if not publish_date:
+        return True
+    return publish_date <= dt.datetime.now().strftime("%Y-%m-%d")
+
+# ---------------------------------------------------------------------------
 # Blog (public)
 # ---------------------------------------------------------------------------
 @app.route("/blog")
 def blog_list():
-    posts = [p for p in persistence.load_blogs() if p.get("published")]
+    posts = [p for p in persistence.load_blogs() if _blog_is_public(p)]
     posts.sort(key=lambda p: p.get("date", ""), reverse=True)
 
     # Add lightweight presentation metadata without changing the stored
@@ -1018,7 +1032,7 @@ def _blog_tool_link(post):
 @app.route("/blog/<post_id>")
 def blog_detail(post_id):
     posts = persistence.load_blogs()
-    post = next((p for p in posts if str(p.get("id")) == str(post_id) and p.get("published")), None)
+    post = next((p for p in posts if str(p.get("id")) == str(post_id) and _blog_is_public(p)), None)
     if not post:
         return render_template("blog_list.html", posts=[], not_found=True), 404
 
@@ -1033,7 +1047,7 @@ def blog_detail(post_id):
     related_posts = [
         p for p in posts
         if str(p.get("id")) != str(post_id)
-        and p.get("published")
+        and _blog_is_public(p)
         and category
         and (p.get("category") or "").strip().lower() == category
     ][:3]
@@ -1041,7 +1055,7 @@ def blog_detail(post_id):
         for candidate in posts:
             if str(candidate.get("id")) == str(post_id) or candidate in related_posts:
                 continue
-            if candidate.get("published"):
+            if _blog_is_public(candidate):
                 related_posts.append(candidate)
             if len(related_posts) >= 3:
                 break
@@ -1061,18 +1075,6 @@ def blog_detail(post_id):
 # ---------------------------------------------------------------------------
 # Static content pages
 # ---------------------------------------------------------------------------
-@app.route("/<slug>")
-def seo_landing_page(slug):
-    """Dedicated informational landing pages for specific search intents.
-    Unknown slugs return a normal 404 and do not interfere with existing routes.
-    """
-    page = seo_pages.SEO_PAGES.get(slug)
-    if not page:
-        return (render_template("404.html"), 404) if os.path.exists(os.path.join(app.root_path, "templates", "404.html")) else ("Page not found.", 404)
-    cta_url = url_for("tools_hub") if slug == "audio-tools-for-youtubers" else url_for("studio")
-    return render_template("seo_page.html", page=page, cta_url=cta_url)
-
-
 @app.route("/sitemap.xml")
 def sitemap():
     """Dynamically generated — includes every public page plus every
@@ -1085,7 +1087,6 @@ def sitemap():
         ("/studio", "0.9", "weekly"),
         ("/voice-cloning", "0.85", "monthly"),
         ("/tools", "0.9", "weekly"),
-        *[(f"/{slug}", "0.75", "monthly") for slug in seo_pages.SEO_PAGES],
         *[(f"/tools/{slug}", "0.75", "monthly") for slug in tool_pages.TOOL_PAGES],
         ("/pricing", "0.8", "monthly"),
         ("/developers", "0.7", "monthly"),
@@ -1102,7 +1103,7 @@ def sitemap():
             for path, priority, freq in static_paths]
 
     for post in persistence.load_blogs():
-        if post.get("published"):
+        if _blog_is_public(post):
             urls.append({
                 "loc": f"{base}/blog/{post.get('id')}",
                 "priority": "0.6",
@@ -1458,6 +1459,7 @@ def admin_blog():
                 "updated_date": request.form.get("updated_date", "").strip() or today,
                 "related_tool": request.form.get("related_tool", "").strip().lower(),
                 "date": today,
+                "publish_date": request.form.get("publish_date", "").strip(),
                 "published": request.form.get("published") == "on",
             }
             posts.insert(0, new_post)
@@ -1474,6 +1476,7 @@ def admin_blog():
                     p["author"] = request.form.get("author", "").strip() or p.get("author") or "VoxCraft Team"
                     p["updated_date"] = request.form.get("updated_date", "").strip() or dt.datetime.now().strftime("%Y-%m-%d")
                     p["related_tool"] = request.form.get("related_tool", "").strip().lower()
+                    p["publish_date"] = request.form.get("publish_date", p.get("publish_date", "")).strip()
                     p["published"] = request.form.get("published") == "on"
                     # date intentionally left as the original publish date —
                     # editing content shouldn't bump a post back to the top
@@ -2475,7 +2478,7 @@ def tool_page(slug):
     keywords = [k.lower() for k in tool.get("blog_keywords", [])]
     if keywords:
         for post in persistence.load_blogs():
-            if not post.get("published"):
+            if not _blog_is_public(post):
                 continue
             haystack = f"{post.get('title', '')} {post.get('category', '')} {post.get('excerpt', '')}".lower()
             if any(k in haystack for k in keywords):
