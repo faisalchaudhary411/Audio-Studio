@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block meta_description %}{{ page.meta_description }}{% endblock %}
+{% block content %}
+<section class="hero hero--compact">
+  <div class="container">
+    <span class="eyebrow">{{ page.eyebrow }}</span>
+    <h1 class="hero__title">{{ page.h1 }}</h1>
+    {% for p in page.intro %}<p class="hero__sub">{{ p }}</p>{% endfor %}
+    <div class="hero__actions"><a href="{{ cta_url }}" class="btn btn--brass">{{ page.cta_label }} →</a></div>
+  </div>
+</section>
+<section class="section"><div class="container content-prose">
+  <h2>How it works</h2><ol>{% for step in page.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+  <h2>Useful for</h2><div class="use-grid">{% for name, text in page.use_cases %}<article class="use-card"><h3>{{ name }}</h3><p>{{ text }}</p></article>{% endfor %}</div>
+  <h2>Questions people ask</h2>{% for q, a in page.faq %}<details class="faq-item"><summary>{{ q }}</summary><p>{{ a }}</p></details>{% endfor %}
+  <div class="final-cta"><h2>Ready to try VoxCraft?</h2><p>Use the live product pages to see the current tools, voices and plan details.</p><a href="{{ cta_url }}" class="btn btn--brass">{{ page.cta_label }} →</a></div>
+</div></section>
+{% endblock %}
