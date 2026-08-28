@@ -88,5 +88,13 @@ SEO_PAGES = {
         "use_cases": [("Narration cleanup", "Trim and combine sections before placing them in the video timeline."), ("Repurposing", "Transcribe spoken content into text for notes or written material."), ("Format compatibility", "Convert audio when an editor or platform requires a different file type.")],
         "faq": [("Which tool should I use first?", "Start with the problem you need to solve rather than processing every file through every tool."), ("Should I keep the original?", "Yes. Keep an untouched original whenever you may need to redo an edit later."), ("Are all tools the same?", "Each tool is focused on a specific task. Check its dedicated page for supported formats and current limits.")],
         "cta_label": "Explore VoxCraft audio tools",
+        "related_links": [
+            ("Transcribe audio to text", "/tools/transcribe-audio-to-text"),
+            ("Trim or cut audio", "/tools/trim-cut-audio"),
+            ("Merge audio files", "/tools/merge-audio-files"),
+            ("Convert audio format", "/tools/convert-audio-format"),
+            ("Remove background noise", "/tools/remove-background-noise"),
+            ("Extract audio from video", "/tools/extract-audio-from-video"),
+        ],
     },
 }
