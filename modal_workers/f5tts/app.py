@@ -49,7 +49,7 @@ app = modal.App("voxcraft-f5tts-worker", image=image)
 # fails to load the state dict instead of just sounding wrong.
 HINDI_CKPT = "hf://SPRINGLab/F5-Hindi-24KHz/model_2500000.safetensors"
 HINDI_VOCAB = "hf://SPRINGLab/F5-Hindi-24KHz/vocab.txt"
-HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, text_mask_padding=False, conv_layers=4, pe_attn_head=1)
+HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, conv_layers=4, pe_attn_head=1)
 
 class SingleChunkRequest(BaseModel):
     chunk_text: str
@@ -60,6 +60,7 @@ class LongCloneResponse(BaseModel):
     success: bool
     audio_b64: str = ""
     error: str = ""
+    ref_text: str = ""
 
 @app.cls(gpu="A10G", timeout=600, scaledown_window=300)
 class F5TTSWorker:
@@ -131,7 +132,7 @@ class F5TTSWorker:
             sf.write(buf, wav_out, sr, format="WAV")
             audio_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
-            return LongCloneResponse(success=True, audio_b64=audio_b64).model_dump()
+            return LongCloneResponse(success=True, audio_b64=audio_b64, ref_text=ref_text).model_dump()
 
         except Exception as exc:
             return LongCloneResponse(success=False, error=str(exc)).model_dump()
