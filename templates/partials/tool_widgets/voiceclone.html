@@ -26,6 +26,15 @@
       </div>
     </div>
 
+    <div style="margin-bottom:12px;">
+      <label style="display:block;color:var(--text-dim);font-size:0.75rem;margin-bottom:4px;">Engine</label>
+      <select class="script-input" id="clone-engine-select" style="min-height:auto;padding:8px 10px;">
+        <option value="chatterbox">Chatterbox — English, Hindi &amp; Urdu</option>
+        <option value="f5tts">F5-TTS — Hindi &amp; Urdu only</option>
+      </select>
+      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-engine-hint"></span>
+    </div>
+
     <textarea class="script-input" id="clone-text" placeholder="اردو، हिंदी، or English…" maxlength="{{ clone_char_limit }}" style="min-height:100px;"></textarea>
     <div style="display:flex;justify-content:space-between;margin-top:4px;flex-wrap:wrap;gap:4px;">
       <span style="color:var(--jade-hi);font-size:0.75rem;" id="clone-lang-detect"></span>
