@@ -586,6 +586,8 @@ def landing():
 
     all_posts = persistence.load_blogs()
     recent_posts = [p for p in all_posts if _blog_is_public(p)][:3]
+    for _rp in recent_posts:
+        _rp["_slug"] = _blog_slug(_rp)
 
     # Keep marketing numbers in sync with voices.py (single source of truth).
     voice_count = sum(len(v) for v in VOICES.values())
@@ -946,6 +948,27 @@ def how_we_test():
 # ---------------------------------------------------------------------------
 # Blog publication scheduling
 # ---------------------------------------------------------------------------
+
+def _slugify(text: str) -> str:
+    """URL-safe slug from a title. Keeps it short and stable."""
+    import re as _re
+    s = (text or "").lower().strip()
+    s = _re.sub(r"[^\w\s-]", "", s, flags=_re.UNICODE)
+    s = _re.sub(r"[-\s]+", "-", s).strip("-")
+    return (s[:90] or "post")
+
+
+def _blog_slug(post) -> str:
+    """Prefer explicit slug field, else derive from title, else fall back to id."""
+    explicit = (post.get("slug") or "").strip()
+    if explicit:
+        return explicit
+    title = (post.get("title") or "").strip()
+    if title:
+        return _slugify(title)
+    return str(post.get("id") or "post")
+
+
 def _blog_is_public(post):
     """A post is public only when published and its optional publish_date has arrived.
     Older posts without publish_date remain fully compatible.
@@ -972,6 +995,7 @@ def blog_list():
         body_text = re.sub(r"<[^>]+>", " ", md_lib.markdown(p.get("body", "")))
         word_count = len(re.findall(r"\b\w+\b", body_text))
         p["_reading_minutes"] = max(1, round(word_count / 220))
+        p["_slug"] = _blog_slug(p)
 
     categories = []
     for p in posts:
@@ -1048,10 +1072,24 @@ def _blog_tool_link(post):
     return {"url": url_for(endpoint, **kwargs), "label": label}
 
 
-@app.route("/blog/<post_id>")
-def blog_detail(post_id):
+@app.route("/blog/<path:identifier>")
+def blog_detail(identifier):
     posts = persistence.load_blogs()
-    post = next((p for p in posts if str(p.get("id")) == str(post_id) and _blog_is_public(p)), None)
+    # Match by slug first (preferred SEO URL), then by numeric/string id
+    post = next(
+        (p for p in posts if _blog_is_public(p) and _blog_slug(p) == identifier),
+        None,
+    )
+    if post is None:
+        post = next(
+            (p for p in posts if _blog_is_public(p) and str(p.get("id")) == str(identifier)),
+            None,
+        )
+        # Old numeric URL → permanent redirect to readable slug
+        if post is not None:
+            canonical_slug = _blog_slug(post)
+            if canonical_slug != identifier:
+                return redirect(url_for("blog_detail", identifier=canonical_slug), code=301)
     if not post:
         return render_template("blog_list.html", posts=[], not_found=True), 404
 
@@ -1065,19 +1103,22 @@ def blog_detail(post_id):
     category = (post.get("category") or "").strip().lower()
     related_posts = [
         p for p in posts
-        if str(p.get("id")) != str(post_id)
+        if str(p.get("id")) != str(post.get("id"))
         and _blog_is_public(p)
         and category
         and (p.get("category") or "").strip().lower() == category
     ][:3]
     if len(related_posts) < 3:
         for candidate in posts:
-            if str(candidate.get("id")) == str(post_id) or candidate in related_posts:
+            if str(candidate.get("id")) == str(post.get("id")) or candidate in related_posts:
                 continue
             if _blog_is_public(candidate):
                 related_posts.append(candidate)
             if len(related_posts) >= 3:
                 break
+
+    for rp in related_posts:
+        rp["_slug"] = _blog_slug(rp)
 
     return render_template(
         "blog_detail.html",
@@ -1110,8 +1151,7 @@ def sitemap():
         ("/pricing", "0.8", "monthly"),
         ("/developers", "0.7", "monthly"),
         ("/blog", "0.7", "weekly"),
-        ("/upgrade", "0.6", "monthly"),
-        ("/activate", "0.5", "monthly"),
+        # /activate and /upgrade intentionally omitted — utility pages, noindex
         ("/privacy", "0.3", "yearly"),
         ("/terms", "0.3", "yearly"),
         ("/about", "0.4", "yearly"),
@@ -1124,7 +1164,7 @@ def sitemap():
     for post in persistence.load_blogs():
         if _blog_is_public(post):
             urls.append({
-                "loc": f"{base}/blog/{post.get('id')}",
+                "loc": f"{base}/blog/{_blog_slug(post)}",
                 "priority": "0.6",
                 "changefreq": "monthly",
                 "lastmod": post.get("date", ""),
