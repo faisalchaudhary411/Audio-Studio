@@ -150,11 +150,12 @@ def _fetch_job(job_id: str):
     }
 
 
-def _split_for_stable_generation(text: str, max_chars: int = 380) -> list:
+def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
     """
     Split long Devanagari/English text into natural segments for stable TTS.
     Prefers paragraph breaks, then sentence boundaries.
-    Keeps each segment under max_chars for commercial quality.
+    280 chars keeps each segment comfortably under the worker's duration
+    safety cap so speech is not truncated mid-sentence.
     """
     import re
     text = text.strip()
@@ -207,10 +208,12 @@ def _concat_wav_segments(wav_bytes_list: list) -> bytes:
         return wav_bytes_list[0]
 
     combined = AudioSegment.empty()
-    for raw in wav_bytes_list:
+    for i, raw in enumerate(wav_bytes_list):
         seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
-        # Small crossfade-like silence between segments for natural flow
-        combined += seg + AudioSegment.silent(duration=180)
+        # Very short natural gap — long silence was making muted sections worse
+        if i > 0:
+            combined += AudioSegment.silent(duration=90)
+        combined += seg
     buf = io.BytesIO()
     combined.export(buf, format="wav")
     return buf.getvalue()
@@ -258,7 +261,7 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
         # Chatterbox path: split long text into stable segments, generate
         # each in parallel, then stitch. The Chatterbox Modal worker is
         # built to autoscale across containers.
-        segments = _split_for_stable_generation(processed_text, max_chars=380)
+        segments = _split_for_stable_generation(processed_text, max_chars=280)
 
         if len(segments) == 1:
             results = [modal_client.generate(segments[0], ref_b64, language_id=language_id, engine=engine)]
