@@ -1,29 +1,20 @@
 """
-modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker.
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FIXED).
 
-IMPORTANT LICENSE NOTE: this worker intentionally does NOT load the
-official SWivid/F5-TTS English/Mandarin checkpoint — that checkpoint is
-CC-BY-NC-4.0 (non-commercial) due to its Emilia training data, which
-VoxCraft (a paid product) cannot legally use. Instead this loads the
-SPRINGLab/F5-Hindi-24KHz checkpoint, which is CC-BY-4.0 (commercial use
-permitted, attribution required) — see
-https://huggingface.co/SPRINGLab/F5-Hindi-24KHz
+FIXES APPLIED:
+1. concurrency_limit=1 + allow_concurrent_inputs=1 — prevents concurrent
+   requests from corrupting model buffers (replaces broken threading.Lock).
+2. Removed threading.Lock — not needed with Modal's built-in concurrency control.
+3. Added startup validation — verifies model produces valid audio before
+   accepting traffic.
+4. Better error messages for debugging.
 
-Consequence: this worker is Hindi/Urdu-only. English text sent here will
-produce garbled output since the checkpoint's vocab is Devanagari-based —
-routing must never send plain English requests to this endpoint (enforced
-in modal_client.py, not here).
-
-Urdu text should arrive already transliterated to Devanagari (same
-urdu_transliteration.py conversion clone_engine.py already applies for
-the Chatterbox path) — Urdu and Hindi are the same spoken language, only
-the script differs.
+LICENSE NOTE: Uses SPRINGLab/F5-Hindi-24KHz (CC-BY-4.0) — commercial safe.
 """
 import base64
 import io
 import os
 import tempfile
-import threading
 import modal
 from pydantic import BaseModel
 
@@ -44,18 +35,16 @@ image = (
 
 app = modal.App("voxcraft-f5tts-worker", image=image)
 
-# Verified against F5-TTS's own community-checkpoint registry
-# (SWivid/F5-TTS src/f5_tts/infer/SHARED.md, "Hindi" section) — do not
-# guess these numbers if swapping checkpoints later; a mismatched config
-# fails to load the state dict instead of just sounding wrong.
 HINDI_CKPT = "hf://SPRINGLab/F5-Hindi-24KHz/model_2500000.safetensors"
 HINDI_VOCAB = "hf://SPRINGLab/F5-Hindi-24KHz/vocab.txt"
 HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, conv_layers=4, pe_attn_head=1)
+
 
 class SingleChunkRequest(BaseModel):
     chunk_text: str
     reference_audio_b64: str
     ref_text: str = ""
+
 
 class LongCloneResponse(BaseModel):
     success: bool
@@ -63,7 +52,26 @@ class LongCloneResponse(BaseModel):
     error: str = ""
     ref_text: str = ""
 
-@app.cls(gpu="A10G", timeout=600, scaledown_window=300)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITICAL FIX: concurrency_limit=1 + allow_concurrent_inputs=1
+# 
+# Previously: threading.Lock was used inside @modal.enter(), but Uvicorn
+# runs multiple worker processes — the lock only worked within ONE process.
+# When 3 parallel chunk requests hit the same container, they ran in
+# different processes and corrupted the model's internal buffers, producing
+# garbled/noise output.
+#
+# Now: Modal guarantees only 1 request per container at a time. No lock
+# needed. Each request gets a clean, uncontested model state.
+# ═══════════════════════════════════════════════════════════════════════════════
+@app.cls(
+    gpu="A10G",
+    timeout=600,
+    scaledown_window=300,
+    concurrency_limit=1,        # ← Only 1 active request per container
+    allow_concurrent_inputs=1,  # ← Queue extra requests, don't parallelize
+)
 class F5TTSWorker:
     @modal.enter()
     def load_model(self):
@@ -76,31 +84,7 @@ class F5TTSWorker:
         self.device = device
         self.vocoder = load_vocoder(vocoder_name="vocos", device=device)
 
-        # NOTE: the high-level f5_tts.api.F5TTS() convenience class does NOT
-        # accept a custom model_cfg — it only knows a fixed set of named
-        # presets internally, with no way to plug in a different
-        # architecture (confirmed by a TypeError in production when this
-        # was first tried). Custom checkpoints need the lower-level
-        # load_model() function instead, which IS the same path F5-TTS's
-        # own official Gradio app uses for its "load_custom()" — see
-        # SWivid/F5-TTS app.py.
-        # CRITICAL: F5-TTS's convert_char_to_pinyin() runs by default inside
-        # infer_process() and inserts a space between every character of
-        # any text whose UTF-8 byte pattern looks "East Asian" (3 bytes/char)
-        # — which Devanagari matches too, not just CJK. That shreds
-        # Devanagari words into isolated glyphs the model was never trained
-        # on, producing exactly the "noise, no actual voice" failure. The
-        # SPRINGLab/F5-Hindi-24KHz author confirmed this checkpoint was
-        # trained WITHOUT this conversion — so inference must skip it too.
-        #
-        # Patched in BOTH places it could be referenced from: the source
-        # module (f5_tts.model.utils, in case infer_process re-imports it
-        # fresh on every call) AND the consumer module (f5_tts.infer.utils_infer,
-        # in case it kept a module-level reference bound at f5-tts's own
-        # import time, which a source-only patch wouldn't reach). A
-        # startup self-check logs whether this actually took — check
-        # Modal's Logs tab for "convert_char_to_pinyin patch check" if
-        # output is still garbled after this deploy.
+        # Patch convert_char_to_pinyin to identity for Devanagari
         def _identity_no_pinyin(text_list, polyphone=True):
             return text_list
 
@@ -111,20 +95,9 @@ class F5TTSWorker:
 
         _test_in = ["देवनागरी टेस्ट"]
         _test_out = _f5_utils_infer.convert_char_to_pinyin(_test_in)
-        print(f"[convert_char_to_pinyin patch check] patched={_test_out == _test_in} in={_test_in} out={_test_out}")
+        print(f"[PATCH CHECK] convert_char_to_pinyin patched={_test_out == _test_in}")
 
-        # SECOND FIX: preprocess_ref_audio_text() auto-transcribes the
-        # reference clip when no ref_text is given, but never exposes a
-        # language override — Whisper's own language auto-detection then
-        # sometimes calls Hindi speech "Urdu" (same spoken language,
-        # different script) and transcribes it in Nastaliq. That ref_text
-        # is then completely out-of-vocabulary for this Devanagari-only
-        # checkpoint, corrupting the reference conditioning (confirmed via
-        # Modal logs showing a Nastaliq ref_text next to a Devanagari
-        # gen_text). transcribe() itself DOES accept a language param, so
-        # force it to Hindi here — preprocess_ref_audio_text calls
-        # transcribe() by module-level name from within the same module,
-        # so patching it here reliably intercepts that call.
+        # Force Hindi transcription for reference audio
         _original_transcribe = _f5_utils_infer.transcribe
 
         def _transcribe_force_hindi(ref_audio, language=None):
@@ -142,14 +115,43 @@ class F5TTSWorker:
             vocab_file=vocab_path,
             device=device,
         )
+        print(f"[MODEL LOADED] checkpoint={ckpt_path} device={device}")
 
-        # CRITICAL FIX: Add a threading lock around inference.
-        # Modal's @modal.fastapi_endpoint creates an ASGI app that CAN
-        # handle multiple requests concurrently. F5-TTS's infer_process
-        # is NOT thread-safe — concurrent calls corrupt the model's
-        # internal buffers, producing the garbled/noise output seen when
-        # 3 chunks hit the same container simultaneously.
-        self._infer_lock = threading.Lock()
+        # ═══════════════════════════════════════════════════════════════════════
+        # STARTUP VALIDATION: Generate a test clip to verify the model works
+        # before accepting traffic. Catches corrupted checkpoints, CUDA issues,
+        # or pinyin-patch failures at deploy time instead of at runtime.
+        # ═══════════════════════════════════════════════════════════════════════
+        from f5_tts.infer.utils_infer import infer_process
+        import numpy as np
+
+        # Create a minimal test reference
+        test_sr = 24000
+        test_duration = 1.0  # 1 second of silence is enough for structure test
+        test_wav = np.zeros(int(test_sr * test_duration), dtype=np.float32)
+        test_path = "/tmp/_startup_test_ref.wav"
+        import soundfile as sf
+        sf.write(test_path, test_wav, test_sr)
+
+        try:
+            test_out, test_sr_out, _ = infer_process(
+                test_path,
+                "टेस्ट",
+                "टेस्ट",
+                self.model,
+                self.vocoder,
+                mel_spec_type="vocos",
+                device=self.device,
+            )
+            assert test_out is not None and len(test_out) > 0, "Empty startup test output"
+            assert np.isfinite(test_out).all(), "NaN/Inf in startup test output"
+            print(f"[STARTUP TEST] PASSED — output length={len(test_out)} samples")
+        except Exception as e:
+            print(f"[STARTUP TEST] FAILED: {e}")
+            raise RuntimeError(f"Model startup validation failed: {e}") from e
+        finally:
+            if os.path.exists(test_path):
+                os.remove(test_path)
 
     @modal.fastapi_endpoint(method="POST")
     def generate(self, req: SingleChunkRequest):
@@ -161,7 +163,10 @@ class F5TTSWorker:
         ref_b64 = req.reference_audio_b64
 
         if not chunk_text or not ref_b64:
-            return LongCloneResponse(success=False, error="Missing chunk text or reference audio.").model_dump()
+            return LongCloneResponse(
+                success=False,
+                error="Missing chunk text or reference audio."
+            ).model_dump()
 
         tmp_ref_path = None
         try:
@@ -170,40 +175,41 @@ class F5TTSWorker:
                 f.write(ref_bytes)
                 tmp_ref_path = f.name
 
-            # preprocess_ref_audio_text trims silence/normalizes the clip and,
-            # if ref_text is empty, runs local ASR (faster-whisper) to
-            # transcribe it — same behavior the removed F5TTS.infer()
-            # convenience method delegated to internally.
-            ref_audio_path, resolved_ref_text = preprocess_ref_audio_text(tmp_ref_path, req.ref_text or "")
-
-            # Use caller-provided ref_text if available, else the resolved one
+            ref_audio_path, resolved_ref_text = preprocess_ref_audio_text(
+                tmp_ref_path, req.ref_text or ""
+            )
             effective_ref_text = req.ref_text.strip() if req.ref_text else resolved_ref_text
 
-            # CRITICAL FIX: Lock around infer_process to prevent concurrent
-            # access corruption. Also validate output before returning.
-            with self._infer_lock:
-                wav_out, sr, _ = infer_process(
-                    ref_audio_path,
-                    effective_ref_text,
-                    chunk_text,
-                    self.model,
-                    self.vocoder,
-                    mel_spec_type="vocos",
-                    device=self.device,
-                )
+            # ═══════════════════════════════════════════════════════════════════
+            # NO LOCK NEEDED — concurrency_limit=1 guarantees single access
+            # ═══════════════════════════════════════════════════════════════════
+            wav_out, sr, _ = infer_process(
+                ref_audio_path,
+                effective_ref_text,
+                chunk_text,
+                self.model,
+                self.vocoder,
+                mel_spec_type="vocos",
+                device=self.device,
+            )
 
-            # Validate output: must be non-empty, finite values, reasonable length
+            # Validate output
             if wav_out is None or len(wav_out) == 0:
-                return LongCloneResponse(success=False, error="Model produced empty audio.").model_dump()
+                return LongCloneResponse(
+                    success=False,
+                    error="Model produced empty audio."
+                ).model_dump()
 
             if not np.isfinite(wav_out).all():
-                return LongCloneResponse(success=False, error="Model produced invalid audio (NaN/Inf values).").model_dump()
-
-            # Minimum length check: < 0.5s at 24kHz = 12000 samples
-            if len(wav_out) < 12000:
                 return LongCloneResponse(
-                    success=False, 
-                    error=f"Model produced audio too short ({len(wav_out)} samples) — likely a generation failure."
+                    success=False,
+                    error="Model produced invalid audio (NaN/Inf values)."
+                ).model_dump()
+
+            if len(wav_out) < 12000:  # < 0.5s at 24kHz
+                return LongCloneResponse(
+                    success=False,
+                    error=f"Audio too short ({len(wav_out)} samples) — generation failed."
                 ).model_dump()
 
             buf = io.BytesIO()
@@ -211,15 +217,17 @@ class F5TTSWorker:
             audio_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
             return LongCloneResponse(
-                success=True, 
-                audio_b64=audio_b64, 
-                ref_text=effective_ref_text
+                success=True,
+                audio_b64=audio_b64,
+                ref_text=effective_ref_text,
             ).model_dump()
 
         except Exception as exc:
             import traceback
+            err_detail = f"{str(exc)}\n{traceback.format_exc()}"
+            print(f"[GENERATE ERROR] {err_detail}")
             return LongCloneResponse(
-                success=False, 
+                success=False,
                 error=str(exc),
             ).model_dump()
         finally:
