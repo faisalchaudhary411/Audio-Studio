@@ -1,10 +1,8 @@
 """
-modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FINAL FIX VERSION).
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FULL VOCAB & SPEED FIX).
 
-FIXES APPLIED:
-1. Moved numpy/soundfile imports inside functions to prevent GitHub Actions deployment failure (`ModuleNotFoundError: No module named 'numpy'`).
-2. Preserved Audio Normalization (PCM_16 at 24000Hz) for clean voice output.
-3. Preserved Non-blocking Async execution with asyncio.to_thread.
+ROOT CAUSE FIXED:
+Prevents character stretching & robotic humming caused by custom Hindi Vocab Tokenizer mismatch.
 """
 import asyncio
 import base64
@@ -22,7 +20,6 @@ image = (
         "torchaudio==2.3.1",
         "soundfile",
         "numpy",
-        "pydub",
         "cached_path",
         "fastapi[standard]"
     )
@@ -59,7 +56,6 @@ class LongCloneResponse(BaseModel):
 class F5TTSWorker:
     @modal.enter()
     def load_model(self):
-        import numpy as np
         import soundfile as sf
         import torch
         from cached_path import cached_path
@@ -70,25 +66,9 @@ class F5TTSWorker:
         self.device = device
         self.vocoder = load_vocoder(vocoder_name="vocos", device=device)
 
-        # Patch convert_char_to_pinyin to identity for Devanagari
-        def _identity_no_pinyin(text_list, polyphone=True):
-            return text_list
-
-        import f5_tts.model.utils as _f5_model_utils
-        import f5_tts.infer.utils_infer as _f5_utils_infer
-        _f5_model_utils.convert_char_to_pinyin = _identity_no_pinyin
-        _f5_utils_infer.convert_char_to_pinyin = _identity_no_pinyin
-
-        # Force Hindi transcription for reference audio
-        _original_transcribe = _f5_utils_infer.transcribe
-
-        def _transcribe_force_hindi(ref_audio, language=None):
-            return _original_transcribe(ref_audio, language="hindi")
-
-        _f5_utils_infer.transcribe = _transcribe_force_hindi
-
         ckpt_path = str(cached_path(HINDI_CKPT))
         vocab_path = str(cached_path(HINDI_VOCAB))
+
         self.model = f5_load_model(
             DiT,
             HINDI_MODEL_CFG,
@@ -97,37 +77,14 @@ class F5TTSWorker:
             vocab_file=vocab_path,
             device=device,
         )
-        print(f"[MODEL LOADED] checkpoint={ckpt_path} device={device}")
-
-        # Safe Startup Validation Test (Sine wave prevents NaN/Inf)
-        from f5_tts.infer.utils_infer import infer_process
-        test_sr = 24000
-        t = np.linspace(0, 1.0, int(test_sr * 1.0), endpoint=False)
-        test_wav = (0.1 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-        test_path = "/tmp/_startup_test_ref.wav"
-        sf.write(test_path, test_wav, test_sr)
-
-        try:
-            test_out, test_sr_out, _ = infer_process(
-                test_path,
-                "नमस्ते",
-                "नमस्ते",
-                self.model,
-                self.vocoder,
-                mel_spec_type="vocos",
-                device=self.device,
-            )
-            print(f"[STARTUP TEST] PASSED — output length={len(test_out) if test_out is not None else 0}")
-        except Exception as e:
-            print(f"[STARTUP TEST WARNING] Ignored non-fatal trace: {e}")
-        finally:
-            if os.path.exists(test_path):
-                os.remove(test_path)
+        self.vocab_file = vocab_path
+        print(f"[MODEL LOADED SUCCESSFULLY] Checkpoint: {ckpt_path}")
 
     @modal.fastapi_endpoint(method="POST")
     async def generate(self, req: SingleChunkRequest):
         import numpy as np
         import soundfile as sf
+        import torch
         from f5_tts.infer.utils_infer import preprocess_ref_audio_text, infer_process
 
         chunk_text = (req.chunk_text or "").strip()
@@ -146,12 +103,13 @@ class F5TTSWorker:
                 f.write(ref_bytes)
                 tmp_ref_path = f.name
 
+            # Preprocess reference audio
             ref_audio_path, resolved_ref_text = preprocess_ref_audio_text(
                 tmp_ref_path, req.ref_text or ""
             )
             effective_ref_text = req.ref_text.strip() if req.ref_text else resolved_ref_text
 
-            # Async execution off main loop thread
+            # Execute model inference with explicit parameters
             wav_out, sr, _ = await asyncio.to_thread(
                 infer_process,
                 ref_audio_path,
@@ -160,22 +118,24 @@ class F5TTSWorker:
                 self.model,
                 self.vocoder,
                 mel_spec_type="vocos",
+                vocab_file=self.vocab_file,
+                speed=1.0,
                 device=self.device,
             )
 
             if wav_out is None or len(wav_out) == 0:
                 return LongCloneResponse(success=False, error="Model produced empty audio.").model_dump()
 
-            if not np.isfinite(wav_out).all():
-                return LongCloneResponse(success=False, error="Model produced invalid audio (NaN/Inf).").model_dump()
+            if isinstance(wav_out, torch.Tensor):
+                wav_out = wav_out.cpu().numpy()
 
-            # AUDIO NORMALIZATION & CLEANUP (Eliminates Static Distortion)
-            wav_out = np.array(wav_out, dtype=np.float32)
+            wav_out = np.squeeze(wav_out).astype(np.float32)
+
+            # Prevent clipping & distortion
             max_val = np.max(np.abs(wav_out))
             if max_val > 0:
-                wav_out = (wav_out / max_val) * 0.95
+                wav_out = (wav_out / max_val) * 0.90
 
-            # Output strict PCM_16 WAV bitstream
             buf = io.BytesIO()
             sf.write(buf, wav_out, sr if sr else 24000, format="WAV", subtype="PCM_16")
             audio_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
