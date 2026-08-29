@@ -3103,9 +3103,16 @@ def api_clone_generate():
     if language_id not in ("en", "hi", "ur"):
         language_id = "en"
 
+    ref_text = (data.get("ref_text") or "").strip()
+
     try:
-        ref_text = (data.get("ref_text") or "").strip()
-job_id = start_clone_job(text, path, language_id=language_id, engine=engine, ref_text=ref_text)
+        job_id = start_clone_job(
+            text,
+            path,
+            language_id=language_id,
+            engine=engine,
+            ref_text=ref_text,
+        )
     except Exception as e:
         import traceback
         return jsonify({"error": f"Failed to start clone job: {str(e)}", "detail": traceback.format_exc()}), 500
