@@ -87,7 +87,7 @@
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.2rem;">From the blog</h2>
   <div style="display:grid;gap:12px;">
     {% for post in related_posts %}
-    <a href="{{ url_for('blog_detail', post_id=post.id) }}" class="panel" style="display:block;">
+    <a href="{{ url_for('blog_detail', identifier=post._slug) }}" class="panel" style="display:block;">
       <span class="voice-card__tag" style="margin-bottom:8px;display:inline-block;">{{ post.category or 'General' }}</span>
       <h3 style="font-family:var(--display);font-size:1.1rem;margin:4px 0 6px;">{{ post.title }}</h3>
       {% if post.excerpt %}<p style="color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:0;">{{ post.excerpt }}</p>{% endif %}
