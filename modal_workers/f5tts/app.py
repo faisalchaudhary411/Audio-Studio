@@ -1,10 +1,10 @@
 """
-modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FINAL STABLE VERSION).
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FINAL FIX VERSION).
 
-FEATURES:
-1. Pure PCM 16-bit / 24kHz audio normalization to eliminate static & garbled output.
-2. Non-blocking Async I/O wrapper using asyncio.to_thread.
-3. Fully compatible Devanagari/Hindi patching & robust fallback logic.
+FIXES APPLIED:
+1. Moved numpy/soundfile imports inside functions to prevent GitHub Actions deployment failure (`ModuleNotFoundError: No module named 'numpy'`).
+2. Preserved Audio Normalization (PCM_16 at 24000Hz) for clean voice output.
+3. Preserved Non-blocking Async execution with asyncio.to_thread.
 """
 import asyncio
 import base64
@@ -12,8 +12,6 @@ import io
 import os
 import tempfile
 import modal
-import numpy as np
-import soundfile as sf
 from pydantic import BaseModel
 
 image = (
@@ -61,6 +59,8 @@ class LongCloneResponse(BaseModel):
 class F5TTSWorker:
     @modal.enter()
     def load_model(self):
+        import numpy as np
+        import soundfile as sf
         import torch
         from cached_path import cached_path
         from f5_tts.model import DiT
@@ -126,6 +126,8 @@ class F5TTSWorker:
 
     @modal.fastapi_endpoint(method="POST")
     async def generate(self, req: SingleChunkRequest):
+        import numpy as np
+        import soundfile as sf
         from f5_tts.infer.utils_infer import preprocess_ref_audio_text, infer_process
 
         chunk_text = (req.chunk_text or "").strip()
