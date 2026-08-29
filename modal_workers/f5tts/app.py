@@ -1,8 +1,10 @@
 """
-modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FULL VOCAB & SPEED FIX).
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (STABLE & TESTED).
 
-ROOT CAUSE FIXED:
-Prevents character stretching & robotic humming caused by custom Hindi Vocab Tokenizer mismatch.
+FIXES APPLIED:
+1. Removed invalid 'vocab_file' kwarg from infer_process() to solve runtime TypeError.
+2. Kept custom vocab loading inside load_model() for Hindi/Urdu character mapping.
+3. Audio Normalization & PCM_16 encoding preserved for clean sound playback.
 """
 import asyncio
 import base64
@@ -56,7 +58,6 @@ class LongCloneResponse(BaseModel):
 class F5TTSWorker:
     @modal.enter()
     def load_model(self):
-        import soundfile as sf
         import torch
         from cached_path import cached_path
         from f5_tts.model import DiT
@@ -69,6 +70,15 @@ class F5TTSWorker:
         ckpt_path = str(cached_path(HINDI_CKPT))
         vocab_path = str(cached_path(HINDI_VOCAB))
 
+        # Identity patch for character-to-pinyin to preserve custom vocabulary
+        def _identity_no_pinyin(text_list, polyphone=True):
+            return text_list
+
+        import f5_tts.model.utils as _f5_model_utils
+        import f5_tts.infer.utils_infer as _f5_utils_infer
+        _f5_model_utils.convert_char_to_pinyin = _identity_no_pinyin
+        _f5_utils_infer.convert_char_to_pinyin = _identity_no_pinyin
+
         self.model = f5_load_model(
             DiT,
             HINDI_MODEL_CFG,
@@ -77,7 +87,6 @@ class F5TTSWorker:
             vocab_file=vocab_path,
             device=device,
         )
-        self.vocab_file = vocab_path
         print(f"[MODEL LOADED SUCCESSFULLY] Checkpoint: {ckpt_path}")
 
     @modal.fastapi_endpoint(method="POST")
@@ -103,13 +112,12 @@ class F5TTSWorker:
                 f.write(ref_bytes)
                 tmp_ref_path = f.name
 
-            # Preprocess reference audio
             ref_audio_path, resolved_ref_text = preprocess_ref_audio_text(
                 tmp_ref_path, req.ref_text or ""
             )
             effective_ref_text = req.ref_text.strip() if req.ref_text else resolved_ref_text
 
-            # Execute model inference with explicit parameters
+            # Execute model inference with valid native kwargs
             wav_out, sr, _ = await asyncio.to_thread(
                 infer_process,
                 ref_audio_path,
@@ -118,7 +126,6 @@ class F5TTSWorker:
                 self.model,
                 self.vocoder,
                 mel_spec_type="vocos",
-                vocab_file=self.vocab_file,
                 speed=1.0,
                 device=self.device,
             )
@@ -131,7 +138,7 @@ class F5TTSWorker:
 
             wav_out = np.squeeze(wav_out).astype(np.float32)
 
-            # Prevent clipping & distortion
+            # Prevent audio clipping & high volume distortion
             max_val = np.max(np.abs(wav_out))
             if max_val > 0:
                 wav_out = (wav_out / max_val) * 0.90
