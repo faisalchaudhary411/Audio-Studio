@@ -50,6 +50,8 @@
   const cloneVoiceSelect = document.getElementById('clone-voice-select');
   const cloneDeleteBtn = document.getElementById('clone-delete-voice-btn');
   const cloneUploadRow = document.getElementById('clone-upload-row');
+  const cloneEngineSelect = document.getElementById('clone-engine-select');
+  const cloneEngineHint = document.getElementById('clone-engine-hint');
   const cloneSaveBtn = document.getElementById('clone-save-voice-btn');
   const cloneSaveHint = document.getElementById('clone-save-hint');
   const consentModal = document.getElementById('clone-consent-modal');
@@ -65,9 +67,27 @@
       cloneCharCount.textContent = `${cloneText.value.length} / ${limit} characters`;
       cloneCharCount.style.color = cloneText.value.length >= limit ? 'var(--brass-hi)' : 'var(--text-dim)';
       if (cloneLangDetect) cloneLangDetect.textContent = detectScriptLabel(cloneText.value);
+      updateEngineHint();
     };
     cloneText.addEventListener('input', updateCount);
     updateCount();
+  }
+
+  function updateEngineHint() {
+    if (!cloneEngineSelect || !cloneEngineHint) return;
+    if (cloneEngineSelect.value === 'f5tts' && detectScriptShort(cloneText.value) === 'English') {
+      cloneEngineHint.textContent = 'This text looks like English — F5-TTS only supports Hindi/Urdu, switch to Chatterbox.';
+      cloneEngineHint.style.color = 'var(--brass-hi)';
+    } else {
+      cloneEngineHint.textContent = cloneEngineSelect.value === 'f5tts'
+        ? 'Slower, flow-matching model — good for Hindi/Urdu narration.'
+        : '';
+      cloneEngineHint.style.color = 'var(--text-dim)';
+    }
+  }
+  if (cloneEngineSelect) {
+    cloneEngineSelect.addEventListener('change', updateEngineHint);
+    updateEngineHint();
   }
   const cloneStatus = document.querySelector('[data-clone-status]');
   const cloneResult = document.getElementById('clone-result');
@@ -241,6 +261,11 @@
         cloneStatus.textContent = 'Enter some text to speak.';
         return;
       }
+      const engine = cloneEngineSelect ? cloneEngineSelect.value : 'chatterbox';
+      if (engine === 'f5tts' && detectScriptShort(cloneText.value) === 'English') {
+        cloneStatus.textContent = 'F5-TTS only supports Hindi/Urdu text — switch to Chatterbox for English.';
+        return;
+      }
       cloneBtn.disabled = true;
       cloneResult.innerHTML = '';
       try {
@@ -268,8 +293,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(
             savedVoiceId
-              ? { text: cloneText.value.trim(), saved_voice_id: savedVoiceId }
-              : { text: cloneText.value.trim(), reference_id: referenceId }
+              ? { text: cloneText.value.trim(), saved_voice_id: savedVoiceId, engine }
+              : { text: cloneText.value.trim(), reference_id: referenceId, engine }
           ),
         });
         const genData = await genRes.json();
