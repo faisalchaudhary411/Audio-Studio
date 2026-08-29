@@ -8,11 +8,6 @@ SWivid/F5-TTS English/Mandarin checkpoint which is CC-BY-NC-4.0). Sending
 plain English text here will not raise an error but will sound wrong,
 since the checkpoint's vocab is Devanagari-based. Callers must not route
 English requests to this module — see modal_client.py's engine dispatch.
-
-ref_text (optional): exact transcript of the reference audio. When provided
-the worker skips ASR and uses this text for voice conditioning. Strongly
-recommended — automatic ASR often produces imperfect transcripts that
-cause the model to output noise instead of speech.
 """
 
 import os
@@ -32,7 +27,7 @@ def is_configured() -> bool:
     return bool(F5TTS_ENDPOINT_URL)
 
 
-def _split_into_chunks(text: str, max_chars: int = 300) -> list:
+def _split_into_chunks(text: str, max_chars: int = 120) -> list:
     sentences = re.split(r'(?<=[.!?۔؟।])\s+', text.strip())
     chunks = []
     current = ""
@@ -49,11 +44,10 @@ def _split_into_chunks(text: str, max_chars: int = 300) -> list:
 
 
 def _process_f5tts_chunk(chunk_tuple):
-    index, chunk_text, ref_b64, ref_text, url = chunk_tuple
+    index, chunk_text, ref_b64, url = chunk_tuple
     payload = {
         "chunk_text": chunk_text,
-        "reference_audio_b64": ref_b64,
-        "ref_text": ref_text or "",
+        "reference_audio_b64": ref_b64
     }
     try:
         r = requests.post(url, json=payload, timeout=_TIMEOUT_SEC)
@@ -67,18 +61,18 @@ def _process_f5tts_chunk(chunk_tuple):
         return (index, False, str(e))
 
 
-def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "") -> dict:
+def generate_long_audio(text: str, reference_audio_b64: str) -> dict:
     if not F5TTS_ENDPOINT_URL:
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
-    chunks = _split_into_chunks(text, max_chars=300)
-    if not chunks:
-        return {"success": False, "error": "No text chunks to generate."}
-
-    tasks = [
-        (i, chunk, reference_audio_b64, ref_text, F5TTS_ENDPOINT_URL)
-        for i, chunk in enumerate(chunks)
-    ]
+    # F5-TTS's duration is estimated from a ref-audio/ref-text ratio, and
+    # that estimate drifts more over longer single-shot text spans than
+    # Chatterbox's architecture does — the visible symptom is repeated
+    # phrases (duration overestimated) or half-pronounced/cut-off words
+    # (underestimated). Keeping chunks short (roughly one clause) keeps
+    # each individual duration estimate close enough to stay reliable.
+    chunks = _split_into_chunks(text, max_chars=120)
+    tasks = [(i, chunk, reference_audio_b64, F5TTS_ENDPOINT_URL) for i, chunk in enumerate(chunks)]
 
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
         results = list(executor.map(_process_f5tts_chunk, tasks))
