@@ -114,6 +114,25 @@ class F5TTSWorker:
         _test_out = _f5_utils_infer.convert_char_to_pinyin(_test_in)
         print(f"[convert_char_to_pinyin patch check] patched={_test_out == _test_in} in={_test_in} out={_test_out}")
 
+        # SECOND FIX: preprocess_ref_audio_text() auto-transcribes the
+        # reference clip when no ref_text is given, but never exposes a
+        # language override — Whisper's own language auto-detection then
+        # sometimes calls Hindi speech "Urdu" (same spoken language,
+        # different script) and transcribes it in Nastaliq. That ref_text
+        # is then completely out-of-vocabulary for this Devanagari-only
+        # checkpoint, corrupting the reference conditioning (confirmed via
+        # Modal logs showing a Nastaliq ref_text next to a Devanagari
+        # gen_text). transcribe() itself DOES accept a language param, so
+        # force it to Hindi here — preprocess_ref_audio_text calls
+        # transcribe() by module-level name from within the same module,
+        # so patching it here reliably intercepts that call.
+        _original_transcribe = _f5_utils_infer.transcribe
+
+        def _transcribe_force_hindi(ref_audio, language=None):
+            return _original_transcribe(ref_audio, language="hindi")
+
+        _f5_utils_infer.transcribe = _transcribe_force_hindi
+
         ckpt_path = str(cached_path(HINDI_CKPT))
         vocab_path = str(cached_path(HINDI_VOCAB))
         self.model = f5_load_model(
