@@ -49,7 +49,7 @@ app = modal.App("voxcraft-f5tts-worker", image=image)
 # fails to load the state dict instead of just sounding wrong.
 HINDI_CKPT = "hf://SPRINGLab/F5-Hindi-24KHz/model_2500000.safetensors"
 HINDI_VOCAB = "hf://SPRINGLab/F5-Hindi-24KHz/vocab.txt"
-HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, conv_layers=4, pe_attn_head=1)
+HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, text_mask_padding=False, conv_layers=4, pe_attn_head=1)
 
 class SingleChunkRequest(BaseModel):
     chunk_text: str
