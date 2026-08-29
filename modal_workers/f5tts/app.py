@@ -83,9 +83,6 @@ class F5TTSWorker:
         # load_model() function instead, which IS the same path F5-TTS's
         # own official Gradio app uses for its "load_custom()" — see
         # SWivid/F5-TTS app.py.
-        ckpt_path = str(cached_path(HINDI_CKPT))
-        vocab_path = str(cached_path(HINDI_VOCAB))
-
         # CRITICAL: F5-TTS's convert_char_to_pinyin() runs by default inside
         # infer_process() and inserts a space between every character of
         # any text whose UTF-8 byte pattern looks "East Asian" (3 bytes/char)
@@ -95,11 +92,30 @@ class F5TTSWorker:
         # SPRINGLab/F5-Hindi-24KHz author confirmed this checkpoint was
         # trained WITHOUT this conversion — so inference must skip it too.
         # Same fix other non-Chinese F5-TTS fine-tunes (e.g. Japanese) have
-        # needed. Patched at the utils_infer module level since that's
-        # where infer_process() resolves the name at call time.
-        import f5_tts.infer.utils_infer as _f5_utils_infer
-        _f5_utils_infer.convert_char_to_pinyin = lambda text_list, polyphone=True: text_list
+        # needed.
+        #
+        # Patched in BOTH places it could be referenced from: the source
+        # module (f5_tts.model.utils, in case infer_process re-imports it
+        # fresh on every call) AND the consumer module (f5_tts.infer.utils_infer,
+        # in case it kept a module-level reference bound at f5-tts's own
+        # import time, which a source-only patch wouldn't reach). A
+        # startup self-check logs whether this actually took — check
+        # Modal's Logs tab for "convert_char_to_pinyin patch check" if
+        # output is still garbled after this deploy.
+        def _identity_no_pinyin(text_list, polyphone=True):
+            return text_list
 
+        import f5_tts.model.utils as _f5_model_utils
+        import f5_tts.infer.utils_infer as _f5_utils_infer
+        _f5_model_utils.convert_char_to_pinyin = _identity_no_pinyin
+        _f5_utils_infer.convert_char_to_pinyin = _identity_no_pinyin
+
+        _test_in = ["देवनागरी टेस्ट"]
+        _test_out = _f5_utils_infer.convert_char_to_pinyin(_test_in)
+        print(f"[convert_char_to_pinyin patch check] patched={_test_out == _test_in} in={_test_in} out={_test_out}")
+
+        ckpt_path = str(cached_path(HINDI_CKPT))
+        vocab_path = str(cached_path(HINDI_VOCAB))
         self.model = f5_load_model(
             DiT,
             HINDI_MODEL_CFG,
