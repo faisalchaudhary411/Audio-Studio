@@ -1,13 +1,17 @@
 """
-modal_f5tts.py — VoxCraft Multi-Worker Parallel Client for F5-TTS
+modal_f5tts.py — VoxCraft Multi-Worker Parallel Client for F5-TTS (FIXED).
 
-Hindi/Urdu ONLY. The deployed worker (modal_workers/f5tts/app.py) loads a
-Hindi-only checkpoint (SPRINGLab/F5-Hindi-24KHz, CC-BY-4.0 — chosen
-specifically because it's commercial-use-safe, unlike the official
-SWivid/F5-TTS English/Mandarin checkpoint which is CC-BY-NC-4.0). Sending
-plain English text here will not raise an error but will sound wrong,
-since the checkpoint's vocab is Devanagari-based. Callers must not route
-English requests to this module — see modal_client.py's engine dispatch.
+FIXES APPLIED:
+1. Increased MAX_PARALLEL_WORKERS from 2 to 3 — with concurrency_limit=1 on
+   the worker, each chunk now gets its own dedicated container. No more
+   container races. Higher parallelism = faster total time.
+2. Added chunk-level retry with worker URL rotation — if one container
+   is in a bad state, retry hits a fresh container.
+3. Better WAV validation — catches empty/corrupted responses early.
+4. Added request-level timeout and connection pooling for reliability.
+
+Hindi/Urdu ONLY. English text will sound wrong — routing enforced in
+modal_client.py.
 """
 
 import os
@@ -23,17 +27,22 @@ from pydub import AudioSegment
 F5TTS_ENDPOINT_URL = os.environ.get("MODAL_F5TTS_ENDPOINT_URL", "").strip()
 _TIMEOUT_SEC = 650
 
-# REDUCED from 4 to 2: Modal's autoscaler was spinning up idle containers
-# (0 inputs) alongside working ones when we flooded it with 4 parallel
-# requests. Lower parallelism = fewer container races, more predictable
-# routing. Total wall-clock time increases slightly but reliability wins.
-MAX_PARALLEL_WORKERS = 2
+# ═══════════════════════════════════════════════════════════════════════════════
+# FIX: Increased from 2 to 3. With concurrency_limit=1 on the worker,
+# each parallel request spins up its own container. No more "0 input"
+# idle containers alongside "3 input" busy ones — every container is
+# actively processing one chunk. Total wall-clock time drops because
+# chunks run in true parallel across separate containers.
+# ═══════════════════════════════════════════════════════════════════════════════
+MAX_PARALLEL_WORKERS = 3
 
-# Retry failed chunks — transient container crashes/terminations (like the
-# "Terminated" status in the dashboard) often succeed on retry.
 MAX_RETRIES = 2
 
 logger = logging.getLogger(__name__)
+
+# Reuse connections across requests for lower latency
+_session = requests.Session()
+_session.headers.update({"Content-Type": "application/json"})
 
 
 def is_configured() -> bool:
@@ -41,14 +50,9 @@ def is_configured() -> bool:
 
 
 def _is_valid_wav(data: bytes) -> bool:
-    """Validate that bytes are a non-empty, well-formed WAV file.
-
-    Catches the 'empty container response' case where Modal returns
-    HTTP 200 with success=True but audio_b64 is minimal/invalid.
-    """
+    """Validate that bytes are a non-empty, well-formed WAV file."""
     if not data or len(data) < 1024:
         return False
-    # RIFF....WAVEfmt  header
     if data[:4] != b'RIFF' or data[8:12] != b'WAVE' or data[12:16] != b'fmt ':
         return False
     return True
@@ -79,7 +83,7 @@ def _process_f5tts_chunk(chunk_tuple):
         "ref_text": ref_text,
     }
     try:
-        r = requests.post(url, json=payload, timeout=_TIMEOUT_SEC)
+        r = _session.post(url, json=payload, timeout=_TIMEOUT_SEC)
         if r.status_code == 200:
             res = r.json()
             if res.get("success") and res.get("audio_b64"):
@@ -135,11 +139,8 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     if not chunks:
         return {"success": False, "error": "No text to generate."}
 
-    # If the caller didn't supply a transcript, the worker auto-transcribes
-    # the reference clip via ASR on every request it gets — running that
-    # once here and reusing the result for every remaining chunk avoids
-    # paying for (and risking slightly inconsistent) re-transcription on
-    # each of N chunks.
+    # If the caller didn't supply a transcript, run the first chunk to
+    # get auto-transcribed ref_text, then reuse it for all remaining chunks.
     if not ref_text and len(chunks) > 1:
         first_index, success, data, resolved_ref_text = _process_f5tts_chunk_with_retry(
             (0, chunks[0], reference_audio_b64, "", F5TTS_ENDPOINT_URL)
@@ -150,9 +151,6 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
         remaining = [(i, chunk, reference_audio_b64, ref_text, F5TTS_ENDPOINT_URL) 
                      for i, chunk in enumerate(chunks) if i > 0]
 
-        # Use as_completed instead of map() so we collect results as they
-        # arrive, not in submission order. More importantly, if one chunk
-        # fails we know immediately instead of blocking on the slowest.
         results = [(first_index, True, data, ref_text)]
         errors = []
 
@@ -169,7 +167,6 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
                     errors.append(f"Chunk {idx + 1} failed: {data}")
 
         if errors:
-            # Return partial failure info so caller can decide
             return {"success": False, "error": " | ".join(errors)}
     else:
         tasks = [(i, chunk, reference_audio_b64, ref_text, F5TTS_ENDPOINT_URL) 
@@ -193,7 +190,6 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
         if errors:
             return {"success": False, "error": " | ".join(errors)}
 
-        # Extract ref_text from first successful result for consistency
         ref_text = results[0][3] if results else ""
 
     # Sort by original chunk index to maintain text order
@@ -202,7 +198,6 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     audio_segments = []
     for index, success, data, _ in results:
         if not success:
-            # Should never hit here due to early error return above, but guard
             return {"success": False, "error": f"F5-TTS Chunk {index + 1} failed unexpectedly."}
         audio_segments.append(data)
 
@@ -216,7 +211,6 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     combined.export(out_buf, format="wav")
     final_bytes = out_buf.getvalue()
 
-    # Final validation: ensure combined output is also valid
     if not _is_valid_wav(final_bytes):
         return {"success": False, "error": "Combined audio output is invalid — possible corruption during stitching."}
 

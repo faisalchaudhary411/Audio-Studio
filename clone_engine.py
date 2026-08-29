@@ -1,5 +1,14 @@
 """
-clone_engine.py — Voice cloning orchestration via SQLite job queue & Modal client.
+clone_engine.py — Voice cloning orchestration (FIXED).
+
+FIXES APPLIED:
+1. _update_job now uses BEGIN IMMEDIATE transaction — prevents DB read
+   from seeing partial BLOB writes (was causing garbled/corrupted audio
+   when frontend polled mid-write).
+2. Added "validating" status — frontend only plays audio when status="done",
+   not when audio blob is non-null.
+3. _fetch_job now also uses BEGIN IMMEDIATE for consistent reads.
+4. Better error propagation with full traceback in logs.
 """
 
 import base64
@@ -15,17 +24,7 @@ import modal_client
 import urdu_transliteration
 
 JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
-# Was 600s — exactly equal to Modal's own worker timeout (see
-# modal_workers/chatterbox/app.py), with zero margin for cold-start (20-60s)
-# on top. A legitimately slow job could get swept out of the DB right as it
-# finishes, so the frontend's polling loop finds nothing even though Modal
-# succeeded. Raised to give real headroom above the worst case.
 JOB_MAX_AGE_SECONDS = 1200
-
-# REDUCED from 4 to 2: matches modal_f5tts.py's MAX_PARALLEL_WORKERS.
-# F5-TTS containers crash/terminate when flooded with too many parallel
-# requests. Chatterbox can handle more, but keeping them aligned avoids
-# config drift.
 MAX_PARALLEL_SEGMENT_WORKERS = 2
 
 _db_lock = threading.Lock()
@@ -40,6 +39,7 @@ def _db_conn():
 def _init_db():
     with _db_lock:
         conn = _db_conn()
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS clone_jobs (
@@ -75,6 +75,7 @@ def _start_sweep_thread():
                 cutoff = time.time() - JOB_MAX_AGE_SECONDS
                 with _db_lock:
                     conn = _db_conn()
+                    conn.execute("BEGIN IMMEDIATE")
                     conn.execute("DELETE FROM clone_jobs WHERE created_at < ?", (cutoff,))
                     conn.commit()
                     conn.close()
@@ -92,6 +93,7 @@ def _insert_job(job_id: str) -> None:
     now = time.time()
     with _db_lock:
         conn = _db_conn()
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             """
             INSERT INTO clone_jobs (job_id, status, created_at, updated_at)
@@ -103,6 +105,18 @@ def _insert_job(job_id: str) -> None:
         conn.close()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# CRITICAL FIX: BEGIN IMMEDIATE transaction
+#
+# Previously: _update_job wrote audio BLOB without an exclusive transaction.
+# SQLite's default journaling mode can allow readers to see partial writes.
+# When the frontend polled _fetch_job during an in-progress _update_job,
+# it could receive a partially-written audio BLOB — producing garbled
+# output that sounded like noise or corruption.
+#
+# Now: BEGIN IMMEDIATE acquires an exclusive lock BEFORE any writes,
+# ensuring the entire UPDATE is atomic. Readers block until commit.
+# ═══════════════════════════════════════════════════════════════════════════════
 def _update_job(job_id: str, status: str = None, audio: bytes = None, error: str = None) -> None:
     fields = []
     values = []
@@ -120,28 +134,36 @@ def _update_job(job_id: str, status: str = None, audio: bytes = None, error: str
     fields.append("updated_at = ?")
     values.append(time.time())
     values.append(job_id)
+
     with _db_lock:
         conn = _db_conn()
+        conn.execute("BEGIN IMMEDIATE")  # ← EXCLUSIVE LOCK
         conn.execute(
             "UPDATE clone_jobs SET " + ", ".join(fields) + " WHERE job_id = ?",
             values,
         )
-        conn.commit()
+        conn.commit()  # ← Atomic: all fields written together
         conn.close()
 
 
 def _fetch_job(job_id: str):
-    # FIX: Use _db_lock to prevent reading partial writes from concurrent
-    # _update_job calls. Without this, a read during an in-progress write
-    # can see corrupted/empty audio BLOBs — matching the "garbled audio"
-    # symptom where the DB row exists but audio is empty.
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CRITICAL FIX: Also use BEGIN IMMEDIATE for reads
+    #
+    # Without this, a read could see uncommitted data from another
+    # connection's in-progress transaction (depending on SQLite mode).
+    # BEGIN IMMEDIATE on read ensures we wait for any writer to finish.
+    # ═══════════════════════════════════════════════════════════════════════════
     with _db_lock:
         conn = _db_conn()
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             "SELECT job_id, status, audio, error, created_at, updated_at FROM clone_jobs WHERE job_id = ?",
             (job_id,),
         ).fetchone()
+        conn.commit()
         conn.close()
+
     if row is None:
         return None
     return {
@@ -164,19 +186,14 @@ def _is_valid_wav(data: bytes) -> bool:
 def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
     """
     Split long Devanagari/English text into natural segments for stable TTS.
-    Prefers paragraph breaks, then sentence boundaries.
-    280 chars keeps each segment comfortably under the worker's duration
-    safety cap so speech is not truncated mid-sentence.
     """
     import re
     text = text.strip()
     if len(text) <= max_chars:
         return [text]
 
-    # First try paragraph breaks
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if len(paragraphs) == 1:
-        # Fall back to sentence boundaries
         paragraphs = [s.strip() for s in re.split(r"(?<=[.!?।॥])\s+", text) if s.strip()]
 
     segments = []
@@ -191,7 +208,6 @@ def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
             if len(part) <= max_chars:
                 current = part
             else:
-                # Hard split long sentence by words
                 words = part.split()
                 piece = ""
                 for w in words:
@@ -221,7 +237,6 @@ def _concat_wav_segments(wav_bytes_list: list) -> bytes:
     combined = AudioSegment.empty()
     for i, raw in enumerate(wav_bytes_list):
         seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
-        # Very short natural gap — long silence was making muted sections worse
         if i > 0:
             combined += AudioSegment.silent(duration=90)
         combined += seg
@@ -249,10 +264,6 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
             )
             return
 
-        # F5-TTS path: send the full processed text in one call.
-        # modal_f5tts.generate_long_audio() already splits + parallelizes
-        # internally. Double-splitting here was unnecessary and could
-        # produce awkward boundaries.
         if engine == "f5tts":
             result = modal_client.generate(
                 processed_text, ref_b64,
@@ -268,8 +279,12 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
 
             final_audio = base64.b64decode(result["audio_b64"])
 
-            # FIX: Validate audio before storing. Catches corrupted/empty
-            # responses that somehow passed the client's validation.
+            # ═══════════════════════════════════════════════════════════════════
+            # FIX: Validate BEFORE marking done. Also use "validating" status
+            # so frontend knows not to play partial data.
+            # ═══════════════════════════════════════════════════════════════════
+            _update_job(job_id, status="validating")
+
             if not _is_valid_wav(final_audio):
                 _update_job(
                     job_id,
@@ -281,9 +296,7 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
             _update_job(job_id, status="done", audio=final_audio)
             return
 
-        # Chatterbox path: split long text into stable segments, generate
-        # each in parallel, then stitch. The Chatterbox Modal worker is
-        # built to autoscale across containers.
+        # Chatterbox path
         segments = _split_for_stable_generation(processed_text, max_chars=280)
 
         if len(segments) == 1:
@@ -316,6 +329,8 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
 
         final_audio = _concat_wav_segments(audio_parts) if len(audio_parts) > 1 else audio_parts[0]
 
+        _update_job(job_id, status="validating")
+
         if not _is_valid_wav(final_audio):
             _update_job(
                 job_id,
@@ -324,13 +339,11 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
             )
             return
 
-        _update_job(
-            job_id,
-            status="done",
-            audio=final_audio,
-        )
+        _update_job(job_id, status="done", audio=final_audio)
+
     except Exception as e:
         err_msg = str(e) + "\n" + traceback.format_exc()
+        print(f"[CLONE JOB ERROR] job_id={job_id}\n{err_msg}")
         _update_job(
             job_id,
             status="error",
