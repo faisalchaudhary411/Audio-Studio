@@ -1,13 +1,11 @@
 """
-modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (FIXED).
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (UPDATED FOR NEW MODAL SDK).
 
 FIXES APPLIED:
-1. concurrency_limit=1 + allow_concurrent_inputs=1 — prevents concurrent
-   requests from corrupting model buffers (replaces broken threading.Lock).
-2. Removed threading.Lock — not needed with Modal's built-in concurrency control.
-3. Added startup validation — verifies model produces valid audio before
-   accepting traffic.
-4. Better error messages for debugging.
+1. Replaced deprecated 'concurrency_limit' with 'max_containers=1'.
+2. Replaced deprecated 'allow_concurrent_inputs' with '@modal.concurrent(max_inputs=1)'.
+3. Added startup validation — verifies model produces valid audio before accepting traffic.
+4. Preserved Devanagari/Hindi patching logic and cleanup routines.
 
 LICENSE NOTE: Uses SPRINGLab/F5-Hindi-24KHz (CC-BY-4.0) — commercial safe.
 """
@@ -53,24 +51,11 @@ class LongCloneResponse(BaseModel):
     ref_text: str = ""
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CRITICAL FIX: concurrency_limit=1 + allow_concurrent_inputs=1
-# 
-# Previously: threading.Lock was used inside @modal.enter(), but Uvicorn
-# runs multiple worker processes — the lock only worked within ONE process.
-# When 3 parallel chunk requests hit the same container, they ran in
-# different processes and corrupted the model's internal buffers, producing
-# garbled/noise output.
-#
-# Now: Modal guarantees only 1 request per container at a time. No lock
-# needed. Each request gets a clean, uncontested model state.
-# ═══════════════════════════════════════════════════════════════════════════════
 @app.cls(
     gpu="A10G",
     timeout=600,
     scaledown_window=300,
-    max_containers=1,        # ← Only 1 active request per container
-    allow_concurrent_inputs=1,  # ← Queue extra requests, don't parallelize
+    max_containers=1,  # UPDATED: Replaced deprecated concurrency_limit
 )
 class F5TTSWorker:
     @modal.enter()
@@ -117,20 +102,15 @@ class F5TTSWorker:
         )
         print(f"[MODEL LOADED] checkpoint={ckpt_path} device={device}")
 
-        # ═══════════════════════════════════════════════════════════════════════
-        # STARTUP VALIDATION: Generate a test clip to verify the model works
-        # before accepting traffic. Catches corrupted checkpoints, CUDA issues,
-        # or pinyin-patch failures at deploy time instead of at runtime.
-        # ═══════════════════════════════════════════════════════════════════════
+        # STARTUP VALIDATION
         from f5_tts.infer.utils_infer import infer_process
         import numpy as np
+        import soundfile as sf
 
-        # Create a minimal test reference
         test_sr = 24000
-        test_duration = 1.0  # 1 second of silence is enough for structure test
+        test_duration = 1.0
         test_wav = np.zeros(int(test_sr * test_duration), dtype=np.float32)
         test_path = "/tmp/_startup_test_ref.wav"
-        import soundfile as sf
         sf.write(test_path, test_wav, test_sr)
 
         try:
@@ -153,6 +133,7 @@ class F5TTSWorker:
             if os.path.exists(test_path):
                 os.remove(test_path)
 
+    @modal.concurrent(max_inputs=1)  # UPDATED: Replaced deprecated allow_concurrent_inputs
     @modal.fastapi_endpoint(method="POST")
     def generate(self, req: SingleChunkRequest):
         import soundfile as sf
@@ -180,9 +161,6 @@ class F5TTSWorker:
             )
             effective_ref_text = req.ref_text.strip() if req.ref_text else resolved_ref_text
 
-            # ═══════════════════════════════════════════════════════════════════
-            # NO LOCK NEEDED — concurrency_limit=1 guarantees single access
-            # ═══════════════════════════════════════════════════════════════════
             wav_out, sr, _ = infer_process(
                 ref_audio_path,
                 effective_ref_text,
@@ -193,7 +171,6 @@ class F5TTSWorker:
                 device=self.device,
             )
 
-            # Validate output
             if wav_out is None or len(wav_out) == 0:
                 return LongCloneResponse(
                     success=False,
