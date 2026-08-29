@@ -1,13 +1,10 @@
 """
-modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (UPDATED FOR NEW MODAL SDK).
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker (UPDATED FOR LATEST MODAL SDK).
 
 FIXES APPLIED:
 1. Replaced deprecated 'concurrency_limit' with 'max_containers=1'.
-2. Replaced deprecated 'allow_concurrent_inputs' with '@modal.concurrent(max_inputs=1)'.
-3. Added startup validation — verifies model produces valid audio before accepting traffic.
-4. Preserved Devanagari/Hindi patching logic and cleanup routines.
-
-LICENSE NOTE: Uses SPRINGLab/F5-Hindi-24KHz (CC-BY-4.0) — commercial safe.
+2. Applied '@modal.concurrent(max_inputs=1)' at CLASS LEVEL (per new Modal syntax).
+3. Preserved Devanagari/Hindi patching logic and cleanup routines.
 """
 import base64
 import io
@@ -55,8 +52,9 @@ class LongCloneResponse(BaseModel):
     gpu="A10G",
     timeout=600,
     scaledown_window=300,
-    max_containers=1,  # UPDATED: Replaced deprecated concurrency_limit
+    max_containers=1,
 )
+@modal.concurrent(max_inputs=1)  # FIX: Applied at Class Level as required by Modal
 class F5TTSWorker:
     @modal.enter()
     def load_model(self):
@@ -133,7 +131,6 @@ class F5TTSWorker:
             if os.path.exists(test_path):
                 os.remove(test_path)
 
-    @modal.concurrent(max_inputs=1)  # UPDATED: Replaced deprecated allow_concurrent_inputs
     @modal.fastapi_endpoint(method="POST")
     def generate(self, req: SingleChunkRequest):
         import soundfile as sf
