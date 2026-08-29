@@ -97,23 +97,35 @@ class ChatterboxWorker:
         )
 
     def _cap_runaway_generation(self, wav, chunk_text: str, sr: int):
-        min_duration_sec = 1.6
+        """
+        Prevent truly runaway generations (model loops / hallucinated silence)
+        while allowing natural speech length.
+
+        Old formula used chars/8.0 (~480 chars/min) which is unrealistically fast
+        and caused legitimate speech to be truncated → muted gaps in the final
+        stitched audio. Natural narrative pace is ~600-750 chars/min.
+        """
+        min_duration_sec = 1.8
         chars = max(len(chunk_text.strip()), 1)
-        expected_sec = chars / 8.0
-        max_duration_sec = min(max(min_duration_sec, expected_sec * 2.0), 40.0)
+        # ~12 chars/sec ≈ 720 chars/min — realistic for clear narration
+        expected_sec = chars / 12.0
+        # Allow generous headroom (2.8×) and raise the hard ceiling so 350-char
+        # segments are no longer cut mid-sentence.
+        max_duration_sec = min(max(min_duration_sec, expected_sec * 2.8), 55.0)
         max_samples = int(max_duration_sec * sr)
         if wav.shape[-1] > max_samples:
             wav = wav[..., :max_samples]
         return wav
 
-    def _trim_trailing_silence(self, wav, sr: int, threshold: float = 0.01, max_trim_sec: float = 1.0):
+    def _trim_trailing_silence(self, wav, sr: int, threshold: float = 0.012, max_trim_sec: float = 0.85):
+        """Trim only true trailing silence; keep a little natural breathing room."""
         max_trim_samples = int(sr * max_trim_sec)
         abs_wav = wav.abs()
         nonsilent = (abs_wav > threshold).nonzero()
         if nonsilent.numel() == 0:
             return wav
         last_sound_idx = int(nonsilent[..., -1].max().item())
-        pad = int(sr * 0.15)
+        pad = int(sr * 0.18)
         natural_cutoff = min(wav.shape[-1], last_sound_idx + pad)
         min_allowed_cutoff = max(natural_cutoff, wav.shape[-1] - max_trim_samples)
         return wav[..., :min_allowed_cutoff]
