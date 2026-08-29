@@ -23,6 +23,7 @@ import base64
 import io
 import os
 import tempfile
+import threading
 import modal
 from pydantic import BaseModel
 
@@ -91,8 +92,6 @@ class F5TTSWorker:
         # on, producing exactly the "noise, no actual voice" failure. The
         # SPRINGLab/F5-Hindi-24KHz author confirmed this checkpoint was
         # trained WITHOUT this conversion — so inference must skip it too.
-        # Same fix other non-Chinese F5-TTS fine-tunes (e.g. Japanese) have
-        # needed.
         #
         # Patched in BOTH places it could be referenced from: the source
         # module (f5_tts.model.utils, in case infer_process re-imports it
@@ -144,9 +143,18 @@ class F5TTSWorker:
             device=device,
         )
 
+        # CRITICAL FIX: Add a threading lock around inference.
+        # Modal's @modal.fastapi_endpoint creates an ASGI app that CAN
+        # handle multiple requests concurrently. F5-TTS's infer_process
+        # is NOT thread-safe — concurrent calls corrupt the model's
+        # internal buffers, producing the garbled/noise output seen when
+        # 3 chunks hit the same container simultaneously.
+        self._infer_lock = threading.Lock()
+
     @modal.fastapi_endpoint(method="POST")
     def generate(self, req: SingleChunkRequest):
         import soundfile as sf
+        import numpy as np
         from f5_tts.infer.utils_infer import preprocess_ref_audio_text, infer_process
 
         chunk_text = (req.chunk_text or "").strip()
@@ -166,26 +174,54 @@ class F5TTSWorker:
             # if ref_text is empty, runs local ASR (faster-whisper) to
             # transcribe it — same behavior the removed F5TTS.infer()
             # convenience method delegated to internally.
-            ref_audio_path, ref_text = preprocess_ref_audio_text(tmp_ref_path, req.ref_text or "")
+            ref_audio_path, resolved_ref_text = preprocess_ref_audio_text(tmp_ref_path, req.ref_text or "")
 
-            wav_out, sr, _ = infer_process(
-                ref_audio_path,
-                ref_text,
-                chunk_text,
-                self.model,
-                self.vocoder,
-                mel_spec_type="vocos",
-                device=self.device,
-            )
+            # Use caller-provided ref_text if available, else the resolved one
+            effective_ref_text = req.ref_text.strip() if req.ref_text else resolved_ref_text
+
+            # CRITICAL FIX: Lock around infer_process to prevent concurrent
+            # access corruption. Also validate output before returning.
+            with self._infer_lock:
+                wav_out, sr, _ = infer_process(
+                    ref_audio_path,
+                    effective_ref_text,
+                    chunk_text,
+                    self.model,
+                    self.vocoder,
+                    mel_spec_type="vocos",
+                    device=self.device,
+                )
+
+            # Validate output: must be non-empty, finite values, reasonable length
+            if wav_out is None or len(wav_out) == 0:
+                return LongCloneResponse(success=False, error="Model produced empty audio.").model_dump()
+
+            if not np.isfinite(wav_out).all():
+                return LongCloneResponse(success=False, error="Model produced invalid audio (NaN/Inf values).").model_dump()
+
+            # Minimum length check: < 0.5s at 24kHz = 12000 samples
+            if len(wav_out) < 12000:
+                return LongCloneResponse(
+                    success=False, 
+                    error=f"Model produced audio too short ({len(wav_out)} samples) — likely a generation failure."
+                ).model_dump()
 
             buf = io.BytesIO()
             sf.write(buf, wav_out, sr, format="WAV")
             audio_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
-            return LongCloneResponse(success=True, audio_b64=audio_b64, ref_text=ref_text).model_dump()
+            return LongCloneResponse(
+                success=True, 
+                audio_b64=audio_b64, 
+                ref_text=effective_ref_text
+            ).model_dump()
 
         except Exception as exc:
-            return LongCloneResponse(success=False, error=str(exc)).model_dump()
+            import traceback
+            return LongCloneResponse(
+                success=False, 
+                error=str(exc),
+            ).model_dump()
         finally:
             if tmp_ref_path and os.path.exists(tmp_ref_path):
                 try:
