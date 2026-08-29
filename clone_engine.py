@@ -22,12 +22,11 @@ JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
 # succeeded. Raised to give real headroom above the worst case.
 JOB_MAX_AGE_SECONDS = 1200
 
-# Caps how many Chatterbox segments generate concurrently on Modal. Higher
-# = faster wall-clock time for multi-segment scripts, at the cost of more
-# GPU containers spinning up at once (same total compute, more $ paid
-# concurrently rather than sequentially). 4 matches modal_f5tts.py's own
-# MAX_PARALLEL_WORKERS for consistency.
-MAX_PARALLEL_SEGMENT_WORKERS = 4
+# REDUCED from 4 to 2: matches modal_f5tts.py's MAX_PARALLEL_WORKERS.
+# F5-TTS containers crash/terminate when flooded with too many parallel
+# requests. Chatterbox can handle more, but keeping them aligned avoids
+# config drift.
+MAX_PARALLEL_SEGMENT_WORKERS = 2
 
 _db_lock = threading.Lock()
 
@@ -132,12 +131,17 @@ def _update_job(job_id: str, status: str = None, audio: bytes = None, error: str
 
 
 def _fetch_job(job_id: str):
-    conn = _db_conn()
-    row = conn.execute(
-        "SELECT job_id, status, audio, error, created_at, updated_at FROM clone_jobs WHERE job_id = ?",
-        (job_id,),
-    ).fetchone()
-    conn.close()
+    # FIX: Use _db_lock to prevent reading partial writes from concurrent
+    # _update_job calls. Without this, a read during an in-progress write
+    # can see corrupted/empty audio BLOBs — matching the "garbled audio"
+    # symptom where the DB row exists but audio is empty.
+    with _db_lock:
+        conn = _db_conn()
+        row = conn.execute(
+            "SELECT job_id, status, audio, error, created_at, updated_at FROM clone_jobs WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        conn.close()
     if row is None:
         return None
     return {
@@ -148,6 +152,13 @@ def _fetch_job(job_id: str):
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def _is_valid_wav(data: bytes) -> bool:
+    """Validate WAV header and minimum size."""
+    if not data or len(data) < 1024:
+        return False
+    return data[:4] == b'RIFF' and data[8:12] == b'WAVE'
 
 
 def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
@@ -166,7 +177,7 @@ def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if len(paragraphs) == 1:
         # Fall back to sentence boundaries
-        paragraphs = [s.strip() for s in re.split(r"(?<=[.!?।؟])\s+", text) if s.strip()]
+        paragraphs = [s.strip() for s in re.split(r"(?<=[.!?।॥])\s+", text) if s.strip()]
 
     segments = []
     current = ""
@@ -254,7 +265,19 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
                     error=result.get("error", "F5-TTS generation failed."),
                 )
                 return
+
             final_audio = base64.b64decode(result["audio_b64"])
+
+            # FIX: Validate audio before storing. Catches corrupted/empty
+            # responses that somehow passed the client's validation.
+            if not _is_valid_wav(final_audio):
+                _update_job(
+                    job_id,
+                    status="error",
+                    error=f"F5-TTS returned invalid audio ({len(final_audio)} bytes). Possible container corruption.",
+                )
+                return
+
             _update_job(job_id, status="done", audio=final_audio)
             return
 
@@ -281,9 +304,25 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
                     error=result.get("error", f"Segment {i+1}/{len(segments)} failed."),
                 )
                 return
-            audio_parts.append(base64.b64decode(result["audio_b64"]))
+            part = base64.b64decode(result["audio_b64"])
+            if not _is_valid_wav(part):
+                _update_job(
+                    job_id,
+                    status="error",
+                    error=f"Segment {i+1} returned invalid audio.",
+                )
+                return
+            audio_parts.append(part)
 
         final_audio = _concat_wav_segments(audio_parts) if len(audio_parts) > 1 else audio_parts[0]
+
+        if not _is_valid_wav(final_audio):
+            _update_job(
+                job_id,
+                status="error",
+                error="Stitched audio is invalid — possible corruption during concatenation.",
+            )
+            return
 
         _update_job(
             job_id,
