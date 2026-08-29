@@ -2543,6 +2543,8 @@ def tool_page(slug):
             if any(k in haystack for k in keywords):
                 related_posts.append(post)
         related_posts = related_posts[:3]
+        for _rp in related_posts:
+            _rp["_slug"] = _blog_slug(_rp)
 
     # A couple of the content strings above reference other tool/page URLs
     # via {placeholder} tokens — fill them in here rather than hardcoding
