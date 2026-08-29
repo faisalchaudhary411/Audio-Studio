@@ -85,6 +85,21 @@ class F5TTSWorker:
         # SWivid/F5-TTS app.py.
         ckpt_path = str(cached_path(HINDI_CKPT))
         vocab_path = str(cached_path(HINDI_VOCAB))
+
+        # CRITICAL: F5-TTS's convert_char_to_pinyin() runs by default inside
+        # infer_process() and inserts a space between every character of
+        # any text whose UTF-8 byte pattern looks "East Asian" (3 bytes/char)
+        # — which Devanagari matches too, not just CJK. That shreds
+        # Devanagari words into isolated glyphs the model was never trained
+        # on, producing exactly the "noise, no actual voice" failure. The
+        # SPRINGLab/F5-Hindi-24KHz author confirmed this checkpoint was
+        # trained WITHOUT this conversion — so inference must skip it too.
+        # Same fix other non-Chinese F5-TTS fine-tunes (e.g. Japanese) have
+        # needed. Patched at the utils_infer module level since that's
+        # where infer_process() resolves the name at call time.
+        import f5_tts.infer.utils_infer as _f5_utils_infer
+        _f5_utils_infer.convert_char_to_pinyin = lambda text_list, polyphone=True: text_list
+
         self.model = f5_load_model(
             DiT,
             HINDI_MODEL_CFG,
