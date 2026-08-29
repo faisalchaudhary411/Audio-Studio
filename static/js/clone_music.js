@@ -3,22 +3,36 @@
 // and Music Generation tabs. Both submit a job and poll a status endpoint,
 // since GPU generation takes 20-90+ seconds and the backend deliberately
 // doesn't hold the HTTP request open that whole time (see clone_engine.py /
-// music_engine.py). Polling stops on done/error or after ~3 minutes.
+// music_engine.py). Polling stops on done/error or after ~10 minutes
+// (raised from 3 min so long Urdu/Hindi scripts + Modal cold-start don't
+// silently time out before the audio is ready).
 (function () {
-  const POLL_INTERVAL_MS = 3000;
-  const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+  const POLL_INTERVAL_MS = 2500;
+  const POLL_TIMEOUT_MS = 10 * 60 * 1000;  // 10 minutes — long scripts need this
 
   async function pollJob(statusUrl, onTick) {
     const deadline = Date.now() + POLL_TIMEOUT_MS;
+    let lastStatus = '';
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-      const res = await fetch(statusUrl);
-      const data = await res.json();
-      if (!res.ok) return { status: 'error', error: data.error || 'Something went wrong.' };
-      if (data.status === 'done' || data.status === 'error') return data;
-      if (onTick) onTick(data.status);
+      try {
+        const res = await fetch(statusUrl);
+        const data = await res.json();
+        if (!res.ok) return { status: 'error', error: data.error || 'Something went wrong.' };
+        if (data.status === 'done' || data.status === 'error') return data;
+        if (onTick) {
+          lastStatus = data.status;
+          onTick(data.status, data);
+        }
+      } catch (netErr) {
+        // Transient network blip — keep polling instead of failing the whole job
+        if (onTick) onTick('working', {});
+      }
     }
-    return { status: 'error', error: 'Timed out waiting for generation.' };
+    return {
+      status: 'error',
+      error: 'Timed out waiting for generation (took longer than 10 minutes). The job may still finish on the server — try generating again with a shorter script or refresh the page.'
+    };
   }
 
   // Display-only script detection — mirrors the logic in
@@ -304,9 +318,14 @@
         }
 
         const result = await pollJob(`/api/clone/status/${genData.job_id}`, (status) => {
-          cloneStatus.textContent = status === 'generating'
-            ? `Generating on GPU (${detectScriptShort(cloneText.value)})… this can take up to a minute.`
-            : 'Working…';
+          const lang = detectScriptShort(cloneText.value);
+          if (status === 'generating') {
+            cloneStatus.textContent = `Generating on GPU (${lang})… long scripts can take 1–4 minutes. Keep this tab open.`;
+          } else if (status === 'queued') {
+            cloneStatus.textContent = 'Queued… waiting for a free GPU worker.';
+          } else {
+            cloneStatus.textContent = 'Still working… please wait (do not close this tab).';
+          }
         });
         if (result.status === 'done') {
           cloneStatus.textContent = 'Done.';
@@ -366,7 +385,9 @@
         }
 
         const result = await pollJob(`/api/music/status/${genData.job_id}`, (status) => {
-          musicStatus.textContent = status === 'generating' ? 'Generating… this can take up to a minute.' : 'Working…';
+          musicStatus.textContent = status === 'generating'
+            ? 'Generating music… this can take up to a couple of minutes. Keep this tab open.'
+            : 'Still working… please wait.';
         });
         if (result.status === 'done') {
           musicStatus.textContent = 'Done.';
