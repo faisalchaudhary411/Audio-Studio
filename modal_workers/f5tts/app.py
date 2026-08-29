@@ -1,3 +1,24 @@
+"""
+modal_workers/f5tts/app.py — VoxCraft F5-TTS Modal GPU worker.
+
+IMPORTANT LICENSE NOTE: this worker intentionally does NOT load the
+official SWivid/F5-TTS English/Mandarin checkpoint — that checkpoint is
+CC-BY-NC-4.0 (non-commercial) due to its Emilia training data, which
+VoxCraft (a paid product) cannot legally use. Instead this loads the
+SPRINGLab/F5-Hindi-24KHz checkpoint, which is CC-BY-4.0 (commercial use
+permitted, attribution required) — see
+https://huggingface.co/SPRINGLab/F5-Hindi-24KHz
+
+Consequence: this worker is Hindi/Urdu-only. English text sent here will
+produce garbled output since the checkpoint's vocab is Devanagari-based —
+routing must never send plain English requests to this endpoint (enforced
+in modal_client.py, not here).
+
+Urdu text should arrive already transliterated to Devanagari (same
+urdu_transliteration.py conversion clone_engine.py already applies for
+the Chatterbox path) — Urdu and Hindi are the same spoken language, only
+the script differs.
+"""
 import base64
 import io
 import os
@@ -21,6 +42,14 @@ image = (
 
 app = modal.App("voxcraft-f5tts-worker", image=image)
 
+# Verified against F5-TTS's own community-checkpoint registry
+# (SWivid/F5-TTS src/f5_tts/infer/SHARED.md, "Hindi" section) — do not
+# guess these numbers if swapping checkpoints later; a mismatched config
+# fails to load the state dict instead of just sounding wrong.
+HINDI_CKPT = "hf://SPRINGLab/F5-Hindi-24KHz/model_2500000.safetensors"
+HINDI_VOCAB = "hf://SPRINGLab/F5-Hindi-24KHz/vocab.txt"
+HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, conv_layers=4, pe_attn_head=1)
+
 class SingleChunkRequest(BaseModel):
     chunk_text: str
     reference_audio_b64: str
@@ -38,7 +67,13 @@ class F5TTSWorker:
         import torch
         from f5_tts.api import F5TTS
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = F5TTS(model="F5TTS_Base", device=device)
+        self.model = F5TTS(
+            model="F5TTS_v1_Base",  # ignored for architecture once ckpt_file/vocab_file/model_cfg are set below — kept only as a valid preset name the constructor expects
+            ckpt_file=HINDI_CKPT,
+            vocab_file=HINDI_VOCAB,
+            model_cfg=HINDI_MODEL_CFG,
+            device=device,
+        )
 
     @modal.fastapi_endpoint(method="POST")
     def generate(self, req: SingleChunkRequest):
