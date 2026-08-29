@@ -44,24 +44,25 @@ def _split_into_chunks(text: str, max_chars: int = 120) -> list:
 
 
 def _process_f5tts_chunk(chunk_tuple):
-    index, chunk_text, ref_b64, url = chunk_tuple
+    index, chunk_text, ref_b64, ref_text, url = chunk_tuple
     payload = {
         "chunk_text": chunk_text,
-        "reference_audio_b64": ref_b64
+        "reference_audio_b64": ref_b64,
+        "ref_text": ref_text,
     }
     try:
         r = requests.post(url, json=payload, timeout=_TIMEOUT_SEC)
         if r.status_code == 200:
             res = r.json()
             if res.get("success") and res.get("audio_b64"):
-                return (index, True, base64.b64decode(res["audio_b64"]))
-            return (index, False, res.get("error", "Empty chunk output"))
-        return (index, False, f"HTTP {r.status_code}")
+                return (index, True, base64.b64decode(res["audio_b64"]), res.get("ref_text", ref_text))
+            return (index, False, res.get("error", "Empty chunk output"), ref_text)
+        return (index, False, f"HTTP {r.status_code}", ref_text)
     except Exception as e:
-        return (index, False, str(e))
+        return (index, False, str(e), ref_text)
 
 
-def generate_long_audio(text: str, reference_audio_b64: str) -> dict:
+def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "") -> dict:
     if not F5TTS_ENDPOINT_URL:
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
@@ -72,15 +73,32 @@ def generate_long_audio(text: str, reference_audio_b64: str) -> dict:
     # (underestimated). Keeping chunks short (roughly one clause) keeps
     # each individual duration estimate close enough to stay reliable.
     chunks = _split_into_chunks(text, max_chars=120)
-    tasks = [(i, chunk, reference_audio_b64, F5TTS_ENDPOINT_URL) for i, chunk in enumerate(chunks)]
+    if not chunks:
+        return {"success": False, "error": "No text to generate."}
 
-    with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
-        results = list(executor.map(_process_f5tts_chunk, tasks))
+    # If the caller didn't supply a transcript, the worker auto-transcribes
+    # the reference clip via ASR on every request it gets — running that
+    # once here and reusing the result for every remaining chunk avoids
+    # paying for (and risking slightly inconsistent) re-transcription on
+    # each of N chunks.
+    if not ref_text and len(chunks) > 1:
+        first_index, success, data, resolved_ref_text = _process_f5tts_chunk((0, chunks[0], reference_audio_b64, "", F5TTS_ENDPOINT_URL))
+        if not success:
+            return {"success": False, "error": f"F5-TTS Chunk 1 failed: {data}"}
+        ref_text = resolved_ref_text
+        remaining = [(i, chunk, reference_audio_b64, ref_text, F5TTS_ENDPOINT_URL) for i, chunk in enumerate(chunks) if i > 0]
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
+            rest_results = list(executor.map(_process_f5tts_chunk, remaining))
+        results = [(first_index, success, data, ref_text)] + rest_results
+    else:
+        tasks = [(i, chunk, reference_audio_b64, ref_text, F5TTS_ENDPOINT_URL) for i, chunk in enumerate(chunks)]
+        with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
+            results = list(executor.map(_process_f5tts_chunk, tasks))
 
     results.sort(key=lambda x: x[0])
 
     audio_segments = []
-    for index, success, data in results:
+    for index, success, data, _ in results:
         if not success:
             return {"success": False, "error": f"F5-TTS Chunk {index+1} failed: {data}"}
         audio_segments.append(data)
