@@ -69,7 +69,7 @@ class LongCloneResponse(BaseModel):
     gpu="A10G",
     timeout=600,
     scaledown_window=300,
-    concurrency_limit=1,        # ← Only 1 active request per container
+    max_containers=1,        # ← Only 1 active request per container
     allow_concurrent_inputs=1,  # ← Queue extra requests, don't parallelize
 )
 class F5TTSWorker:
