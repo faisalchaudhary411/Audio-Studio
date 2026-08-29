@@ -216,7 +216,9 @@ def _concat_wav_segments(wav_bytes_list: list) -> bytes:
     return buf.getvalue()
 
 
-def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_lang: str = "en", engine: str = "chatterbox"):
+def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
+                   requested_lang: str = "en", engine: str = "chatterbox",
+                   ref_text: str = ""):
     _update_job(job_id, status="generating")
     try:
         with open(reference_audio_path, "rb") as f:
@@ -233,19 +235,33 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_
             )
             return
 
-        # Commercial: split long text into stable segments, generate each, then stitch
+        # F5-TTS path: send the full processed text in one call.
+        # modal_f5tts.generate_long_audio() already splits + parallelizes
+        # internally. Double-splitting here was unnecessary and could
+        # produce awkward boundaries.
+        if engine == "f5tts":
+            result = modal_client.generate(
+                processed_text, ref_b64,
+                language_id=language_id, engine=engine, ref_text=ref_text
+            )
+            if not result.get("success"):
+                _update_job(
+                    job_id,
+                    status="error",
+                    error=result.get("error", "F5-TTS generation failed."),
+                )
+                return
+            final_audio = base64.b64decode(result["audio_b64"])
+            _update_job(job_id, status="done", audio=final_audio)
+            return
+
+        # Chatterbox path: split long text into stable segments, generate
+        # each in parallel, then stitch. The Chatterbox Modal worker is
+        # built to autoscale across containers.
         segments = _split_for_stable_generation(processed_text, max_chars=380)
 
-        # Generate segments in parallel — the Chatterbox Modal worker is
-        # built to autoscale across containers ("Parallel Ready" in its
-        # own docstring), but was being driven one segment at a time here,
-        # so a 3-segment script paid for 3 sequential round-trips instead
-        # of ~1. Same ThreadPoolExecutor pattern modal_f5tts.py already
-        # uses for its own chunking. F5-TTS itself isn't re-parallelized
-        # here since modal_f5tts.generate_long_audio() already does its
-        # own internal chunking+parallelism for the whole text in one call.
-        if engine == "f5tts" or len(segments) == 1:
-            results = [modal_client.generate(seg, ref_b64, language_id=language_id, engine=engine) for seg in segments]
+        if len(segments) == 1:
+            results = [modal_client.generate(segments[0], ref_b64, language_id=language_id, engine=engine)]
         else:
             with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_SEGMENT_WORKERS, len(segments))) as executor:
                 results = list(executor.map(
@@ -280,7 +296,8 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_
         )
 
 
-def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en", engine: str = "chatterbox") -> str:
+def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en",
+                    engine: str = "chatterbox", ref_text: str = "") -> str:
     job_id = uuid.uuid4().hex
     _insert_job(job_id)
 
@@ -299,7 +316,7 @@ def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en
 
     thread = threading.Thread(
         target=_run_clone_job,
-        args=(job_id, text, reference_audio_path, language_id, engine),
+        args=(job_id, text, reference_audio_path, language_id, engine, ref_text),
         daemon=True,
     )
     thread.start()

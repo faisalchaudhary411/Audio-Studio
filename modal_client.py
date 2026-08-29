@@ -38,11 +38,16 @@ def engine_is_configured(engine: str) -> bool:
     return False
 
 
-def generate(text: str, reference_audio_b64: str, language_id: str = "en", engine: str = "chatterbox") -> dict:
+def generate(text: str, reference_audio_b64: str, language_id: str = "en",
+             engine: str = "chatterbox", ref_text: str = "") -> dict:
     """
     Main entry point expected by clone_engine.py. `engine` must be an
     explicit choice ("chatterbox" or "f5tts") — there is no automatic
     routing or fallback between them.
+
+    ref_text: optional exact transcript of the reference audio. Only used
+    by the F5-TTS path. Strongly improves quality and prevents noise-only
+    output when the automatic ASR would otherwise produce a bad transcript.
     """
     if engine not in VALID_ENGINES:
         return {"success": False, "error": f"Unknown engine '{engine}'. Choose one of: {', '.join(VALID_ENGINES)}."}
@@ -61,4 +66,4 @@ def generate(text: str, reference_audio_b64: str, language_id: str = "en", engin
     # engine == "f5tts"
     if not modal_f5tts.is_configured():
         return {"success": False, "error": "F5-TTS engine is not configured on this deployment (MODAL_F5TTS_ENDPOINT_URL missing)."}
-    return modal_f5tts.generate_long_audio(text, reference_audio_b64)
+    return modal_f5tts.generate_long_audio(text, reference_audio_b64, ref_text=ref_text)
