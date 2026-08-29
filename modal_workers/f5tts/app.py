@@ -35,6 +35,7 @@ image = (
         "soundfile",
         "numpy",
         "pydub",
+        "cached_path",
         "fastapi[standard]"
     )
     .pip_install("f5-tts")
@@ -65,19 +66,37 @@ class F5TTSWorker:
     @modal.enter()
     def load_model(self):
         import torch
-        from f5_tts.api import F5TTS
+        from cached_path import cached_path
+        from f5_tts.model import DiT
+        from f5_tts.infer.utils_infer import load_model as f5_load_model, load_vocoder
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = F5TTS(
-            model="F5TTS_v1_Base",  # ignored for architecture once ckpt_file/vocab_file/model_cfg are set below — kept only as a valid preset name the constructor expects
-            ckpt_file=HINDI_CKPT,
-            vocab_file=HINDI_VOCAB,
-            model_cfg=HINDI_MODEL_CFG,
+        self.device = device
+        self.vocoder = load_vocoder(vocoder_name="vocos", device=device)
+
+        # NOTE: the high-level f5_tts.api.F5TTS() convenience class does NOT
+        # accept a custom model_cfg — it only knows a fixed set of named
+        # presets internally, with no way to plug in a different
+        # architecture (confirmed by a TypeError in production when this
+        # was first tried). Custom checkpoints need the lower-level
+        # load_model() function instead, which IS the same path F5-TTS's
+        # own official Gradio app uses for its "load_custom()" — see
+        # SWivid/F5-TTS app.py.
+        ckpt_path = str(cached_path(HINDI_CKPT))
+        vocab_path = str(cached_path(HINDI_VOCAB))
+        self.model = f5_load_model(
+            DiT,
+            HINDI_MODEL_CFG,
+            ckpt_path,
+            mel_spec_type="vocos",
+            vocab_file=vocab_path,
             device=device,
         )
 
     @modal.fastapi_endpoint(method="POST")
     def generate(self, req: SingleChunkRequest):
         import soundfile as sf
+        from f5_tts.infer.utils_infer import preprocess_ref_audio_text, infer_process
 
         chunk_text = (req.chunk_text or "").strip()
         ref_b64 = req.reference_audio_b64
@@ -92,10 +111,20 @@ class F5TTSWorker:
                 f.write(ref_bytes)
                 tmp_ref_path = f.name
 
-            wav_out, sr = self.model.infer(
-                ref_file=tmp_ref_path,
-                ref_text=req.ref_text,
-                gen_text=chunk_text,
+            # preprocess_ref_audio_text trims silence/normalizes the clip and,
+            # if ref_text is empty, runs local ASR (faster-whisper) to
+            # transcribe it — same behavior the removed F5TTS.infer()
+            # convenience method delegated to internally.
+            ref_audio_path, ref_text = preprocess_ref_audio_text(tmp_ref_path, req.ref_text or "")
+
+            wav_out, sr, _ = infer_process(
+                ref_audio_path,
+                ref_text,
+                chunk_text,
+                self.model,
+                self.vocoder,
+                mel_spec_type="vocos",
+                device=self.device,
             )
 
             buf = io.BytesIO()
