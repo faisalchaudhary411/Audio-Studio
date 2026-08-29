@@ -1,5 +1,13 @@
 """
-modal_f5tts.py — VoxCraft Multi-Worker Parallel Client for F5-TTS Long Scripts
+modal_f5tts.py — VoxCraft Multi-Worker Parallel Client for F5-TTS
+
+Hindi/Urdu ONLY. The deployed worker (modal_workers/f5tts/app.py) loads a
+Hindi-only checkpoint (SPRINGLab/F5-Hindi-24KHz, CC-BY-4.0 — chosen
+specifically because it's commercial-use-safe, unlike the official
+SWivid/F5-TTS English/Mandarin checkpoint which is CC-BY-NC-4.0). Sending
+plain English text here will not raise an error but will sound wrong,
+since the checkpoint's vocab is Devanagari-based. Callers must not route
+English requests to this module — see modal_client.py's engine dispatch.
 """
 
 import os

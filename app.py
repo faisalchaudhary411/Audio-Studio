@@ -35,6 +35,7 @@ import markdown as md_lib
 from voices import VOICES, FREE_VOICES, default_preview_text
 from tts_engine import tts_dispatch, apply_pronunciation_dict
 from clone_engine import start_clone_job, get_job
+import modal_client
 import music_engine
 import audio_tools
 import persistence
@@ -3072,6 +3073,7 @@ def api_clone_generate():
     reference_id = data.get("reference_id")
     saved_voice_id = data.get("saved_voice_id")
     language_id = (data.get("language_id") or "en").strip().lower()
+    engine = (data.get("engine") or "chatterbox").strip().lower()
 
     if not text:
         return jsonify({"error": "Please enter some text first."}), 400
@@ -3079,6 +3081,8 @@ def api_clone_generate():
         return jsonify({"error": f"Cloned-voice generations are capped at {CLONE_CHAR_LIMIT} characters."}), 400
     if not reference_id and not saved_voice_id:
         return jsonify({"error": "Upload a reference clip or pick a saved voice first."}), 400
+    if engine not in modal_client.VALID_ENGINES:
+        return jsonify({"error": f"Unknown engine '{engine}'."}), 400
 
     if saved_voice_id:
         voice = persistence.get_voice(saved_voice_id)
@@ -3100,7 +3104,7 @@ def api_clone_generate():
         language_id = "en"
 
     try:
-        job_id = start_clone_job(text, path, language_id=language_id)
+        job_id = start_clone_job(text, path, language_id=language_id, engine=engine)
     except Exception as e:
         import traceback
         return jsonify({"error": f"Failed to start clone job: {str(e)}", "detail": traceback.format_exc()}), 500

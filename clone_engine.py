@@ -9,6 +9,7 @@ import threading
 import time
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import modal_client
 import urdu_transliteration
@@ -20,6 +21,13 @@ JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
 # finishes, so the frontend's polling loop finds nothing even though Modal
 # succeeded. Raised to give real headroom above the worst case.
 JOB_MAX_AGE_SECONDS = 1200
+
+# Caps how many Chatterbox segments generate concurrently on Modal. Higher
+# = faster wall-clock time for multi-segment scripts, at the cost of more
+# GPU containers spinning up at once (same total compute, more $ paid
+# concurrently rather than sequentially). 4 matches modal_f5tts.py's own
+# MAX_PARALLEL_WORKERS for consistency.
+MAX_PARALLEL_SEGMENT_WORKERS = 4
 
 _db_lock = threading.Lock()
 
@@ -208,7 +216,7 @@ def _concat_wav_segments(wav_bytes_list: list) -> bytes:
     return buf.getvalue()
 
 
-def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_lang: str = "en"):
+def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_lang: str = "en", engine: str = "chatterbox"):
     _update_job(job_id, status="generating")
     try:
         with open(reference_audio_path, "rb") as f:
@@ -217,12 +225,36 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_
         processed_text, auto_lang_id = urdu_transliteration.prepare_text_for_tts(text)
         language_id = requested_lang if requested_lang in ("hi", "en") and requested_lang != "en" else auto_lang_id
 
+        if engine == "f5tts" and language_id not in modal_client.F5TTS_SUPPORTED_LANGUAGES:
+            _update_job(
+                job_id,
+                status="error",
+                error="The F5-TTS engine only supports Hindi/Urdu text on this deployment. Switch to Chatterbox for English.",
+            )
+            return
+
         # Commercial: split long text into stable segments, generate each, then stitch
         segments = _split_for_stable_generation(processed_text, max_chars=380)
-        audio_parts = []
 
-        for i, segment in enumerate(segments):
-            result = modal_client.generate(segment, ref_b64, language_id=language_id)
+        # Generate segments in parallel — the Chatterbox Modal worker is
+        # built to autoscale across containers ("Parallel Ready" in its
+        # own docstring), but was being driven one segment at a time here,
+        # so a 3-segment script paid for 3 sequential round-trips instead
+        # of ~1. Same ThreadPoolExecutor pattern modal_f5tts.py already
+        # uses for its own chunking. F5-TTS itself isn't re-parallelized
+        # here since modal_f5tts.generate_long_audio() already does its
+        # own internal chunking+parallelism for the whole text in one call.
+        if engine == "f5tts" or len(segments) == 1:
+            results = [modal_client.generate(seg, ref_b64, language_id=language_id, engine=engine) for seg in segments]
+        else:
+            with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_SEGMENT_WORKERS, len(segments))) as executor:
+                results = list(executor.map(
+                    lambda seg: modal_client.generate(seg, ref_b64, language_id=language_id, engine=engine),
+                    segments,
+                ))
+
+        audio_parts = []
+        for i, result in enumerate(results):
             if not result.get("success"):
                 _update_job(
                     job_id,
@@ -248,24 +280,26 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str, requested_
         )
 
 
-def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en") -> str:
+def start_clone_job(text: str, reference_audio_path: str, language_id: str = "en", engine: str = "chatterbox") -> str:
     job_id = uuid.uuid4().hex
     _insert_job(job_id)
 
-    if not modal_client.is_configured():
+    if engine not in modal_client.VALID_ENGINES:
+        _update_job(job_id, status="error", error=f"Unknown engine '{engine}'.")
+        return job_id
+
+    if not modal_client.engine_is_configured(engine):
+        env_var = "MODAL_CLONE_ENDPOINT_URL" if engine == "chatterbox" else "MODAL_F5TTS_ENDPOINT_URL"
         _update_job(
             job_id,
             status="error",
-            error=(
-                "Voice cloning isn't configured on this deployment yet — "
-                "set MODAL_CLONE_ENDPOINT_URL."
-            ),
+            error=f"The {engine} engine isn't configured on this deployment yet — set {env_var}.",
         )
         return job_id
 
     thread = threading.Thread(
         target=_run_clone_job,
-        args=(job_id, text, reference_audio_path, language_id),
+        args=(job_id, text, reference_audio_path, language_id, engine),
         daemon=True,
     )
     thread.start()
