@@ -1,6 +1,6 @@
-// ===== VoxCraft — Tools hub (Transcribe / Convert / Merge / Cutter) =====
+// ===== VoxCraft — Tools hub (shared with /tools/<slug> pages) =====
 (function () {
-  // ---- Tab switching ----
+  // ---- Tab switching (hub only; individual tool pages have one panel) ----
   const tabs = document.querySelectorAll('[data-tool-tab]');
   const panels = {
     transcribe: document.getElementById('panel-transcribe'),
@@ -15,60 +15,140 @@
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
       const key = tab.dataset.toolTab;
-      Object.entries(panels).forEach(([k, el]) => { el.style.display = k === key ? '' : 'none'; });
-      tabs.forEach(t => t.className = t.dataset.toolTab === key ? 'btn btn--sm btn--brass' : 'btn btn--sm btn--ghost');
+      Object.entries(panels).forEach(([k, el]) => {
+        if (el) el.style.display = k === key ? '' : 'none';
+      });
+      tabs.forEach(t => {
+        t.className = t.dataset.toolTab === key ? 'btn btn--sm btn--brass is-active' : 'btn btn--sm btn--ghost';
+      });
     });
   });
 
-  // BUG FIX: browsers don't recognize "audio/m4a" as a MIME type (that's just
-  // the file extension convention) — the actual container is MP4, so the
-  // correct MIME type is audio/mp4. Using the wrong MIME type can make the
-  // <audio> element fail to play the file even though it downloaded fine.
-  const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', flac: 'audio/flac' };
-  function mimeFor(fmt) { return AUDIO_MIME[fmt] || 'audio/mpeg'; }
+  // BUG FIX: browsers don't recognize "audio/m4a" as a MIME type — the
+  // actual container is MP4, so the correct MIME type is audio/mp4.
+  const AUDIO_MIME = {
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    m4a: 'audio/mp4',
+    flac: 'audio/flac',
+  };
+  function mimeFor(fmt) {
+    return AUDIO_MIME[fmt] || 'audio/mpeg';
+  }
 
-  function audioPlayerHtml(b64, filename, mime = 'audio/mpeg') {
+  function audioPlayerHtml(b64, filename, mime) {
+    mime = mime || 'audio/mpeg';
     return `
-      <audio controls style="width:100%;" src="data:${mime};base64,${b64}"></audio>
-      <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
+      <div class="result-panel">
+        <audio controls style="width:100%;" src="data:${mime};base64,${b64}"></audio>
+        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
+      </div>
     `;
   }
 
+  // Shared helpers matching studio.js generate-button behaviour
+  function setLoading(btn, on) {
+    if (!btn) return;
+    btn.disabled = !!on;
+    btn.classList.toggle('is-loading', !!on);
+  }
+
+  function ensureProgress(afterEl) {
+    if (!afterEl) return null;
+    let bar = afterEl.parentElement && afterEl.parentElement.querySelector('.gen-progress');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'gen-progress';
+      bar.innerHTML = '<div class="gen-progress__bar"></div>';
+      // Prefer placing after the render-bar when present
+      const renderBar = afterEl.closest('.panel') && afterEl.closest('.panel').querySelector('.render-bar');
+      if (renderBar && renderBar.parentNode) {
+        renderBar.parentNode.insertBefore(bar, renderBar.nextSibling);
+      } else if (afterEl.parentNode) {
+        afterEl.parentNode.insertBefore(bar, afterEl.nextSibling);
+      }
+    }
+    return bar;
+  }
+
+  function showProgress(bar, on) {
+    if (!bar) return;
+    bar.classList.toggle('is-active', !!on);
+  }
+
+  function friendlyError(data, fallback) {
+    if (data && typeof data.error === 'string' && data.error.trim()) {
+      return data.error.trim();
+    }
+    return fallback || 'Something went wrong. Please try again.';
+  }
+
+  function bindFileLabel(input) {
+    if (!input || input.dataset.labelBound) return;
+    input.dataset.labelBound = '1';
+    const update = () => {
+      const file = input.files && input.files[0];
+      if (file) {
+        const mb = (file.size / (1024 * 1024)).toFixed(2);
+        input.setAttribute('data-file-label', `${file.name} · ${mb} MB`);
+        input.classList.add('has-file');
+      } else {
+        input.removeAttribute('data-file-label');
+        input.classList.remove('has-file');
+      }
+    };
+    input.addEventListener('change', update);
+    update();
+  }
+
+  // Wire every visible file input for nicer "file chosen" feedback
+  document.querySelectorAll('input.file-input[type="file"]').forEach(bindFileLabel);
+
   // ---- Transcribe ----
-  // Guarded: this file is now shared between the all-in-one /tools hub
-  // (every panel present) and individual /tools/<slug> pages (only ONE
-  // panel's markup exists in the DOM). Without the `if (transcribeBtn)`
-  // guard, addEventListener on a null element would throw and silently
-  // kill every tool wired up AFTER this one in the same script.
   const transcribeBtn = document.getElementById('transcribe-btn');
   const transcribeStatus = document.querySelector('[data-transcribe-status]');
   const transcribeResult = document.getElementById('transcribe-result');
+  const transcribeProgress = ensureProgress(transcribeResult);
   if (transcribeBtn) {
-    transcribeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runTranscribe); });
+    transcribeBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runTranscribe);
+    });
   }
   async function runTranscribe() {
-    const file = document.getElementById('transcribe-file').files[0];
-    if (!file) { transcribeStatus.textContent = 'Choose a file first.'; return; }
-    transcribeBtn.disabled = true;
-    transcribeStatus.textContent = 'Transcribing… this may take a moment for longer files.';
-    transcribeResult.innerHTML = '';
+    const fileInput = document.getElementById('transcribe-file');
+    const file = fileInput && fileInput.files[0];
+    if (!file) {
+      if (transcribeStatus) transcribeStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(transcribeBtn, true);
+    showProgress(transcribeProgress, true);
+    if (transcribeStatus) transcribeStatus.textContent = 'Transcribing… this may take a moment for longer files.';
+    if (transcribeResult) transcribeResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
     form.append('lang_code', document.getElementById('transcribe-lang').value);
     try {
       const res = await fetch('/api/tools/transcribe', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { transcribeStatus.textContent = data.error || 'Failed.'; return; }
-      transcribeStatus.textContent = `Done (${data.method})`;
-      transcribeResult.innerHTML = `
-        <textarea class="script-input" style="min-height:140px;" readonly>${data.text}</textarea>
-        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-           download="transcription.txt" href="data:text/plain;charset=utf-8,${encodeURIComponent(data.text)}">Download TXT</a>
-      `;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (transcribeStatus) transcribeStatus.textContent = friendlyError(data, 'Transcription failed.');
+        return;
+      }
+      if (transcribeStatus) transcribeStatus.textContent = `Done (${data.method || 'ok'})`;
+      if (transcribeResult) {
+        transcribeResult.innerHTML = `
+          <textarea class="script-input" style="min-height:140px;" readonly>${data.text || ''}</textarea>
+          <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
+             download="transcription.txt" href="data:text/plain;charset=utf-8,${encodeURIComponent(data.text || '')}">Download TXT</a>
+        `;
+      }
     } catch (e) {
-      transcribeStatus.textContent = 'Network error.';
+      if (transcribeStatus) transcribeStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      transcribeBtn.disabled = false;
+      setLoading(transcribeBtn, false);
+      showProgress(transcribeProgress, false);
     }
   }
 
@@ -77,35 +157,47 @@
   const convertBtn = document.getElementById('convert-btn');
   const convertStatus = document.querySelector('[data-convert-status]');
   const convertResult = document.getElementById('convert-result');
+  const convertProgress = ensureProgress(convertResult);
   if (convertQuality) {
-    document.getElementById('convert-quality-label').textContent = convertQuality.value;
+    const label = document.getElementById('convert-quality-label');
+    if (label) label.textContent = convertQuality.value;
     convertQuality.addEventListener('input', () => {
-      document.getElementById('convert-quality-label').textContent = convertQuality.value;
+      if (label) label.textContent = convertQuality.value;
     });
   }
   if (convertBtn) {
-    convertBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runConvert); });
+    convertBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runConvert);
+    });
   }
   async function runConvert() {
     const file = document.getElementById('convert-file').files[0];
-    if (!file) { convertStatus.textContent = 'Choose a file first.'; return; }
-    convertBtn.disabled = true;
-    convertStatus.textContent = 'Converting…';
-    convertResult.innerHTML = '';
+    if (!file) {
+      if (convertStatus) convertStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(convertBtn, true);
+    showProgress(convertProgress, true);
+    if (convertStatus) convertStatus.textContent = 'Converting…';
+    if (convertResult) convertResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
     form.append('output_format', document.getElementById('convert-format').value);
-    form.append('quality', convertQuality.value);
+    form.append('quality', convertQuality ? convertQuality.value : '192');
     try {
       const res = await fetch('/api/tools/convert', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { convertStatus.textContent = data.error || 'Failed.'; return; }
-      convertStatus.textContent = `Converted to ${data.format.toUpperCase()}`;
-      convertResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (convertStatus) convertStatus.textContent = friendlyError(data, 'Conversion failed.');
+        return;
+      }
+      if (convertStatus) convertStatus.textContent = `Converted to ${(data.format || '').toUpperCase()}`;
+      if (convertResult) convertResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
-      convertStatus.textContent = 'Network error.';
+      if (convertStatus) convertStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      convertBtn.disabled = false;
+      setLoading(convertBtn, false);
+      showProgress(convertProgress, false);
     }
   }
 
@@ -117,7 +209,8 @@
   const mergeBtn = document.getElementById('merge-btn');
   const mergeStatus = document.querySelector('[data-merge-status]');
   const mergeResult = document.getElementById('merge-result');
-  let mergeSelectedFiles = []; // accumulates across multiple picks, unlike the raw <input> which replaces on reselect
+  const mergeProgress = ensureProgress(mergeResult);
+  let mergeSelectedFiles = [];
 
   function renderMergeList() {
     if (!mergeFileList) return;
@@ -125,12 +218,16 @@
       mergeFileList.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem;">No files added yet.</p>';
       return;
     }
-    mergeFileList.innerHTML = mergeSelectedFiles.map((f, i) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--ink);border-radius:8px;margin-bottom:6px;">
-        <span style="font-size:0.85rem;color:var(--text-mid);overflow-wrap:anywhere;">${i + 1}. ${f.name}</span>
-        <button type="button" data-remove-idx="${i}" class="btn btn--ghost btn--sm" style="padding:4px 10px;">Remove</button>
-      </div>
-    `).join('');
+    mergeFileList.innerHTML = mergeSelectedFiles
+      .map((f, i) => {
+        const mb = (f.size / (1024 * 1024)).toFixed(2);
+        return `
+        <div class="file-chip">
+          <span class="file-chip__name">${i + 1}. ${f.name} <span class="file-chip__meta">${mb} MB</span></span>
+          <button type="button" data-remove-idx="${i}" class="btn btn--ghost btn--sm" style="padding:4px 10px;">Remove</button>
+        </div>`;
+      })
+      .join('');
     mergeFileList.querySelectorAll('[data-remove-idx]').forEach(btn => {
       btn.addEventListener('click', () => {
         mergeSelectedFiles.splice(parseInt(btn.dataset.removeIdx, 10), 1);
@@ -140,42 +237,55 @@
   }
 
   if (mergeGap) {
-    document.getElementById('merge-gap-label').textContent = mergeGap.value;
+    const gapLabel = document.getElementById('merge-gap-label');
+    if (gapLabel) gapLabel.textContent = mergeGap.value;
     mergeGap.addEventListener('input', () => {
-      document.getElementById('merge-gap-label').textContent = mergeGap.value;
+      if (gapLabel) gapLabel.textContent = mergeGap.value;
     });
   }
   if (mergeFileList) renderMergeList();
-  if (mergeAddBtn) mergeAddBtn.addEventListener('click', () => mergeFilesInput.click());
+  if (mergeAddBtn && mergeFilesInput) {
+    mergeAddBtn.addEventListener('click', () => mergeFilesInput.click());
+  }
   if (mergeFilesInput) {
     mergeFilesInput.addEventListener('change', () => {
       for (const f of mergeFilesInput.files) mergeSelectedFiles.push(f);
-      mergeFilesInput.value = ''; // reset so picking the same file again still fires 'change'
+      mergeFilesInput.value = '';
       renderMergeList();
     });
   }
   if (mergeBtn) {
-    mergeBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runMerge); });
+    mergeBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runMerge);
+    });
   }
   async function runMerge() {
-    if (mergeSelectedFiles.length < 2) { mergeStatus.textContent = 'Add at least 2 files first.'; return; }
-    mergeBtn.disabled = true;
-    mergeStatus.textContent = `Merging ${mergeSelectedFiles.length} files…`;
-    mergeResult.innerHTML = '';
+    if (mergeSelectedFiles.length < 2) {
+      if (mergeStatus) mergeStatus.textContent = 'Add at least 2 files first.';
+      return;
+    }
+    setLoading(mergeBtn, true);
+    showProgress(mergeProgress, true);
+    if (mergeStatus) mergeStatus.textContent = `Merging ${mergeSelectedFiles.length} files…`;
+    if (mergeResult) mergeResult.innerHTML = '';
     const form = new FormData();
     for (const f of mergeSelectedFiles) form.append('files', f);
-    form.append('gap_ms', mergeGap.value);
+    form.append('gap_ms', mergeGap ? mergeGap.value : '500');
     form.append('output_format', document.getElementById('merge-format').value);
     try {
       const res = await fetch('/api/tools/merge', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { mergeStatus.textContent = data.error || 'Failed.'; return; }
-      mergeStatus.textContent = `Merged ${mergeSelectedFiles.length} files`;
-      mergeResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (mergeStatus) mergeStatus.textContent = friendlyError(data, 'Merge failed.');
+        return;
+      }
+      if (mergeStatus) mergeStatus.textContent = `Merged ${mergeSelectedFiles.length} files`;
+      if (mergeResult) mergeResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
-      mergeStatus.textContent = 'Network error.';
+      if (mergeStatus) mergeStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      mergeBtn.disabled = false;
+      setLoading(mergeBtn, false);
+      showProgress(mergeProgress, false);
     }
   }
 
@@ -188,6 +298,7 @@
   const cutterBtn = document.getElementById('cutter-btn');
   const cutterStatus = document.querySelector('[data-cutter-status]');
   const cutterResult = document.getElementById('cutter-result');
+  const cutterProgress = ensureProgress(cutterResult);
   let cutterMode = 'trim';
   let cutterDurationSec = 0;
 
@@ -195,9 +306,12 @@
     cutterModeBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         cutterMode = btn.dataset.cutterMode;
-        cutterModeBtns.forEach(b => b.className = b.dataset.cutterMode === cutterMode ? 'btn btn--sm btn--brass' : 'btn btn--sm btn--ghost');
-        trimControls.style.display = cutterMode === 'trim' ? '' : 'none';
-        splitControls.style.display = cutterMode === 'split' ? '' : 'none';
+        cutterModeBtns.forEach(b => {
+          b.className =
+            b.dataset.cutterMode === cutterMode ? 'btn btn--sm btn--brass is-active' : 'btn btn--sm btn--ghost';
+        });
+        if (trimControls) trimControls.style.display = cutterMode === 'trim' ? '' : 'none';
+        if (splitControls) splitControls.style.display = cutterMode === 'split' ? '' : 'none';
       });
     });
   }
@@ -206,68 +320,88 @@
     cutterFile.addEventListener('change', async () => {
       const file = cutterFile.files[0];
       if (!file) return;
-      cutterDuration.textContent = 'Reading duration…';
+      if (cutterDuration) cutterDuration.textContent = 'Reading duration…';
       const form = new FormData();
       form.append('file', file);
       try {
         const res = await fetch('/api/tools/cutter/duration', { method: 'POST', body: form });
-        const data = await res.json();
-        if (!res.ok) { cutterDuration.textContent = data.error || 'Could not read file.'; return; }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (cutterDuration) cutterDuration.textContent = friendlyError(data, 'Could not read file.');
+          return;
+        }
         cutterDurationSec = data.duration_sec;
-        cutterDuration.textContent = `Duration: ${cutterDurationSec.toFixed(1)}s`;
-        document.getElementById('cutter-end').value = cutterDurationSec.toFixed(1);
-        document.getElementById('cutter-split-at').value = (cutterDurationSec / 2).toFixed(1);
+        if (cutterDuration) cutterDuration.textContent = `Duration: ${cutterDurationSec.toFixed(1)}s`;
+        const endEl = document.getElementById('cutter-end');
+        const splitEl = document.getElementById('cutter-split-at');
+        if (endEl) endEl.value = cutterDurationSec.toFixed(1);
+        if (splitEl) splitEl.value = (cutterDurationSec / 2).toFixed(1);
       } catch (e) {
-        cutterDuration.textContent = 'Network error.';
+        if (cutterDuration) cutterDuration.textContent = 'Network error.';
       }
     });
   }
 
   if (cutterBtn) {
-    cutterBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runCutter); });
+    cutterBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runCutter);
+    });
   }
   async function runCutter() {
-    const file = cutterFile.files[0];
-    if (!file) { cutterStatus.textContent = 'Choose a file first.'; return; }
-    cutterBtn.disabled = true;
-    cutterResult.innerHTML = '';
+    const file = cutterFile && cutterFile.files[0];
+    if (!file) {
+      if (cutterStatus) cutterStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(cutterBtn, true);
+    showProgress(cutterProgress, true);
+    if (cutterResult) cutterResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
     try {
       if (cutterMode === 'trim') {
-        cutterStatus.textContent = 'Trimming…';
+        if (cutterStatus) cutterStatus.textContent = 'Trimming…';
         form.append('start_sec', document.getElementById('cutter-start').value);
         form.append('end_sec', document.getElementById('cutter-end').value);
         const res = await fetch('/api/tools/cutter/trim', { method: 'POST', body: form });
-        const data = await res.json();
-        if (!res.ok) { cutterStatus.textContent = data.error || 'Failed.'; return; }
-        cutterStatus.textContent = 'Trimmed';
-        cutterResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (cutterStatus) cutterStatus.textContent = friendlyError(data, 'Trim failed.');
+          return;
+        }
+        if (cutterStatus) cutterStatus.textContent = 'Trimmed';
+        if (cutterResult) cutterResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
       } else {
-        cutterStatus.textContent = 'Splitting…';
+        if (cutterStatus) cutterStatus.textContent = 'Splitting…';
         form.append('split_sec', document.getElementById('cutter-split-at').value);
         const res = await fetch('/api/tools/cutter/split', { method: 'POST', body: form });
-        const data = await res.json();
-        if (!res.ok) { cutterStatus.textContent = data.error || 'Failed.'; return; }
-        cutterStatus.textContent = 'Split complete';
-        cutterResult.innerHTML = `
-          <p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-dim);">Part 1</p>
-          ${audioPlayerHtml(data.part1_b64, data.filename_base + '-1.mp3')}
-          <p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-dim);margin-top:10px;">Part 2</p>
-          ${audioPlayerHtml(data.part2_b64, data.filename_base + '-2.mp3')}
-        `;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (cutterStatus) cutterStatus.textContent = friendlyError(data, 'Split failed.');
+          return;
+        }
+        if (cutterStatus) cutterStatus.textContent = 'Split complete';
+        if (cutterResult) {
+          cutterResult.innerHTML = `
+            <p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-dim);">Part 1</p>
+            ${audioPlayerHtml(data.part1_b64, data.filename_base + '-1.mp3')}
+            <p style="font-family:var(--mono);font-size:0.8rem;color:var(--text-dim);margin-top:10px;">Part 2</p>
+            ${audioPlayerHtml(data.part2_b64, data.filename_base + '-2.mp3')}
+          `;
+        }
       }
     } catch (e) {
-      cutterStatus.textContent = 'Network error.';
+      if (cutterStatus) cutterStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      cutterBtn.disabled = false;
+      setLoading(cutterBtn, false);
+      showProgress(cutterProgress, false);
     }
   }
 
   // ---- Denoise ----
   const denoiseStrength = document.getElementById('denoise-strength');
   const denoiseStrengthLabel = document.getElementById('denoise-strength-label');
-  if (denoiseStrength) {
+  if (denoiseStrength && denoiseStrengthLabel) {
     denoiseStrength.addEventListener('input', () => {
       denoiseStrengthLabel.textContent = denoiseStrength.value;
     });
@@ -275,28 +409,39 @@
   const denoiseBtn = document.getElementById('denoise-btn');
   const denoiseStatus = document.querySelector('[data-denoise-status]');
   const denoiseResult = document.getElementById('denoise-result');
+  const denoiseProgress = ensureProgress(denoiseResult);
   if (denoiseBtn) {
-    denoiseBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runDenoise); });
+    denoiseBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runDenoise);
+    });
   }
   async function runDenoise() {
     const file = document.getElementById('denoise-file').files[0];
-    if (!file) { denoiseStatus.textContent = 'Choose a file first.'; return; }
-    denoiseBtn.disabled = true;
-    denoiseStatus.textContent = 'Removing noise…';
-    denoiseResult.innerHTML = '';
+    if (!file) {
+      if (denoiseStatus) denoiseStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(denoiseBtn, true);
+    showProgress(denoiseProgress, true);
+    if (denoiseStatus) denoiseStatus.textContent = 'Removing noise…';
+    if (denoiseResult) denoiseResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
-    form.append('strength', denoiseStrength.value);
+    form.append('strength', denoiseStrength ? denoiseStrength.value : '0.5');
     try {
       const res = await fetch('/api/tools/denoise', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { denoiseStatus.textContent = data.error || 'Failed.'; return; }
-      denoiseStatus.textContent = 'Noise removed';
-      denoiseResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (denoiseStatus) denoiseStatus.textContent = friendlyError(data, 'Denoise failed.');
+        return;
+      }
+      if (denoiseStatus) denoiseStatus.textContent = 'Noise removed';
+      if (denoiseResult) denoiseResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
     } catch (e) {
-      denoiseStatus.textContent = 'Network error.';
+      if (denoiseStatus) denoiseStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      denoiseBtn.disabled = false;
+      setLoading(denoiseBtn, false);
+      showProgress(denoiseProgress, false);
     }
   }
 
@@ -316,42 +461,75 @@
   const vcBtn = document.getElementById('voicechange-btn');
   const vcStatus = document.querySelector('[data-voicechange-status]');
   const vcResult = document.getElementById('voicechange-result');
+  const vcProgress = ensureProgress(vcResult);
 
   if (vcEffect) {
     vcEffect.addEventListener('change', () => {
-      vcPitchControls.style.display = vcEffect.value === 'pitch_shift' ? '' : 'none';
-      vcRobotControls.style.display = vcEffect.value === 'robot' ? '' : 'none';
-      vcEchoControls.style.display = vcEffect.value === 'echo' ? '' : 'none';
+      if (vcPitchControls) vcPitchControls.style.display = vcEffect.value === 'pitch_shift' ? '' : 'none';
+      if (vcRobotControls) vcRobotControls.style.display = vcEffect.value === 'robot' ? '' : 'none';
+      if (vcEchoControls) vcEchoControls.style.display = vcEffect.value === 'echo' ? '' : 'none';
     });
-    vcSemitones.addEventListener('input', () => { vcSemitonesLabel.textContent = vcSemitones.value; });
-    vcIntensity.addEventListener('input', () => { vcIntensityLabel.textContent = vcIntensity.value; });
-    vcDelay.addEventListener('input', () => { vcDelayLabel.textContent = vcDelay.value; });
-    vcDecay.addEventListener('input', () => { vcDecayLabel.textContent = vcDecay.value; });
-    vcBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runVoiceChange); });
+    if (vcSemitones && vcSemitonesLabel) {
+      vcSemitones.addEventListener('input', () => {
+        vcSemitonesLabel.textContent = vcSemitones.value;
+      });
+    }
+    if (vcIntensity && vcIntensityLabel) {
+      vcIntensity.addEventListener('input', () => {
+        vcIntensityLabel.textContent = vcIntensity.value;
+      });
+    }
+    if (vcDelay && vcDelayLabel) {
+      vcDelay.addEventListener('input', () => {
+        vcDelayLabel.textContent = vcDelay.value;
+      });
+    }
+    if (vcDecay && vcDecayLabel) {
+      vcDecay.addEventListener('input', () => {
+        vcDecayLabel.textContent = vcDecay.value;
+      });
+    }
+    if (vcBtn) {
+      vcBtn.addEventListener('click', () => {
+        window.VoxCraftAds.showInterstitial(runVoiceChange);
+      });
+    }
   }
 
   async function runVoiceChange() {
-    const file = document.getElementById('voicechange-file').files[0];
-    if (!file) { vcStatus.textContent = 'Choose a file first.'; return; }
-    vcBtn.disabled = true;
-    vcStatus.textContent = 'Applying effect…';
-    vcResult.innerHTML = '';
+    const fileEl = document.getElementById('voicechange-file');
+    const file = fileEl && fileEl.files[0];
+    if (!file) {
+      if (vcStatus) vcStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(vcBtn, true);
+    showProgress(vcProgress, true);
+    if (vcStatus) vcStatus.textContent = 'Applying effect…';
+    if (vcResult) vcResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
     form.append('effect', vcEffect.value);
-    if (vcEffect.value === 'pitch_shift') form.append('semitones', vcSemitones.value);
-    if (vcEffect.value === 'robot') form.append('intensity', vcIntensity.value);
-    if (vcEffect.value === 'echo') { form.append('delay_ms', vcDelay.value); form.append('decay', vcDecay.value); }
+    if (vcEffect.value === 'pitch_shift' && vcSemitones) form.append('semitones', vcSemitones.value);
+    if (vcEffect.value === 'robot' && vcIntensity) form.append('intensity', vcIntensity.value);
+    if (vcEffect.value === 'echo') {
+      if (vcDelay) form.append('delay_ms', vcDelay.value);
+      if (vcDecay) form.append('decay', vcDecay.value);
+    }
     try {
       const res = await fetch('/api/tools/voicechange', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { vcStatus.textContent = data.error || 'Failed.'; return; }
-      vcStatus.textContent = 'Effect applied';
-      vcResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (vcStatus) vcStatus.textContent = friendlyError(data, 'Effect failed.');
+        return;
+      }
+      if (vcStatus) vcStatus.textContent = 'Effect applied';
+      if (vcResult) vcResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
     } catch (e) {
-      vcStatus.textContent = 'Network error.';
+      if (vcStatus) vcStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      vcBtn.disabled = false;
+      setLoading(vcBtn, false);
+      showProgress(vcProgress, false);
     }
   }
 
@@ -362,32 +540,57 @@
   const vxBtn = document.getElementById('videoxtract-btn');
   const vxStatus = document.querySelector('[data-videoxtract-status]');
   const vxResult = document.getElementById('videoxtract-result');
+  const vxProgress = ensureProgress(vxResult);
 
-  if (vxQuality) {
-    vxQuality.addEventListener('input', () => { vxQualityLabel.textContent = vxQuality.value; });
-    vxBtn.addEventListener('click', () => { window.VoxCraftAds.showInterstitial(runVideoExtract); });
+  if (vxQuality && vxQualityLabel) {
+    vxQuality.addEventListener('input', () => {
+      vxQualityLabel.textContent = vxQuality.value;
+    });
+  }
+  if (vxBtn) {
+    vxBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runVideoExtract);
+    });
   }
 
   async function runVideoExtract() {
-    const file = vxFile.files[0];
-    if (!file) { vxStatus.textContent = 'Choose a video file first.'; return; }
-    vxBtn.disabled = true;
-    vxStatus.textContent = 'Extracting audio (this can take a moment for larger files)…';
-    vxResult.innerHTML = '';
+    const file = vxFile && vxFile.files[0];
+    if (!file) {
+      if (vxStatus) vxStatus.textContent = 'Choose a video file first.';
+      return;
+    }
+    // Client-side size guard matching server (50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      if (vxStatus) vxStatus.textContent = 'File is over 50MB. Please use a smaller video.';
+      return;
+    }
+    setLoading(vxBtn, true);
+    showProgress(vxProgress, true);
+    if (vxStatus) vxStatus.textContent = 'Extracting audio (this can take a moment for larger files)…';
+    if (vxResult) vxResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
     form.append('output_format', document.getElementById('videoxtract-format').value);
-    form.append('quality', vxQuality.value);
+    form.append('quality', vxQuality ? vxQuality.value : '192');
     try {
       const res = await fetch('/api/tools/videoxtract', { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) { vxStatus.textContent = data.error || 'Failed.'; return; }
-      vxStatus.textContent = `Extracted · ${data.size_kb} KB`;
-      vxResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (vxStatus) vxStatus.textContent = friendlyError(data, 'Extraction failed.');
+        return;
+      }
+      if (vxStatus) vxStatus.textContent = `Extracted · ${data.size_kb} KB`;
+      if (vxResult) vxResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
-      vxStatus.textContent = 'Network error.';
+      if (vxStatus) vxStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      vxBtn.disabled = false;
+      setLoading(vxBtn, false);
+      showProgress(vxProgress, false);
     }
+  }
+
+  // Soft-fail if ads helper is missing so tools still work on pages without ads.js
+  if (!window.VoxCraftAds) {
+    window.VoxCraftAds = { showInterstitial: function (cb) { if (typeof cb === 'function') cb(); } };
   }
 })();
