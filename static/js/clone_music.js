@@ -66,6 +66,8 @@
   const cloneUploadRow = document.getElementById('clone-upload-row');
   const cloneEngineSelect = document.getElementById('clone-engine-select');
   const cloneEngineHint = document.getElementById('clone-engine-hint');
+  const cloneRefTextRow = document.getElementById('clone-ref-text-row');
+  const cloneRefText = document.getElementById('clone-ref-text');
   const cloneSaveBtn = document.getElementById('clone-save-voice-btn');
   const cloneSaveHint = document.getElementById('clone-save-hint');
   const consentModal = document.getElementById('clone-consent-modal');
@@ -88,6 +90,9 @@
   }
 
   function updateEngineHint() {
+    if (cloneRefTextRow) {
+      cloneRefTextRow.style.display = (cloneEngineSelect && cloneEngineSelect.value === 'f5tts') ? '' : 'none';
+    }
     if (!cloneEngineSelect || !cloneEngineHint) return;
     if (cloneEngineSelect.value === 'f5tts' && detectScriptShort(cloneText.value) === 'English') {
       cloneEngineHint.textContent = 'This text looks like English — F5-TTS only supports Hindi/Urdu, switch to Chatterbox.';
@@ -302,13 +307,14 @@
         }
 
         cloneStatus.textContent = 'Submitting cloning job…';
+        const refText = (engine === 'f5tts' && cloneRefText) ? cloneRefText.value.trim() : '';
         const genRes = await fetch('/api/clone/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(
             savedVoiceId
-              ? { text: cloneText.value.trim(), saved_voice_id: savedVoiceId, engine }
-              : { text: cloneText.value.trim(), reference_id: referenceId, engine }
+              ? { text: cloneText.value.trim(), saved_voice_id: savedVoiceId, engine, ref_text: refText }
+              : { text: cloneText.value.trim(), reference_id: referenceId, engine, ref_text: refText }
           ),
         });
         const genData = await genRes.json();
