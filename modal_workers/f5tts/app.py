@@ -128,7 +128,13 @@ class F5TTSWorker:
             )
             effective_ref_text = req.ref_text.strip() if req.ref_text else resolved_ref_text
 
-            # Execute model inference with valid native kwargs
+            # Higher-quality inference settings for cleaner pronunciation
+            # and reduced onset clipping / half-word issues:
+            # - nfe_step=48 gives better detail than default 32 (still practical)
+            # - cfg_strength=2.0 is the proven sweet spot for naturalness
+            # - sway_sampling_coef=-1.0 is the library-recommended value
+            # - remove_silence=False is critical: library silence removal
+            #   often eats the first phonemes of the generated content
             wav_out, sr, _ = await asyncio.to_thread(
                 infer_process,
                 ref_audio_path,
@@ -137,7 +143,11 @@ class F5TTSWorker:
                 self.model,
                 self.vocoder,
                 mel_spec_type="vocos",
+                nfe_step=48,
+                cfg_strength=2.0,
+                sway_sampling_coef=-1.0,
                 speed=1.0,
+                remove_silence=False,
                 device=self.device,
             )
 
@@ -149,10 +159,23 @@ class F5TTSWorker:
 
             wav_out = np.squeeze(wav_out).astype(np.float32)
 
-            # Prevent audio clipping & high volume distortion
+            # Peak-normalize gently (0.92) — preserves dynamics better than 0.90
+            # while still preventing digital clipping on loud peaks.
             max_val = np.max(np.abs(wav_out))
             if max_val > 0:
-                wav_out = (wav_out / max_val) * 0.90
+                wav_out = (wav_out / max_val) * 0.92
+
+            # Very light trailing-silence trim only (never touch the start).
+            # This removes a few hundred ms of dead air at the end of a chunk
+            # without risking the first word of the next chunk after stitching.
+            if len(wav_out) > 2400:  # >100 ms at 24 kHz
+                # Find last sample above a modest threshold
+                abs_wav = np.abs(wav_out)
+                threshold = 0.008
+                last_loud = np.where(abs_wav > threshold)[0]
+                if len(last_loud) > 0:
+                    end = min(len(wav_out), last_loud[-1] + int(0.12 * (sr or 24000)))
+                    wav_out = wav_out[:end]
 
             buf = io.BytesIO()
             sf.write(buf, wav_out, sr if sr else 24000, format="WAV", subtype="PCM_16")
