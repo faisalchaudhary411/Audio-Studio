@@ -272,9 +272,23 @@ def voice_change(file_bytes: bytes, filename: str, effect: str, **params) -> byt
 # ---------------------------------------------------------------------------
 def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3", quality_kbps: int = 192) -> bytes:
     check_file_size(file_bytes, max_mb=50)
+    output_format = (output_format or "mp3").lower().strip()
+    if output_format not in ("mp3", "wav", "ogg"):
+        raise ValueError("Output format must be mp3, wav, or ogg.")
+    try:
+        quality_kbps = int(quality_kbps)
+    except (TypeError, ValueError):
+        quality_kbps = 192
+    quality_kbps = max(64, min(320, quality_kbps))
+
     video_path, output_path = None, None
     try:
-        suffix = "." + filename.rsplit(".", 1)[-1].lower()
+        # Preserve extension when possible so ffmpeg can sniff the container.
+        raw_ext = (filename or "video.mp4").rsplit(".", 1)
+        suffix = ("." + raw_ext[-1].lower()) if len(raw_ext) == 2 and raw_ext[-1] else ".mp4"
+        if suffix not in (".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg"):
+            suffix = ".mp4"
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(file_bytes)
             video_path = tmp.name
@@ -283,18 +297,41 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
             output_path = out_tmp.name
 
         import subprocess
+
+        # Build codec-aware args. -y must be a global option (before -i);
+        # putting it after the output path is ignored or errors on some builds.
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", video_path,
+            "-vn",              # drop video stream
+            "-ar", "44100",
+            "-ac", "2",
+        ]
+        if output_format == "mp3":
+            cmd += ["-c:a", "libmp3lame", "-b:a", f"{quality_kbps}k"]
+        elif output_format == "ogg":
+            cmd += ["-c:a", "libvorbis", "-b:a", f"{quality_kbps}k"]
+        else:  # wav — uncompressed; bitrate flag does not apply
+            cmd += ["-c:a", "pcm_s16le"]
+        cmd.append(output_path)
+
         try:
-            subprocess.run(
-                ["ffmpeg", "-i", video_path, "-vn", "-ar", "44100", "-ac", "2",
-                 "-b:a", f"{quality_kbps}k", output_path, "-y"],
-                check=True, capture_output=True, timeout=120,
-            )
+            result = subprocess.run(cmd, check=False, capture_output=True, timeout=120)
         except FileNotFoundError:
-            raise Exception("ffmpeg is required for video-to-audio extraction and isn't installed on this server.")
-        except subprocess.CalledProcessError:
-            # Almost always a partial/corrupted upload (common on slow mobile
-            # data), not actually a missing-ffmpeg problem.
-            raise Exception("Could not read this video file. If you're on mobile data, this can happen when the upload doesn't fully finish — please try uploading again.")
+            raise Exception(
+                "Audio extraction is temporarily unavailable on this server. Please try again later."
+            )
+        except subprocess.TimeoutExpired:
+            raise Exception(
+                "Extraction timed out. Try a shorter clip or a smaller file (under 50MB)."
+            )
+
+        if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) < 64:
+            # Partial/corrupted upload is the most common cause on mobile.
+            raise Exception(
+                "Could not read this video file. Re-upload the full file "
+                "(incomplete transfers on slow connections often cause this)."
+            )
 
         with open(output_path, "rb") as f:
             return f.read()
