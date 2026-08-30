@@ -32,7 +32,18 @@ app = modal.App("voxcraft-f5tts-worker", image=image)
 
 HINDI_CKPT = "hf://SPRINGLab/F5-Hindi-24KHz/model_2500000.safetensors"
 HINDI_VOCAB = "hf://SPRINGLab/F5-Hindi-24KHz/vocab.txt"
-HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, conv_layers=4, pe_attn_head=1)
+# text_mask_padding=False is REQUIRED here — this is not a tuning knob.
+# SPRINGLab published this exact config for F5-Hindi-24KHz in F5-TTS's own
+# SHARED.md model registry, and their checkpoint was trained with it.
+# f5-tts's library default is True; if you omit this key, DiT silently
+# falls back to True and the model masks filler/padding tokens at attention
+# time using a positional scheme the checkpoint was never trained on. The
+# result is not an error — infer_process runs to completion and emits a
+# clean-sounding mel spectrogram (correct pitch, formants, energy) that
+# encodes no aligned phoneme content. That's "voice-shaped noise": audio
+# that passes every audio-level check (valid WAV, plausible F0, high
+# voiced-frame ratio) while ASR finds no intelligible speech in it.
+HINDI_MODEL_CFG = dict(dim=768, depth=18, heads=12, ff_mult=2, text_dim=512, conv_layers=4, pe_attn_head=1, text_mask_padding=False)
 
 
 class SingleChunkRequest(BaseModel):
