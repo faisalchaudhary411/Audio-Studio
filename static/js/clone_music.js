@@ -68,6 +68,8 @@
   const cloneEngineHint = document.getElementById('clone-engine-hint');
   const cloneRefTextRow = document.getElementById('clone-ref-text-row');
   const cloneRefText = document.getElementById('clone-ref-text');
+  const cloneRefTextHint = document.getElementById('clone-ref-text-hint');
+  const cloneAutoTranscribeBtn = document.getElementById('clone-auto-transcribe-btn');
   const cloneSaveBtn = document.getElementById('clone-save-voice-btn');
   const cloneSaveHint = document.getElementById('clone-save-hint');
   const consentModal = document.getElementById('clone-consent-modal');
@@ -106,6 +108,17 @@
   }
   if (cloneEngineSelect) {
     cloneEngineSelect.addEventListener('change', updateEngineHint);
+    cloneEngineSelect.addEventListener('change', () => {
+      // Catches the case where a clip/saved-voice was picked while
+      // Chatterbox was selected, then the person switches to F5-TTS —
+      // the ref_text box just became visible and empty, so fill it now
+      // instead of leaving it for them to notice and click manually.
+      if (cloneEngineSelect.value === 'f5tts' && cloneRefText && !cloneRefText.value.trim()) {
+        if (usingSavedVoice() || (cloneRefInput && cloneRefInput.files.length)) {
+          autoFillRefText();
+        }
+      }
+    });
     updateEngineHint();
   }
   const cloneStatus = document.querySelector('[data-clone-status]');
@@ -155,7 +168,13 @@
       // Auto-fill the cached ref_text for this saved voice, if it has one —
       // still editable in case the saved transcript needs a correction.
       if (cloneRefText && usingSavedVoice()) {
-        cloneRefText.value = savedVoiceRefText[cloneVoiceSelect.value] || '';
+        const cached = savedVoiceRefText[cloneVoiceSelect.value] || '';
+        cloneRefText.value = cached;
+        // Older saved voices predate ref_text caching and have nothing
+        // stored — transcribe on the fly instead of leaving it blank.
+        if (!cached && cloneEngineSelect && cloneEngineSelect.value === 'f5tts') {
+          autoFillRefText();
+        }
       }
     });
   }
@@ -193,7 +212,70 @@
       if (cloneSaveHint) cloneSaveHint.textContent = cloneRefInput.files.length
         ? 'Uploads the clip, then asks for your consent before saving.'
         : 'Upload a clip first, then save it to reuse later.';
+      if (cloneRefText) cloneRefText.value = '';
+      // Auto-transcribe as soon as a new clip is picked, so by the time the
+      // person is ready to generate, the Devanagari box is already filled
+      // in — they only need to skim and correct it, not type it from
+      // scratch. Only worth doing when F5-TTS is actually selected, since
+      // that's the only engine that reads ref_text.
+      if (cloneRefInput.files.length && cloneEngineSelect && cloneEngineSelect.value === 'f5tts') {
+        autoFillRefText();
+      }
     });
+  }
+
+  async function autoFillRefText() {
+    if (!cloneRefText || !cloneAutoTranscribeBtn) return;
+    if (!usingSavedVoice() && !cloneRefInput.files.length) return;
+    cloneAutoTranscribeBtn.disabled = true;
+    const originalHint = cloneRefTextHint ? cloneRefTextHint.textContent : '';
+    if (cloneRefTextHint) cloneRefTextHint.textContent = 'Listening to the reference clip…';
+    try {
+      let body;
+      if (usingSavedVoice()) {
+        body = { saved_voice_id: cloneVoiceSelect.value };
+      } else {
+        if (!pendingReferenceId) {
+          const form = new FormData();
+          form.append('reference_audio', cloneRefInput.files[0]);
+          const uploadRes = await fetch('/api/clone/upload', { method: 'POST', body: form });
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok) {
+            if (cloneRefTextHint) cloneRefTextHint.textContent = uploadData.error || 'Upload failed.';
+            return;
+          }
+          pendingReferenceId = uploadData.reference_id;
+        }
+        body = { reference_id: pendingReferenceId };
+      }
+      const res = await fetch('/api/clone/reference/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (cloneRefTextHint) cloneRefTextHint.textContent = data.error || 'Could not auto-transcribe this clip — type it manually.';
+        return;
+      }
+      cloneRefText.value = data.text || '';
+      if (cloneRefTextHint) {
+        cloneRefTextHint.textContent = data.text
+          ? 'Auto-filled from the clip — please check it reads correctly before generating.'
+          : 'Could not make out any speech in the clip — please type it manually.';
+      }
+    } catch (e) {
+      if (cloneRefTextHint) cloneRefTextHint.textContent = 'Network error — type the transcript manually.';
+    } finally {
+      cloneAutoTranscribeBtn.disabled = false;
+      setTimeout(() => {
+        if (cloneRefTextHint) cloneRefTextHint.textContent = originalHint;
+      }, 6000);
+    }
+  }
+
+  if (cloneAutoTranscribeBtn) {
+    cloneAutoTranscribeBtn.addEventListener('click', autoFillRefText);
   }
 
   function openConsentModal() {
