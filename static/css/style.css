@@ -1358,65 +1358,69 @@ body.has-announce-ticker .nav{
 /* Ticker is exempt from reduced-motion (see rule near top of file) —
    it's treated as live content, not a decorative animation, so it
    always keeps scrolling regardless of the visitor's motion preference. */
-/* ================================
-   Featured Badges (LaunchBuff + Product Hunt)
-================================ */
-
-.featured-badges {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin: 32px 0;
-  padding: 0 16px;
+/* ===== Featured / directory badges (footer strip) =====
+   Add more badges by appending another <a class="featured-badges__item">
+   inside .featured-badges__grid — layout auto-fits any count. */
+.featured-badges{
+  max-width:1100px;
+  margin:0 auto;
+  padding:28px 0 8px;
+  border-bottom:1px solid var(--line);
+  text-align:center;
 }
-
-.featured-badges a {
-  display: inline-block;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+.featured-badges__label{
+  display:block;
+  font-family:var(--mono);
+  font-size:0.68rem;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--text-dim);
+  margin-bottom:16px;
 }
-
-.featured-badges a:hover {
-  transform: translateY(-2px);
-  opacity: 0.9;
+.featured-badges__grid{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  align-items:center;
+  gap:14px 18px;
 }
-
-.featured-badges img {
-  height: 54px;
-  width: auto;
-  max-width: 100%;
-  border-radius: 8px;
+.featured-badges__item{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:56px;
+  padding:6px 12px;
+  background:rgba(245,242,234,0.03);
+  border:1px solid var(--line);
+  border-radius:12px;
+  text-decoration:none;
+  transition:border-color .2s ease, transform .2s ease, background .2s ease, box-shadow .2s ease;
 }
-/* ================================
-   Featured Badges (LaunchBuff + Product Hunt)
-================================ */
-
-.featured-badges {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  margin: 32px 0;
-  padding: 0 16px;
+.featured-badges__item:hover{
+  border-color:rgba(232,169,60,0.4);
+  background:rgba(232,169,60,0.06);
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,0.25);
 }
-
-.featured-badges a {
-  display: inline-block;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+.featured-badges__item img{
+  display:block;
+  height:42px;
+  width:auto;
+  max-width:min(220px, 42vw);
+  object-fit:contain;
+  border-radius:6px;
 }
-
-.featured-badges a:hover {
-  transform: translateY(-2px);
-  opacity: 0.9;
-}
-
-.featured-badges img {
-  height: 54px;
-  width: auto;
-  max-width: 100%;
-  border-radius: 8px;
+@media (max-width:560px){
+  .featured-badges{padding:22px 0 4px;}
+  .featured-badges__grid{gap:10px 12px;}
+  .featured-badges__item{
+    height:48px;
+    padding:5px 10px;
+    flex:1 1 calc(50% - 12px);
+    min-width:140px;
+    max-width:220px;
+  }
+  .featured-badges__item img{height:36px;max-width:100%;}
 }
 /* ===== Shared form labels / text inputs (studio + clone + tools) ===== */
 .studio-label{
