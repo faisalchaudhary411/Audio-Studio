@@ -9,69 +9,94 @@
   const generateBtn = document.getElementById('music-generate-btn');
   const status = document.querySelector('[data-music-status]');
   const result = document.getElementById('music-result');
+  const progress = document.getElementById('music-progress');
 
   if (!generateBtn) return; // not on this page (free user / panel absent)
 
-  instrumentalCheck.addEventListener('change', () => {
-    lyricsWrap.style.display = instrumentalCheck.checked ? 'none' : 'block';
-  });
+  function setLoading(on) {
+    generateBtn.disabled = !!on;
+    generateBtn.classList.toggle('is-loading', !!on);
+    if (progress) {
+      progress.classList.toggle('is-active', !!on);
+      progress.setAttribute('aria-hidden', on ? 'false' : 'true');
+    }
+  }
 
-  durationSlider.addEventListener('input', () => {
-    durationLabel.textContent = durationSlider.value;
-  });
+  if (instrumentalCheck && lyricsWrap) {
+    instrumentalCheck.addEventListener('change', () => {
+      lyricsWrap.style.display = instrumentalCheck.checked ? 'none' : 'block';
+    });
+  }
+
+  if (durationSlider && durationLabel) {
+    durationSlider.addEventListener('input', () => {
+      durationLabel.textContent = durationSlider.value;
+    });
+  }
 
   async function pollJob(jobId) {
     const res = await fetch(`/api/music/status/${jobId}`);
     const data = await res.json();
     if (data.status === 'done') {
-      status.textContent = 'Done.';
-      result.innerHTML = `
-        <audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
-        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-           download="voxcraft-track-${Date.now()}.wav" href="data:audio/wav;base64,${data.audio_b64}">Download</a>
-      `;
-      generateBtn.disabled = false;
+      if (status) status.textContent = 'Done.';
+      if (result) {
+        result.innerHTML = `
+          <div class="result-panel">
+            <div class="result-panel__label">Generated track</div>
+            <audio controls src="data:audio/wav;base64,${data.audio_b64}"></audio>
+            <div class="result-panel__actions">
+              <a class="btn btn--ghost btn--sm" download="voxcraft-track-${Date.now()}.wav"
+                 href="data:audio/wav;base64,${data.audio_b64}">Download</a>
+            </div>
+          </div>
+        `;
+      }
+      setLoading(false);
       return;
     }
     if (data.status === 'error') {
-      status.textContent = data.error || 'Generation failed.';
-      generateBtn.disabled = false;
+      if (status) status.textContent = data.error || 'Generation failed.';
+      setLoading(false);
       return;
     }
-    const labels = { queued: 'Queued…', starting: 'Starting…', generating: 'Generating (usually 30-60s)…' };
-    status.textContent = labels[data.status] || data.status;
+    const labels = {
+      queued: 'Queued…',
+      starting: 'Starting…',
+      generating: 'Generating (usually 30–60s)… keep this tab open.',
+    };
+    if (status) status.textContent = labels[data.status] || data.status;
     setTimeout(() => pollJob(jobId), 2500);
   }
 
   generateBtn.addEventListener('click', async () => {
-    if (!tagsInput.value.trim()) {
-      status.textContent = 'Describe the style first (e.g. "lofi, chill, piano").';
+    if (!tagsInput || !tagsInput.value.trim()) {
+      if (status) status.textContent = 'Describe the style first (e.g. "lofi, chill, piano").';
       return;
     }
-    generateBtn.disabled = true;
-    result.innerHTML = '';
-    status.textContent = 'Starting…';
+    setLoading(true);
+    if (result) result.innerHTML = '';
+    if (status) status.textContent = 'Starting…';
     try {
       const res = await fetch('/api/music/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tags: tagsInput.value.trim(),
-          lyrics: lyricsInput.value.trim(),
-          instrumental: instrumentalCheck.checked,
-          duration: parseInt(durationSlider.value, 10),
+          lyrics: lyricsInput && instrumentalCheck && !instrumentalCheck.checked ? lyricsInput.value.trim() : '',
+          duration: durationSlider ? parseInt(durationSlider.value, 10) : 60,
+          instrumental: instrumentalCheck ? !!instrumentalCheck.checked : true,
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        status.textContent = data.error || 'Something went wrong.';
-        generateBtn.disabled = false;
+        if (status) status.textContent = data.error || 'Could not start generation.';
+        setLoading(false);
         return;
       }
       pollJob(data.job_id);
     } catch (e) {
-      status.textContent = 'Network error.';
-      generateBtn.disabled = false;
+      if (status) status.textContent = 'Network error — check your connection.';
+      setLoading(false);
     }
   });
 })();

@@ -133,6 +133,37 @@
   // the same Devanagari line every single generation.
   const savedVoiceRefText = {};
 
+  // Shared with studio / tools: loading spinner + progress bar
+  const cloneProgress = document.getElementById('clone-progress');
+  function setBtnLoading(btn, on) {
+    if (!btn) return;
+    btn.disabled = !!on;
+    btn.classList.toggle('is-loading', !!on);
+  }
+  function setProgress(el, on) {
+    if (!el) return;
+    el.classList.toggle('is-active', !!on);
+    el.setAttribute('aria-hidden', on ? 'false' : 'true');
+  }
+  function bindFileLabel(input) {
+    if (!input || input.dataset.labelBound) return;
+    input.dataset.labelBound = '1';
+    const update = () => {
+      const file = input.files && input.files[0];
+      if (file) {
+        const mb = (file.size / (1024 * 1024)).toFixed(2);
+        input.setAttribute('data-file-label', file.name + ' · ' + mb + ' MB');
+        input.classList.add('has-file');
+      } else {
+        input.removeAttribute('data-file-label');
+        input.classList.remove('has-file');
+      }
+    };
+    input.addEventListener('change', update);
+    update();
+  }
+  if (cloneRefInput) bindFileLabel(cloneRefInput);
+
   async function refreshSavedVoices(selectId) {
     if (!cloneVoiceSelect) return;
     try {
@@ -383,7 +414,8 @@
         cloneStatus.textContent = 'F5-TTS only supports Hindi/Urdu text — switch to Chatterbox for English.';
         return;
       }
-      cloneBtn.disabled = true;
+      setBtnLoading(cloneBtn, true);
+      setProgress(cloneProgress, true);
       cloneResult.innerHTML = '';
       try {
         let referenceId = null;
@@ -398,6 +430,8 @@
             const uploadData = await uploadRes.json();
             if (!uploadRes.ok) {
               cloneStatus.textContent = uploadData.error || 'Upload failed.';
+              setBtnLoading(cloneBtn, false);
+              setProgress(cloneProgress, false);
               return;
             }
             referenceId = uploadData.reference_id;
@@ -418,6 +452,8 @@
         const genData = await genRes.json();
         if (!genRes.ok) {
           cloneStatus.textContent = genData.error || 'Could not start cloning.';
+          setBtnLoading(cloneBtn, false);
+          setProgress(cloneProgress, false);
           return;
         }
 
@@ -434,9 +470,14 @@
         if (result.status === 'done') {
           cloneStatus.textContent = 'Done.';
           cloneResult.innerHTML = `
-            <audio controls style="width:100%;" src="data:audio/wav;base64,${result.audio_b64}"></audio>
-            <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-               download="cloned-voice.wav" href="data:audio/wav;base64,${result.audio_b64}">Download WAV</a>
+            <div class="result-panel">
+              <div class="result-panel__label">Cloned speech</div>
+              <audio controls src="data:audio/wav;base64,${result.audio_b64}"></audio>
+              <div class="result-panel__actions">
+                <a class="btn btn--ghost btn--sm" download="cloned-voice.wav"
+                   href="data:audio/wav;base64,${result.audio_b64}">Download WAV</a>
+              </div>
+            </div>
           `;
         } else {
           cloneStatus.textContent = result.error || 'Generation failed.';
@@ -444,7 +485,8 @@
       } catch (e) {
         cloneStatus.textContent = 'Network error — check your connection.';
       } finally {
-        cloneBtn.disabled = false;
+        setBtnLoading(cloneBtn, false);
+        setProgress(cloneProgress, false);
       }
     });
   }
@@ -469,7 +511,9 @@
         musicStatus.textContent = 'Describe the music you want first.';
         return;
       }
-      musicBtn.disabled = true;
+      setBtnLoading(musicBtn, true);
+      const musicProgress = document.getElementById('music-progress');
+      setProgress(musicProgress, true);
       musicResult.innerHTML = '';
       musicStatus.textContent = 'Starting generation…';
       try {
@@ -485,6 +529,8 @@
         const genData = await genRes.json();
         if (!genRes.ok) {
           musicStatus.textContent = genData.error || 'Could not start generation.';
+          setBtnLoading(musicBtn, false);
+          setProgress(document.getElementById('music-progress'), false);
           return;
         }
 
@@ -496,9 +542,14 @@
         if (result.status === 'done') {
           musicStatus.textContent = 'Done.';
           musicResult.innerHTML = `
-            <audio controls style="width:100%;" src="data:audio/wav;base64,${result.audio_b64}"></audio>
-            <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-               download="generated-music.wav" href="data:audio/wav;base64,${result.audio_b64}">Download</a>
+            <div class="result-panel">
+              <div class="result-panel__label">Generated music</div>
+              <audio controls src="data:audio/wav;base64,${result.audio_b64}"></audio>
+              <div class="result-panel__actions">
+                <a class="btn btn--ghost btn--sm" download="generated-music.wav"
+                   href="data:audio/wav;base64,${result.audio_b64}">Download</a>
+              </div>
+            </div>
           `;
         } else {
           musicStatus.textContent = result.error || 'Generation failed.';
@@ -506,7 +557,8 @@
       } catch (e) {
         musicStatus.textContent = 'Network error — check your connection.';
       } finally {
-        musicBtn.disabled = false;
+        setBtnLoading(musicBtn, false);
+        setProgress(document.getElementById('music-progress'), false);
       }
     });
   }
