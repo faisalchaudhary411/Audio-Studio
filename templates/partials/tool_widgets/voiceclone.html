@@ -37,8 +37,11 @@
 
     <div id="clone-ref-text-row" style="display:none;margin-bottom:12px;">
       <label style="display:block;color:var(--text-dim);font-size:0.75rem;margin-bottom:4px;">What does the reference clip say? (Devanagari)</label>
-      <textarea class="script-input" id="clone-ref-text" placeholder="जो कुछ भी रेफरेंस क्लिप में बोला गया है, वह यहाँ हिंदी में लिखें…" maxlength="300" style="min-height:56px;"></textarea>
-      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;">F5-TTS needs to know what your reference clip says. Without this, it falls back to auto-transcribing the clip, which often mis-detects Hindi/Urdu as English and can turn the whole generation into unintelligible audio. Type the exact line spoken in the clip, in Devanagari — even for Urdu references, since Urdu and Hindi share pronunciation. If you save this clip as a reusable voice below, this text is saved with it — pick that voice again later and it fills in automatically.</span>
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        <textarea class="script-input" id="clone-ref-text" placeholder="जो कुछ भी रेफरेंस क्लिप में बोला गया है, वह यहाँ हिंदी में लिखें…" maxlength="300" style="min-height:56px;flex:1;"></textarea>
+        <button class="btn btn--ghost btn--sm" id="clone-auto-transcribe-btn" type="button" style="white-space:nowrap;" title="Auto-fill from the reference clip using speech recognition">Auto-fill</button>
+      </div>
+      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-ref-text-hint">F5-TTS needs to know what your reference clip says. Upload a clip and this fills in automatically — always double-check it before generating, speech recognition isn't perfect. If you save this clip as a reusable voice below, this text is saved with it too.</span>
     </div>
 
     <textarea class="script-input" id="clone-text" placeholder="اردو، हिंदी، or English…" maxlength="{{ clone_char_limit }}" style="min-height:100px;"></textarea>
