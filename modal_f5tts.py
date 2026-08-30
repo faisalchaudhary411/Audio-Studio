@@ -47,7 +47,7 @@ MAX_RETRIES = 2
 # word). We therefore prepend a short neutral Urdu pause token so the
 # model "spends" the blur on the pause; the real first word arrives after
 # the boundary and survives. Current value is the practical sweet spot.
-F5_CHUNK_LEADING_PAUSE = "۔ "
+F5_CHUNK_LEADING_PAUSE = "۔ ۔ "
 logger = logging.getLogger(__name__)
 
 # Reuse connections across requests for lower latency
@@ -91,7 +91,7 @@ def _hard_wrap(text: str, max_chars: int) -> list:
     return pieces
 
 
-def _split_into_chunks(text: str, max_chars: int = 95) -> list:
+def _split_into_chunks(text: str, max_chars: int = 85) -> list:
     """Split on sentence terminators first (Latin + Devanagari/Urdu danda,
     Hindi/Urdu question mark), then on commas, then hard-wrap anything that
     is still too long. A Hindi/Urdu paragraph with no '.', '!', '?', '।',
@@ -218,7 +218,7 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     if not F5TTS_ENDPOINT_URL:
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
-    chunks = _split_into_chunks(text, max_chars=95)
+    chunks = _split_into_chunks(text, max_chars=85)
 
     # F5's duration estimate (see infer_process's max_chars formula) is
     # least reliable on very short chunks — this is what showed up as
@@ -227,13 +227,13 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     # gives the model the least context to establish natural onset timing.
     # Merging any undersized chunk into its neighbor (while staying under
     # max_chars) trades a little extra chunk length for a steadier onset.
-    MIN_CHUNK_CHARS = 35
+    MIN_CHUNK_CHARS = 40
     merged_chunks = []
     for c in chunks:
         if (
             merged_chunks
             and len(merged_chunks[-1]) < MIN_CHUNK_CHARS
-            and len(merged_chunks[-1]) + len(c) + 1 <= 110
+            and len(merged_chunks[-1]) + len(c) + 1 <= 95
         ):
             merged_chunks[-1] = f"{merged_chunks[-1]} {c}"
         else:
@@ -309,7 +309,21 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     combined = AudioSegment.empty()
     for b in audio_segments:
         seg = AudioSegment.from_file(io.BytesIO(b), format="wav")
-        combined = combined.append(seg, crossfade=80) if len(combined) > 0 else seg
+        combined = combined.append(seg, crossfade=100) if len(combined) > 0 else seg
+
+    # Light compression of excessively long internal silences only.
+    # Keeps natural short pauses, removes the long dead gaps that appear
+    # between poorly-generated chunks.
+    from pydub.silence import detect_nonsilent
+    nonsilent = detect_nonsilent(combined, min_silence_len=450, silence_thresh=-42)
+    if nonsilent:
+        cleaned = AudioSegment.empty()
+        for i, (start, end) in enumerate(nonsilent):
+            cleaned += combined[start:end]
+            if i < len(nonsilent) - 1:
+                # keep a short natural pause (180 ms) between speech regions
+                cleaned += AudioSegment.silent(duration=180)
+        combined = cleaned
 
     out_buf = io.BytesIO()
     combined.export(out_buf, format="wav")
