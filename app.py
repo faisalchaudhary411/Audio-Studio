@@ -3017,6 +3017,7 @@ def api_clone_voice_save():
     reference_id = data.get("reference_id")
     name = (data.get("name") or "").strip()
     consent = data.get("consent") is True
+    ref_text = (data.get("ref_text") or "").strip()[:300]
 
     if not reference_id:
         return jsonify({"error": "Upload a reference clip first."}), 400
@@ -3045,6 +3046,7 @@ def api_clone_voice_save():
         "name": name[:80],
         "filename": dest_filename,
         "created_at": now_iso,
+        "ref_text": ref_text,
     })
 
     # Permanent, never-pruned evidence trail — kept even if the voice is
@@ -3074,7 +3076,12 @@ def api_clone_voices_list():
     voices = persistence.load_voices_for_license(license_key)
     return jsonify({
         "voices": [
-            {"id": v["id"], "name": v.get("name", "Untitled voice"), "created_at": v.get("created_at", "")}
+            {
+                "id": v["id"],
+                "name": v.get("name", "Untitled voice"),
+                "created_at": v.get("created_at", ""),
+                "ref_text": v.get("ref_text", ""),
+            }
             for v in voices
         ]
     })
@@ -3146,6 +3153,12 @@ def api_clone_generate():
         language_id = "en"
 
     ref_text = (data.get("ref_text") or "").strip()
+    # If the caller didn't type one this time but the saved voice already
+    # has a ref_text attached from when it was saved, reuse it — this is
+    # what makes ref_text "cached" per voice instead of needing retyping
+    # on every generation.
+    if not ref_text and saved_voice_id:
+        ref_text = (voice.get("ref_text") or "").strip()
 
     try:
         job_id = start_clone_job(

@@ -206,6 +206,27 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
     chunks = _split_into_chunks(text, max_chars=80)
+
+    # F5's duration estimate (see infer_process's max_chars formula) is
+    # least reliable on very short chunks — this is what showed up as
+    # word-initial clipping ("آج" -> "आ") once the 80-char split above
+    # started producing more, shorter chunks. A short chunk sitting alone
+    # gives the model the least context to establish natural onset timing.
+    # Merging any undersized chunk into its neighbor (while staying under
+    # max_chars) trades a little extra chunk length for a steadier onset.
+    MIN_CHUNK_CHARS = 25
+    merged_chunks = []
+    for c in chunks:
+        if (
+            merged_chunks
+            and len(merged_chunks[-1]) < MIN_CHUNK_CHARS
+            and len(merged_chunks[-1]) + len(c) + 1 <= 100
+        ):
+            merged_chunks[-1] = f"{merged_chunks[-1]} {c}"
+        else:
+            merged_chunks.append(c)
+    chunks = merged_chunks
+
     if not chunks:
         return {"success": False, "error": "No text to generate."}
 
