@@ -133,8 +133,8 @@ class F5TTSWorker:
             # - nfe_step=48 gives better detail than default 32 (still practical)
             # - cfg_strength=2.0 is the proven sweet spot for naturalness
             # - sway_sampling_coef=-1.0 is the library-recommended value
-            # - remove_silence=False is critical: library silence removal
-            #   often eats the first phonemes of the generated content
+            # Note: do NOT pass remove_silence — older f5-tts builds reject it.
+            # We already protect the onset with leading pause + careful trailing trim.
             wav_out, sr, _ = await asyncio.to_thread(
                 infer_process,
                 ref_audio_path,
@@ -147,7 +147,6 @@ class F5TTSWorker:
                 cfg_strength=2.0,
                 sway_sampling_coef=-1.0,
                 speed=1.0,
-                remove_silence=False,
                 device=self.device,
             )
 
