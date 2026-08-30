@@ -3112,6 +3112,54 @@ def api_clone_voice_delete(voice_id):
     return jsonify({"deleted": deleted})
 
 
+@app.route("/api/clone/reference/transcribe", methods=["POST"])
+def api_clone_reference_transcribe():
+    """Auto-fill the F5-TTS ref_text box by running the reference clip
+    through the same ASR already used by the standalone Transcribe tool
+    (audio_tools.transcribe), forced to hi-IN. This is intentionally NOT
+    routed through Whisper or through language=None auto-detect — both of
+    those are what mis-detected Hindi/Urdu as English in the original
+    "voice-shaped noise" bug. Forcing hi-IN makes Google's ASR return
+    Devanagari directly, which is exactly what F5's ref_text needs.
+
+    This is a convenience default, not a source of truth — Google's ASR
+    still makes ordinary mistakes (named entities, homophones), so the
+    result is always returned as an editable pre-fill, never auto-submitted
+    for generation without the option to review it.
+    """
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+
+    data = request.get_json(force=True) or {}
+    reference_id = data.get("reference_id")
+    saved_voice_id = data.get("saved_voice_id")
+    if not reference_id and not saved_voice_id:
+        return jsonify({"error": "No reference clip specified."}), 400
+
+    if saved_voice_id:
+        license_key = session.get("license_key")
+        voice = persistence.get_voice(saved_voice_id)
+        if not voice or voice.get("license_key") != license_key:
+            return jsonify({"error": "Saved voice not found."}), 404
+        path = os.path.join(VOICE_REFS_DIR, voice["filename"])
+        filename = voice["filename"]
+    else:
+        path = os.path.join(CLONE_UPLOAD_DIR, reference_id)
+        filename = reference_id
+
+    if not os.path.exists(path):
+        return jsonify({"error": "Reference clip not found — try re-uploading it."}), 404
+
+    try:
+        with open(path, "rb") as f:
+            file_bytes = f.read()
+        result = audio_tools.transcribe(file_bytes, filename, "hi-IN")
+    except Exception as e:
+        return jsonify({"error": f"Could not auto-transcribe this clip: {str(e)[:200]}"}), 502
+
+    return jsonify({"text": result["text"]})
+
+
 @app.route("/api/clone/generate", methods=["POST"])
 def api_clone_generate():
     if not has_clone_and_music():

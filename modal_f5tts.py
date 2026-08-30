@@ -38,6 +38,19 @@ MAX_PARALLEL_WORKERS = 3
 
 MAX_RETRIES = 2
 
+# EXPERIMENTAL — not verified against a live F5 worker (no GPU access in
+# dev). Faisal's listening tests across two separate scripts both showed
+# the FIRST word of MULTIPLE different sentences getting clipped ("السلام
+# علیکم"->"علیکم", "آج صبح"->"صبح", "میں نے ایک کپ"->"ایک کپ") — not just
+# the first sentence of the whole generation. Since every chunk is sent to
+# F5 as its own independent infer_process call (see the loop below), this
+# pattern means the onset-clipping is a per-chunk artifact, not a one-time
+# "cold start" of the whole job — it should reproduce at the start of every
+# chunk. Giving the model a short leading pause before the real content
+# starts is a documented F5-TTS community workaround for this. Set to ""
+# to disable if it doesn't help or makes pacing worse.
+F5_CHUNK_LEADING_PAUSE = "، "
+
 logger = logging.getLogger(__name__)
 
 # Reuse connections across requests for lower latency
@@ -148,7 +161,7 @@ def _process_f5tts_chunk(chunk_tuple):
     """Single attempt — no retry here, retry wrapper handles that."""
     index, chunk_text, ref_b64, ref_text, url = chunk_tuple
     payload = {
-        "chunk_text": chunk_text,
+        "chunk_text": f"{F5_CHUNK_LEADING_PAUSE}{chunk_text}" if F5_CHUNK_LEADING_PAUSE else chunk_text,
         "reference_audio_b64": ref_b64,
         "ref_text": ref_text,
     }
