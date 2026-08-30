@@ -39,17 +39,31 @@ MAX_PARALLEL_WORKERS = 3
 MAX_RETRIES = 2
 
 # EXPERIMENTAL — not verified against a live F5 worker (no GPU access in
-# dev). Faisal's listening tests across two separate scripts both showed
+# dev). Faisal's listening tests across three separate scripts all showed
 # the FIRST word of MULTIPLE different sentences getting clipped ("السلام
 # علیکم"->"علیکم", "آج صبح"->"صبح", "میں نے ایک کپ"->"ایک کپ") — not just
 # the first sentence of the whole generation. Since every chunk is sent to
 # F5 as its own independent infer_process call (see the loop below), this
 # pattern means the onset-clipping is a per-chunk artifact, not a one-time
 # "cold start" of the whole job — it should reproduce at the start of every
-# chunk. Giving the model a short leading pause before the real content
-# starts is a documented F5-TTS community workaround for this. Set to ""
-# to disable if it doesn't help or makes pacing worse.
-F5_CHUNK_LEADING_PAUSE = "، "
+# chunk.
+#
+# Root cause (found in f5-tts's own infer_batch_process, not this repo):
+# it crops the generated mel with `generated[:, ref_audio_len:, :]` — a
+# crop point based purely on the reference audio's raw duration, with no
+# guarantee the model actually finishes "reproducing the reference" and
+# starts "producing new content" at exactly that frame. Any transition
+# blur right at that boundary eats into whatever comes right after it —
+# your real first word, or a buffer we put there on purpose.
+#
+# A single leading comma ("، ") was tried first and did NOT fully protect
+# the first word (whole words were still lost, not just softened) — either
+# the buffer was too short for however much blur exists, or this fix
+# hadn't been deployed yet when that test ran. Bumped to a slightly longer
+# buffer ("۔ ۔ ") as the next experiment. Tune by ear — there's no way to
+# calculate the "right" length without listening to real output on GPU.
+# Set to "" to disable entirely if it isn't helping.
+F5_CHUNK_LEADING_PAUSE = "۔ ۔ "
 
 logger = logging.getLogger(__name__)
 
