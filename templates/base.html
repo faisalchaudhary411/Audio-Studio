@@ -165,39 +165,42 @@
     </div>
     <a href="{{ url_for('studio') }}" class="btn btn--brass">Open Voice Studio</a>
   </div>
-<div class="featured-badges">
-  <!-- LaunchBuff Badge -->
-  <a href="https://launchbuff.com/products/voxcraft-text-to-voice-crafted-2iugyx" 
-     target="_blank" 
-     rel="noopener noreferrer" 
-     title="Featured on LaunchBuff">
-    <img 
-      src="https://launchbuff.com/badge-featured-dark.svg" 
-      alt="Featured on LaunchBuff" 
-      width="200" 
-      height="62"
-    />
-  </a>
 
-  <!-- Product Hunt Review Badge -->
-  <a href="https://www.producthunt.com/products/voxcraft-text-to-voice-crafted/reviews/new?utm_source=badge-product_review&utm_medium=badge&utm_source=badge-voxcraft-text-to-voice-crafted" 
-     target="_blank" 
-     rel="noopener noreferrer">
-    <img 
-      src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1303147&theme=dark" 
-      alt="Leave a review on Product Hunt" 
-      width="250" 
-      height="54"
-    />
-  </a>
-</div>
-<a href="https://launchnest.io/p/voxcraft" target="_blank" rel="noopener noreferrer">
-  <img src="https://launchnest.io/badge/voxcraft.svg?variant=listed"
-       alt="Voxcraft on LaunchNest"
-       width="220"
-       height="56"
-       loading="lazy" />
-</a>
+  {# Featured / directory badges — add new <a class="featured-badges__item">…</a>
+     children only; the grid auto-aligns any count. #}
+  <div class="featured-badges" aria-label="Featured on">
+    <span class="featured-badges__label">As featured on</span>
+    <div class="featured-badges__grid">
+      <a class="featured-badges__item"
+         href="https://launchbuff.com/products/voxcraft-text-to-voice-crafted-2iugyx"
+         target="_blank"
+         rel="noopener noreferrer"
+         title="Featured on LaunchBuff">
+        <img src="https://launchbuff.com/badge-featured-dark.svg"
+             alt="Featured on LaunchBuff"
+             width="200" height="54" loading="lazy" decoding="async">
+      </a>
+      <a class="featured-badges__item"
+         href="https://www.producthunt.com/products/voxcraft-text-to-voice-crafted/reviews/new?utm_source=badge-product_review&amp;utm_medium=badge&amp;utm_source=badge-voxcraft-text-to-voice-crafted"
+         target="_blank"
+         rel="noopener noreferrer"
+         title="Product Hunt">
+        <img src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1303147&amp;theme=dark"
+             alt="Leave a review on Product Hunt"
+             width="250" height="54" loading="lazy" decoding="async">
+      </a>
+      <a class="featured-badges__item"
+         href="https://launchnest.io/p/voxcraft"
+         target="_blank"
+         rel="noopener noreferrer"
+         title="LaunchNest">
+        <img src="https://launchnest.io/badge/voxcraft.svg?variant=listed"
+             alt="VoxCraft on LaunchNest"
+             width="220" height="54" loading="lazy" decoding="async">
+      </a>
+    </div>
+  </div>
+
   <div class="footer__top">
     <div class="footer__brand-col">
       <a href="{{ url_for('landing') }}" class="footer__brand">
