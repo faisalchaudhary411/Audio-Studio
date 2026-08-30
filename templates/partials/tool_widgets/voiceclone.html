@@ -35,6 +35,12 @@
       <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-engine-hint"></span>
     </div>
 
+    <div id="clone-ref-text-row" style="display:none;margin-bottom:12px;">
+      <label style="display:block;color:var(--text-dim);font-size:0.75rem;margin-bottom:4px;">What does the reference clip say? (Devanagari)</label>
+      <textarea class="script-input" id="clone-ref-text" placeholder="जो कुछ भी रेफरेंस क्लिप में बोला गया है, वह यहाँ हिंदी में लिखें…" maxlength="300" style="min-height:56px;"></textarea>
+      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;">F5-TTS needs to know what your reference clip says. Without this, it falls back to auto-transcribing the clip, which often mis-detects Hindi/Urdu as English and can turn the whole generation into unintelligible audio. Type the exact line spoken in the clip, in Devanagari — even for Urdu references, since Urdu and Hindi share pronunciation.</span>
+    </div>
+
     <textarea class="script-input" id="clone-text" placeholder="اردو، हिंदी، or English…" maxlength="{{ clone_char_limit }}" style="min-height:100px;"></textarea>
     <div style="display:flex;justify-content:space-between;margin-top:4px;flex-wrap:wrap;gap:4px;">
       <span style="color:var(--jade-hi);font-size:0.75rem;" id="clone-lang-detect"></span>
