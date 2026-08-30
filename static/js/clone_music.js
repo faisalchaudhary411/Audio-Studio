@@ -115,6 +115,10 @@
   // the file currently sitting in cloneRefInput, so "Save this voice" and
   // "Clone & generate" don't each upload the same clip separately.
   let pendingReferenceId = null;
+  // voice_id -> ref_text, populated from /api/clone/voices so picking a
+  // saved voice can auto-fill the box instead of making the user retype
+  // the same Devanagari line every single generation.
+  const savedVoiceRefText = {};
 
   async function refreshSavedVoices(selectId) {
     if (!cloneVoiceSelect) return;
@@ -129,6 +133,7 @@
         opt.value = v.id;
         opt.textContent = v.name;
         cloneVoiceSelect.appendChild(opt);
+        savedVoiceRefText[v.id] = v.ref_text || '';
       });
       if (selectId) cloneVoiceSelect.value = selectId;
     } catch (e) {
@@ -147,6 +152,11 @@
       cloneUploadRow.style.display = usingSavedVoice() ? 'none' : '';
       if (cloneDeleteBtn) cloneDeleteBtn.style.display = usingSavedVoice() ? '' : 'none';
       cloneStatus.textContent = '';
+      // Auto-fill the cached ref_text for this saved voice, if it has one —
+      // still editable in case the saved transcript needs a correction.
+      if (cloneRefText && usingSavedVoice()) {
+        cloneRefText.value = savedVoiceRefText[cloneVoiceSelect.value] || '';
+      }
     });
   }
 
@@ -249,7 +259,12 @@
         const res = await fetch('/api/clone/voices/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reference_id: pendingReferenceId, name, consent: true }),
+          body: JSON.stringify({
+            reference_id: pendingReferenceId,
+            name,
+            consent: true,
+            ref_text: cloneRefText ? cloneRefText.value.trim() : '',
+          }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -258,6 +273,7 @@
           return;
         }
         closeConsentModal();
+        savedVoiceRefText[data.id] = cloneRefText ? cloneRefText.value.trim() : '';
         await refreshSavedVoices(data.id);
         cloneUploadRow.style.display = 'none';
         if (cloneDeleteBtn) cloneDeleteBtn.style.display = '';
