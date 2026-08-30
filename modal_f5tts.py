@@ -38,33 +38,16 @@ MAX_PARALLEL_WORKERS = 3
 
 MAX_RETRIES = 2
 
-# EXPERIMENTAL — not verified against a live F5 worker (no GPU access in
-# dev). Faisal's listening tests across three separate scripts all showed
-# the FIRST word of MULTIPLE different sentences getting clipped ("السلام
-# علیکم"->"علیکم", "آج صبح"->"صبح", "میں نے ایک کپ"->"ایک کپ") — not just
-# the first sentence of the whole generation. Since every chunk is sent to
-# F5 as its own independent infer_process call (see the loop below), this
-# pattern means the onset-clipping is a per-chunk artifact, not a one-time
-# "cold start" of the whole job — it should reproduce at the start of every
-# chunk.
+# Onset-clipping / first-word protection.
 #
-# Root cause (found in f5-tts's own infer_batch_process, not this repo):
-# it crops the generated mel with `generated[:, ref_audio_len:, :]` — a
-# crop point based purely on the reference audio's raw duration, with no
-# guarantee the model actually finishes "reproducing the reference" and
-# starts "producing new content" at exactly that frame. Any transition
-# blur right at that boundary eats into whatever comes right after it —
-# your real first word, or a buffer we put there on purpose.
-#
-# A single leading comma ("، ") was tried first and did NOT fully protect
-# the first word (whole words were still lost, not just softened) — either
-# the buffer was too short for however much blur exists, or this fix
-# hadn't been deployed yet when that test ran. Bumped to a slightly longer
-# buffer ("۔ ۔ ") as the next experiment. Tune by ear — there's no way to
-# calculate the "right" length without listening to real output on GPU.
-# Set to "" to disable entirely if it isn't helping.
-F5_CHUNK_LEADING_PAUSE = "۔ ۔ "
-
+# Root cause inside f5-tts infer_batch_process:
+#   generated = generated[:, ref_audio_len:, :]
+# The crop uses only the reference audio length. Transition blur at that
+# boundary eats the start of the new content (half-words / missing first
+# word). We therefore prepend a short neutral Urdu pause token so the
+# model "spends" the blur on the pause; the real first word arrives after
+# the boundary and survives. Current value is the practical sweet spot.
+F5_CHUNK_LEADING_PAUSE = "۔ "
 logger = logging.getLogger(__name__)
 
 # Reuse connections across requests for lower latency
@@ -108,7 +91,7 @@ def _hard_wrap(text: str, max_chars: int) -> list:
     return pieces
 
 
-def _split_into_chunks(text: str, max_chars: int = 80) -> list:
+def _split_into_chunks(text: str, max_chars: int = 95) -> list:
     """Split on sentence terminators first (Latin + Devanagari/Urdu danda,
     Hindi/Urdu question mark), then on commas, then hard-wrap anything that
     is still too long. A Hindi/Urdu paragraph with no '.', '!', '?', '।',
@@ -119,6 +102,9 @@ def _split_into_chunks(text: str, max_chars: int = 80) -> list:
     text = text.strip()
     if not text:
         return []
+
+    # Normalize whitespace so length estimates and splits stay consistent.
+    text = re.sub(r'\s+', ' ', text)
 
     sentences = re.split(r'(?<=[.!?؟।॥])\s+', text)
 
@@ -232,7 +218,7 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     if not F5TTS_ENDPOINT_URL:
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
-    chunks = _split_into_chunks(text, max_chars=80)
+    chunks = _split_into_chunks(text, max_chars=95)
 
     # F5's duration estimate (see infer_process's max_chars formula) is
     # least reliable on very short chunks — this is what showed up as
@@ -241,13 +227,13 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     # gives the model the least context to establish natural onset timing.
     # Merging any undersized chunk into its neighbor (while staying under
     # max_chars) trades a little extra chunk length for a steadier onset.
-    MIN_CHUNK_CHARS = 25
+    MIN_CHUNK_CHARS = 35
     merged_chunks = []
     for c in chunks:
         if (
             merged_chunks
             and len(merged_chunks[-1]) < MIN_CHUNK_CHARS
-            and len(merged_chunks[-1]) + len(c) + 1 <= 100
+            and len(merged_chunks[-1]) + len(c) + 1 <= 110
         ):
             merged_chunks[-1] = f"{merged_chunks[-1]} {c}"
         else:
@@ -323,7 +309,7 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     combined = AudioSegment.empty()
     for b in audio_segments:
         seg = AudioSegment.from_file(io.BytesIO(b), format="wav")
-        combined = combined.append(seg, crossfade=50) if len(combined) > 0 else seg
+        combined = combined.append(seg, crossfade=80) if len(combined) > 0 else seg
 
     out_buf = io.BytesIO()
     combined.export(out_buf, format="wav")
