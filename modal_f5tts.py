@@ -58,19 +58,89 @@ def _is_valid_wav(data: bytes) -> bool:
     return True
 
 
-def _split_into_chunks(text: str, max_chars: int = 120) -> list:
-    sentences = re.split(r'(?<=[.!?؟।॥])\s+', text.strip())
+def _hard_wrap(text: str, max_chars: int) -> list:
+    """Last-resort split for a run with no usable punctuation at all —
+    break on whitespace near max_chars so no single chunk ever exceeds it.
+    F5's own duration heuristic (ref_len + ref_len/ref_bytes * gen_bytes)
+    degrades badly past ~80 chars of unbroken input, so this must never be
+    skipped just because the text lacks periods or dandas."""
+    words = text.split()
+    if not words:
+        return []
+    pieces = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if len(candidate) <= max_chars or not current:
+            current = candidate
+        else:
+            pieces.append(current)
+            current = word
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def _split_into_chunks(text: str, max_chars: int = 80) -> list:
+    """Split on sentence terminators first (Latin + Devanagari/Urdu danda,
+    Hindi/Urdu question mark), then on commas, then hard-wrap anything that
+    is still too long. A Hindi/Urdu paragraph with no '.', '!', '?', '।',
+    or '॥' used to come back as a single oversized sentence and get pushed
+    into infer_process whole — F5 falls apart well past 80 characters of
+    unbroken input, which is what produced long runs of unintelligible
+    "voice-shaped" audio with no stitch/crossfade seams in it."""
+    text = text.strip()
+    if not text:
+        return []
+
+    sentences = re.split(r'(?<=[.!?؟।॥])\s+', text)
+
     chunks = []
     current = ""
+
+    def flush():
+        nonlocal current
+        if current.strip():
+            chunks.append(current.strip())
+        current = ""
+
     for sentence in sentences:
-        if len(current) + len(sentence) <= max_chars:
-            current += " " + sentence if current else sentence
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+
+        if len(sentence) > max_chars:
+            # This "sentence" has no terminator inside it (or is one huge
+            # run) — flush what we have, then break IT down further
+            # instead of ever handing infer_process something this long.
+            flush()
+            sub_pieces = re.split(r'(?<=[,،])\s+', sentence)
+            sub_current = ""
+            for piece in sub_pieces:
+                piece = piece.strip()
+                if not piece:
+                    continue
+                if len(piece) > max_chars:
+                    if sub_current:
+                        chunks.append(sub_current.strip())
+                        sub_current = ""
+                    chunks.extend(_hard_wrap(piece, max_chars))
+                elif len(sub_current) + len(piece) + 1 <= max_chars:
+                    sub_current = f"{sub_current} {piece}".strip()
+                else:
+                    chunks.append(sub_current.strip())
+                    sub_current = piece
+            if sub_current:
+                chunks.append(sub_current.strip())
+            continue
+
+        if len(current) + len(sentence) + 1 <= max_chars:
+            current = f"{current} {sentence}".strip()
         else:
-            if current:
-                chunks.append(current.strip())
+            flush()
             current = sentence
-    if current:
-        chunks.append(current.strip())
+
+    flush()
     return [c for c in chunks if c.strip()]
 
 
@@ -135,7 +205,7 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     if not F5TTS_ENDPOINT_URL:
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
-    chunks = _split_into_chunks(text, max_chars=120)
+    chunks = _split_into_chunks(text, max_chars=80)
     if not chunks:
         return {"success": False, "error": "No text to generate."}
 
