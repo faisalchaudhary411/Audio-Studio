@@ -146,7 +146,7 @@ class F5TTSWorker:
                 nfe_step=48,
                 cfg_strength=2.0,
                 sway_sampling_coef=-1.0,
-                speed=1.0,
+                speed=0.95,
                 device=self.device,
             )
 
