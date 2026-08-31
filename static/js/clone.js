@@ -34,7 +34,11 @@
     const data = await res.json();
     if (data.status === 'done') {
       cloneStatus.textContent = 'Done.';
-      cloneResult.innerHTML = `<audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>`;
+      const ts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
+      const fname = `VoxCraft-Clone-${ts}.wav`;
+      cloneResult.innerHTML = `<audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
+        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
+           download="${fname}" href="data:audio/wav;base64,${data.audio_b64}">Download WAV</a>`;
       generateBtn.disabled = false;
       return;
     }
