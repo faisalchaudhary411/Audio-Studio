@@ -91,7 +91,7 @@ def _hard_wrap(text: str, max_chars: int) -> list:
     return pieces
 
 
-def _split_into_chunks(text: str, max_chars: int = 70) -> list:
+def _split_into_chunks(text: str, max_chars: int = 55) -> list:
     """Split on sentence terminators first (Latin + Devanagari/Urdu danda,
     Hindi/Urdu question mark), then on commas, then hard-wrap anything that
     is still too long. A Hindi/Urdu paragraph with no '.', '!', '?', '।',
@@ -104,9 +104,9 @@ def _split_into_chunks(text: str, max_chars: int = 70) -> list:
         return []
 
     # Normalize whitespace so length estimates and splits stay consistent.
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'[ \t]+', ' ', text)  # keep newlines for paragraph splits
 
-    sentences = re.split(r'(?<=[.!?؟।॥])\s+', text)
+    sentences = re.split(r'(?<=[.!?؟۔।॥])\s+|\n+', text)
 
     chunks = []
     current = ""
@@ -218,7 +218,7 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     if not F5TTS_ENDPOINT_URL:
         return {"success": False, "error": "F5-TTS Endpoint URL is not configured."}
 
-    chunks = _split_into_chunks(text, max_chars=70)
+    chunks = _split_into_chunks(text, max_chars=55)
 
     # F5's duration estimate (see infer_process's max_chars formula) is
     # least reliable on very short chunks — this is what showed up as
@@ -227,13 +227,13 @@ def generate_long_audio(text: str, reference_audio_b64: str, ref_text: str = "")
     # gives the model the least context to establish natural onset timing.
     # Merging any undersized chunk into its neighbor (while staying under
     # max_chars) trades a little extra chunk length for a steadier onset.
-    MIN_CHUNK_CHARS = 30
+    MIN_CHUNK_CHARS = 22
     merged_chunks = []
     for c in chunks:
         if (
             merged_chunks
             and len(merged_chunks[-1]) < MIN_CHUNK_CHARS
-            and len(merged_chunks[-1]) + len(c) + 1 <= 80
+            and len(merged_chunks[-1]) + len(c) + 1 <= 60
         ):
             merged_chunks[-1] = f"{merged_chunks[-1]} {c}"
         else:
