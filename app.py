@@ -2567,37 +2567,6 @@ def tool_page(slug):
                             lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
 
 
-def _public_tool_error(exc: Exception) -> tuple:
-    """Map internal exceptions to user-safe messages — never leak paths,
-    stack traces, ffmpeg stderr, library names, or server layout."""
-    msg = str(exc or "").strip()
-    # Intentional user-facing messages raised by audio_tools (size limits,
-    # format validation, readable upload failures) are already safe.
-    safe_prefixes = (
-        "File is ",
-        "Upload at least",
-        "Could not read",
-        "Could not understand",
-        "Could not encode",
-        "Speech recognition",
-        "Audio extraction",
-        "Extraction timed",
-        "Output format must",
-        "Unknown effect",
-        "No file",
-        "Add at least",
-        "Free daily",
-    )
-    if any(msg.startswith(p) for p in safe_prefixes):
-        return msg, 400 if "limit" not in msg.lower() else 402
-    # Everything else: generic copy + log the real detail server-side.
-    try:
-        app.logger.exception("Tool error: %s", msg)
-    except Exception:
-        pass
-    return "Something went wrong processing this file. Please try again with a different file.", 500
-
-
 @app.route("/api/tools/transcribe", methods=["POST"])
 def api_transcribe():
     lim = get_limits()
@@ -2612,8 +2581,7 @@ def api_transcribe():
         _bump_counter("usage_transcribe")
         return jsonify(result)
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/convert", methods=["POST"])
@@ -2623,21 +2591,17 @@ def api_convert():
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
-    try:
-        quality = int(request.form.get("quality", 192))
-    except (TypeError, ValueError):
-        quality = 192
+    quality = int(request.form.get("quality", 192))
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
         out_bytes = audio_tools.convert(file.read(), file.filename, output_format, quality)
         _bump_counter("usage_convert")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"converted-{int(time.time())}.{output_format}",
+                         "filename": f"VoxCraft-Converted-{int(time.time())}.{output_format}",
                          "format": output_format})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/merge", methods=["POST"])
@@ -2655,11 +2619,10 @@ def api_merge():
         out_bytes = audio_tools.merge(pairs, gap_ms, output_format)
         _bump_counter("usage_merge")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"merged-{int(time.time())}.{output_format}",
+                         "filename": f"VoxCraft-Merged-{int(time.time())}.{output_format}",
                          "format": output_format})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/cutter/duration", methods=["POST"])
@@ -2672,8 +2635,7 @@ def api_cutter_duration():
         duration = audio_tools.get_duration_sec(data, file.filename)
         return jsonify({"duration_sec": duration})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/cutter/trim", methods=["POST"])
@@ -2690,10 +2652,9 @@ def api_cutter_trim():
         out_bytes = audio_tools.trim(file.read(), file.filename, start_sec, end_sec)
         _bump_counter("usage_cutter")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"trimmed-{int(time.time())}.mp3"})
+                         "filename": f"VoxCraft-Trimmed-{int(time.time())}.mp3"})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/cutter/split", methods=["POST"])
@@ -2711,11 +2672,10 @@ def api_cutter_split():
         return jsonify({
             "part1_b64": base64.b64encode(part1).decode("ascii"),
             "part2_b64": base64.b64encode(part2).decode("ascii"),
-            "filename_base": f"part-{int(time.time())}",
+            "filename_base": f"VoxCraft-Part-{int(time.time())}",
         })
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/denoise", methods=["POST"])
@@ -2731,10 +2691,9 @@ def api_denoise():
         out_bytes = audio_tools.denoise(file.read(), file.filename, strength)
         _bump_counter("usage_denoise")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"denoised-{int(time.time())}.mp3"})
+                         "filename": f"VoxCraft-Denoised-{int(time.time())}.mp3"})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/voicechange", methods=["POST"])
@@ -2758,10 +2717,9 @@ def api_voicechange():
         out_bytes = audio_tools.voice_change(file.read(), file.filename, effect, **params)
         _bump_counter("usage_voicechange")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"voicechange-{effect}-{int(time.time())}.mp3"})
+                         "filename": f"VoxCraft-VoiceChange-{effect}-{int(time.time())}.mp3"})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tools/videoxtract", methods=["POST"])
@@ -2771,21 +2729,17 @@ def api_videoxtract():
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
-    try:
-        quality = int(request.form.get("quality", 192))
-    except (TypeError, ValueError):
-        quality = 192
+    quality = int(request.form.get("quality", 192))
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
         out_bytes = audio_tools.video_to_audio(file.read(), file.filename, output_format, quality)
         _bump_counter("usage_videoxtract")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"extracted-{int(time.time())}.{output_format}",
+                         "filename": f"VoxCraft-Extracted-{int(time.time())}.{output_format}",
                          "format": output_format, "size_kb": round(len(out_bytes) / 1024, 1)})
     except Exception as e:
-        msg, code = _public_tool_error(e)
-        return jsonify({"error": msg}), code
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/tts/preview", methods=["POST"])
@@ -2810,7 +2764,7 @@ def api_preview():
         return jsonify({"error": f"Preview error: {str(e)}"}), 500
 
     _bump_counter("usage_previews")
-    return send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="preview.mp3")
+    return send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="VoxCraft-Preview.mp3")
 
 
 @app.route("/api/tts/generate", methods=["POST"])
@@ -2849,7 +2803,7 @@ def api_generate():
     _bump_monthly_chars(len(text))
 
     timestamp = int(time.time())
-    filename = f"tts-{timestamp}.mp3"
+    filename = f"VoxCraft-TTS-{timestamp}.mp3"
     return jsonify({
         "audio_b64": base64.b64encode(audio).decode("ascii"),
         "filename": filename,
@@ -2890,7 +2844,7 @@ def api_batch():
     for idx, line in enumerate(lines):
         try:
             audio = tts_dispatch(apply_pronunciation_dict(line, pron_dict), voice_id, rate=rate_str, speed_pct=speed_pct)
-            fname = f"tts-batch-{idx + 1:02d}-{timestamp_base}.mp3"
+            fname = f"VoxCraft-TTS-{idx + 1:02d}-{timestamp_base}.mp3"
             results.append({"idx": idx + 1, "text": line, "filename": fname, "audio": audio})
             _bump_monthly_chars(len(line))  # only bump for lines that actually succeeded
         except Exception as e:
@@ -2914,7 +2868,7 @@ def api_batch():
             for r in results
         ],
         "zip_b64": base64.b64encode(zip_buf.getvalue()).decode("ascii"),
-        "zip_filename": f"tts-batch-{timestamp_base}.zip",
+        "zip_filename": f"VoxCraft-TTS-Batch-{timestamp_base}.zip",
         "errors": errors,
     })
 
@@ -3011,7 +2965,7 @@ def api_v1_tts():
     api_keys.bump_usage(record["key_hash"], len(text))
     usage_after = api_keys.get_usage(record["key_hash"])
 
-    resp = send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="speech.mp3")
+    resp = send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="VoxCraft-Speech.mp3")
     # Standard-shaped rate-limit headers — not enforced here (quota is
     # already enforced above), just informational so a developer's own
     # client code can proactively back off before hitting 429.
