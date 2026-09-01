@@ -47,7 +47,7 @@ MAX_RETRIES = 2
 # word). We therefore prepend a short neutral Urdu pause token so the
 # model "spends" the blur on the pause; the real first word arrives after
 # the boundary and survives. Current value is the practical sweet spot.
-F5_CHUNK_LEADING_PAUSE = "۔ "
+F5_CHUNK_LEADING_PAUSE = "۔ ۔ "
 logger = logging.getLogger(__name__)
 
 # Reuse connections across requests for lower latency
@@ -157,11 +157,36 @@ def _split_into_chunks(text: str, max_chars: int = 55) -> list:
     return [c for c in chunks if c.strip()]
 
 
+
+# Short function words that are often eaten by onset clipping when they
+# start a chunk. After Urdu→Devanagari these appear as the forms below.
+_SHORT_ONSET_WORDS = {
+    "मैं", "मे", "में", "यह", "वह", "हम", "तुम", "तो", "और", "कि", "को",
+    "से", "पर", "भी", "ही", "न", "ना", "जो", "ये", "वो", "एक", "इस", "उस",
+    "अब", "फिर", "कब", "क्या", "क्यों", "कैसे",
+}
+
+def _protect_chunk_onset(chunk_text: str) -> str:
+    """Prepend leading pause; if chunk starts with a fragile short word,
+    add a tiny extra neutral buffer so the real word survives the crop."""
+    t = (chunk_text or "").strip()
+    if not t:
+        return t
+    pause = F5_CHUNK_LEADING_PAUSE or ""
+    first = t.split()[0] if t.split() else ""
+    # strip trailing punct from first token for lookup
+    first_core = first.rstrip("।.,!?؟،")
+    if first_core in _SHORT_ONSET_WORDS:
+        # Extra buffer only for short onset words
+        return f"{pause}ह् {t}" if pause else f"ह् {t}"
+    return f"{pause}{t}" if pause else t
+
+
 def _process_f5tts_chunk(chunk_tuple):
     """Single attempt — no retry here, retry wrapper handles that."""
     index, chunk_text, ref_b64, ref_text, url = chunk_tuple
     payload = {
-        "chunk_text": f"{F5_CHUNK_LEADING_PAUSE}{chunk_text}" if F5_CHUNK_LEADING_PAUSE else chunk_text,
+        "chunk_text": _protect_chunk_onset(chunk_text),
         "reference_audio_b64": ref_b64,
         "ref_text": ref_text,
     }
