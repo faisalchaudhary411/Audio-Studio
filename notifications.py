@@ -140,6 +140,63 @@ Approve here: {admin_link}
     return notified
 
 
+def notify_admin_grace_reminder(name, email, req_id, hours_left, site_url="") -> bool:
+    """Heads-up email: a manual-payment auto-approval is running on
+    temporary GRACE access and still hasn't been converted to a permanent
+    key. See pro_requests.sweep_grace_reminders() for why this exists —
+    without it, grace approvals had no way to ever remind admin they
+    needed a follow-up action."""
+    admin_link = f"{site_url.rstrip('/')}/admin/requests" if site_url else "/admin/requests"
+    resend_key = _secret("RESEND_API_KEY")
+    admin_email = _secret("ADMIN_EMAIL")
+    if not (resend_key and admin_email):
+        return False
+    text = (
+        f"VoxCraft — grace period expiring soon\n\n"
+        f"{name} <{email}> was auto-approved for temporary Pro access "
+        f"(request {req_id}) and hasn't been finalized to a permanent key yet. "
+        f"Their grace access expires in about {hours_left} hour(s).\n\n"
+        f"Review and finalize here: {admin_link}\n"
+    )
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": EMAIL_FROM, "to": [admin_email],
+                                 "subject": f"⏳ Grace period expiring — {name} ({hours_left}h left)",
+                                 "text": text}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def notify_admin_grace_lapsed(name, email, req_id, site_url="") -> bool:
+    """Fires once if a grace-period auto-approval's window passed WITHOUT
+    ever being finalized — the reminder above should normally catch this
+    first, but this is the safety net for a reminder that got missed or
+    never actioned."""
+    admin_link = f"{site_url.rstrip('/')}/admin/requests" if site_url else "/admin/requests"
+    resend_key = _secret("RESEND_API_KEY")
+    admin_email = _secret("ADMIN_EMAIL")
+    if not (resend_key and admin_email):
+        return False
+    text = (
+        f"VoxCraft — grace period LAPSED unreviewed\n\n"
+        f"{name} <{email}> (request {req_id}) was auto-approved for temporary "
+        f"Pro access, and that grace window has now passed without ever being "
+        f"finalized to a permanent key — their access has silently cut off.\n\n"
+        f"If the payment was genuine, approve them here to restore access: {admin_link}\n"
+    )
+    try:
+        r = requests.post("https://api.resend.com/emails",
+                           headers={"Authorization": f"Bearer {resend_key}", "Content-Type": "application/json"},
+                           json={"from": EMAIL_FROM, "to": [admin_email],
+                                 "subject": f"🚨 Grace period lapsed unreviewed — {name}",
+                                 "text": text}, timeout=15)
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
 def notify_admin_announcement_published(title, ann_type, message, site_url="") -> bool:
     """Sends the admin a copy of an announcement they just published — a
     confirmation/record, not a request for approval (unlike

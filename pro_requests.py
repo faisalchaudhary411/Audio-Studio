@@ -344,6 +344,13 @@ def submit_pro_request(request, name, email, phone="", payment_method="", txn_id
         "billing_requested": billing,
         # Grace only — permanent key is created only when admin clicks Approve
         "access_type": "grace" if auto_approved else "",
+        # Tracks whether this grace auto-approval has since been converted
+        # to a permanent key by admin — see sweep_grace_reminders() below
+        # for why this flag exists (without it, a grace approval had no
+        # way to ever surface back to admin for finalization).
+        "grace_finalized": False,
+        "grace_reminder_sent": False,
+        "grace_expired_notified": False,
     }
     reqs.insert(0, new_req)
 
@@ -382,6 +389,12 @@ def approve_request(req_id: str, license_key: str) -> bool:
             req["status"] = "approved"
             req["key_assigned"] = license_key
             req["approved_date"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+            # If this was a grace auto-approval, this IS the finalization —
+            # a no-op for a plain (non-grace) approval since the key is
+            # already absent. See sweep_grace_reminders() for why this flag
+            # matters: without it, a finalized grace request would keep
+            # getting reminder/lapsed emails forever.
+            req["grace_finalized"] = True
             user_email = req.get("email")
             user_name = req.get("name", "Pro User")
             break
@@ -398,6 +411,84 @@ def reject_request(req_id: str) -> bool:
         if req["id"] == req_id:
             req["status"] = "rejected"
             req["rejected_date"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+            # A plain pending/payment_pending reject never had a key issued,
+            # so there's nothing to revoke. A grace auto-approval DID already
+            # mint and activate a live key before admin ever saw the request —
+            # if admin is now rejecting it (fraud found on review), that key
+            # needs to be cut off immediately rather than left live until it
+            # naturally expires at grace_hours.
+            key = req.get("key_assigned")
+            if key and req.get("access_type") == "grace":
+                licensing.revoke_key(key)
+                req["grace_finalized"] = True  # rejected is a terminal state too — stop reminder emails
             persistence.save_requests(reqs)
             return True
     return False
+
+
+# How long before a grace-period auto-approval lapses to send admin a
+# heads-up that it still hasn't been converted to a permanent key.
+# Comfortably short of the default 72h MANUAL_GRACE_HOURS, but still works
+# fine if MANUAL_GRACE_HOURS is configured much lower — worst case the
+# reminder and the lapse notice below just fire close together.
+GRACE_REMINDER_HOURS_BEFORE = 12
+
+
+def sweep_grace_reminders(site_url: str = "") -> dict:
+    """Closes the silent dead-end in the auto-approval flow: once a manual
+    payment is auto-approved, submit_pro_request() immediately sets
+    status="approved" with a temporary GRACE key — but admin/requests.html
+    only ever showed Approve/Reject buttons for status in
+    ('pending', 'payment_pending'), so a grace-approved row had NO way to
+    resurface for finalization. Left alone, the customer's temporary access
+    just expired at MANUAL_GRACE_HOURS with no reminder, no record anyone
+    missed it, and no admin action ever possible short of digging through
+    raw request data.
+
+    Called from a background thread in app.py (NOT tied to anyone opening
+    the admin panel — that was the whole problem), this:
+      1. GRACE_REMINDER_HOURS_BEFORE hours before grace_expires, if still
+         not grace_finalized, emails admin once (grace_reminder_sent flag
+         stops repeats).
+      2. If grace_expires has already passed and it's STILL not finalized
+         (reminder never actioned, or the thread happened to be down when
+         it should have fired), emails a separate one-time "lapsed"
+         alert — the safety net for a missed reminder.
+
+    Never touches the customer's actual access — is_subscription_active()
+    already cuts that off live at expiry regardless. This only guarantees a
+    human finds out before/around the moment it happens, instead of never.
+    """
+    reqs = persistence.load_requests()
+    changed = False
+    now = dt.datetime.now()
+    reminded, missed = 0, 0
+    for r in reqs:
+        if r.get("access_type") != "grace" or r.get("grace_finalized"):
+            continue
+        expires_raw = r.get("grace_expires", "")
+        if not expires_raw:
+            continue
+        try:
+            expires_at = dt.datetime.strptime(expires_raw, "%Y-%m-%d %H:%M")
+        except (ValueError, TypeError):
+            continue
+        if now >= expires_at:
+            if not r.get("grace_expired_notified"):
+                notifications.notify_admin_grace_lapsed(
+                    r.get("name", ""), r.get("email", ""), r.get("id", ""), site_url=site_url,
+                )
+                r["grace_expired_notified"] = True
+                changed = True
+                missed += 1
+        elif not r.get("grace_reminder_sent") and (expires_at - now) <= dt.timedelta(hours=GRACE_REMINDER_HOURS_BEFORE):
+            hours_left = round((expires_at - now).total_seconds() / 3600.0, 1)
+            notifications.notify_admin_grace_reminder(
+                r.get("name", ""), r.get("email", ""), r.get("id", ""), hours_left, site_url=site_url,
+            )
+            r["grace_reminder_sent"] = True
+            changed = True
+            reminded += 1
+    if changed:
+        persistence.save_requests(reqs)
+    return {"reminded": reminded, "missed": missed}

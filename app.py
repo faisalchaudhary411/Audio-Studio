@@ -121,6 +121,35 @@ app = Flask(__name__)
 # request actually arrived on. Change here only.
 CANONICAL_HOST = "https://voxcraft.site"
 
+# Grace-period auto-approvals (manual bank-transfer flow, see pro_requests.py)
+# had no automated path back to admin's attention before they silently
+# lapsed — this sweep is the fix. Runs independently of anyone opening
+# /admin/requests, since that page is exactly what nobody was opening in
+# time. Interval is short relative to GRACE_REMINDER_HOURS_BEFORE (12h) and
+# MANUAL_GRACE_HOURS (default 72h) so a reminder/lapse notice never sits
+# undetected for more than ~20 minutes past when it should have fired.
+_grace_reminder_sweep_thread = None
+
+
+def _start_grace_reminder_sweep_thread():
+    global _grace_reminder_sweep_thread
+    if _grace_reminder_sweep_thread is not None and _grace_reminder_sweep_thread.is_alive():
+        return
+
+    def _sweep_loop():
+        while True:
+            time.sleep(1200)  # 20 minutes
+            try:
+                pro_requests.sweep_grace_reminders(site_url=CANONICAL_HOST)
+            except Exception:
+                pass  # never let the sweeper thread itself crash the process
+
+    _grace_reminder_sweep_thread = threading.Thread(target=_sweep_loop, daemon=True)
+    _grace_reminder_sweep_thread.start()
+
+
+_start_grace_reminder_sweep_thread()
+
 
 def static_url(filename: str) -> str:
     """Cache-busted static asset URL: appends ?v=<file mtime> instead of a
@@ -1353,12 +1382,19 @@ def admin_dashboard():
     posts = persistence.load_blogs()
     active_keys = sum(1 for k, v in keys.items() if licensing.is_subscription_active(v) and not v.get("revoked"))
     pending_reqs = sum(1 for r in reqs if r.get("status") in ("pending", "payment_pending"))
+    # Grace auto-approvals awaiting finalization to a permanent key — these
+    # don't show up in pending_reqs above (their status is already
+    # "approved"), so without a separate count here they'd be invisible on
+    # the dashboard too, same blind spot sweep_grace_reminders() fixes for
+    # email. See pro_requests.sweep_grace_reminders / admin/requests.html.
+    pending_grace = sum(1 for r in reqs if r.get("access_type") == "grace" and not r.get("grace_finalized"))
     anns = persistence.load_announcements()
     live_anns = sum(1 for a in anns if a.get("active"))
     today_visitors = persistence.get_daily_traffic(1)[0]["visitors"]
     return render_template("admin/dashboard.html",
                             total_keys=len(keys), active_keys=active_keys,
-                            pending_reqs=pending_reqs, total_posts=len(posts),
+                            pending_reqs=pending_reqs, pending_grace=pending_grace,
+                            total_posts=len(posts),
                             total_anns=len(anns), live_anns=live_anns,
                             today_visitors=today_visitors,
                             db_path=persistence.DB_PATH)
