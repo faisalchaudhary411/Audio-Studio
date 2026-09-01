@@ -1,9 +1,11 @@
 import base64
 import uuid
 import datetime as dt
+from unittest.mock import patch
 
 import persistence
 import pro_requests
+import licensing
 
 
 def _unique_txn_id():
@@ -127,3 +129,109 @@ def test_rate_limited_blocks_after_threshold():
 def test_rate_limited_false_under_threshold():
     ip_hash = f"rate-test-{uuid.uuid4().hex[:8]}"
     assert pro_requests._rate_limited(ip_hash) is False
+
+
+def _fake_grace_request(hours_until_expiry, finalized=False, reminder_sent=False, expired_notified=False):
+    """A grace auto-approval record, as submit_pro_request() would have
+    written it — used to test sweep_grace_reminders() without needing a
+    real license key or OCR pipeline."""
+    expires_at = dt.datetime.now() + dt.timedelta(hours=hours_until_expiry)
+    return {
+        "id": f"REQ-{uuid.uuid4().hex[:10]}", "status": "approved",
+        "name": "Test Customer", "email": "test@example.com",
+        "access_type": "grace",
+        "grace_expires": expires_at.strftime("%Y-%m-%d %H:%M"),
+        "grace_finalized": finalized,
+        "grace_reminder_sent": reminder_sent,
+        "grace_expired_notified": expired_notified,
+        "date": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "ip": "test-ip-hash",
+    }
+
+
+def test_grace_reminder_sent_when_within_threshold_and_unfinalized():
+    reqs = persistence.load_requests()
+    reqs.insert(0, _fake_grace_request(hours_until_expiry=pro_requests.GRACE_REMINDER_HOURS_BEFORE - 1))
+    persistence.save_requests(reqs)
+
+    with patch("notifications.notify_admin_grace_reminder", return_value=True) as mock_reminder:
+        result = pro_requests.sweep_grace_reminders(site_url="https://voxcraft.site")
+
+    assert result["reminded"] >= 1
+    mock_reminder.assert_called()
+
+
+def test_grace_reminder_not_sent_twice():
+    reqs = persistence.load_requests()
+    reqs.insert(0, _fake_grace_request(hours_until_expiry=2, reminder_sent=True))
+    persistence.save_requests(reqs)
+
+    with patch("notifications.notify_admin_grace_reminder", return_value=True) as mock_reminder:
+        pro_requests.sweep_grace_reminders(site_url="https://voxcraft.site")
+
+    mock_reminder.assert_not_called()
+
+
+def test_grace_reminder_not_sent_when_already_finalized():
+    reqs = persistence.load_requests()
+    reqs.insert(0, _fake_grace_request(hours_until_expiry=1, finalized=True))
+    persistence.save_requests(reqs)
+
+    with patch("notifications.notify_admin_grace_reminder", return_value=True) as mock_reminder, \
+         patch("notifications.notify_admin_grace_lapsed", return_value=True) as mock_lapsed:
+        pro_requests.sweep_grace_reminders(site_url="https://voxcraft.site")
+
+    mock_reminder.assert_not_called()
+    mock_lapsed.assert_not_called()
+
+
+def test_grace_lapsed_notice_fires_once_after_expiry():
+    reqs = persistence.load_requests()
+    reqs.insert(0, _fake_grace_request(hours_until_expiry=-1))  # already past expiry
+    persistence.save_requests(reqs)
+
+    with patch("notifications.notify_admin_grace_lapsed", return_value=True) as mock_lapsed:
+        result = pro_requests.sweep_grace_reminders(site_url="https://voxcraft.site")
+
+    assert result["missed"] >= 1
+    mock_lapsed.assert_called()
+
+
+def test_grace_lapsed_notice_not_repeated():
+    reqs = persistence.load_requests()
+    reqs.insert(0, _fake_grace_request(hours_until_expiry=-1, expired_notified=True))
+    persistence.save_requests(reqs)
+
+    with patch("notifications.notify_admin_grace_lapsed", return_value=True) as mock_lapsed:
+        pro_requests.sweep_grace_reminders(site_url="https://voxcraft.site")
+
+    mock_lapsed.assert_not_called()
+
+
+def test_approve_request_marks_grace_finalized():
+    reqs = persistence.load_requests()
+    req = _fake_grace_request(hours_until_expiry=5)
+    reqs.insert(0, req)
+    persistence.save_requests(reqs)
+
+    with patch("notifications.send_key_email", return_value=True):
+        pro_requests.approve_request(req["id"], "VOX-FAKE-PERMANENT-KEY")
+
+    updated = next(r for r in persistence.load_requests() if r["id"] == req["id"])
+    assert updated["grace_finalized"] is True
+    assert updated["key_assigned"] == "VOX-FAKE-PERMANENT-KEY"
+
+
+def test_reject_request_revokes_live_grace_key():
+    key = licensing.create_subscription_key("Test Customer", "test@example.com",
+                                              subscription_type="grace", expires_in_hours=72, plan="pro")
+    reqs = persistence.load_requests()
+    req = _fake_grace_request(hours_until_expiry=5)
+    req["key_assigned"] = key
+    reqs.insert(0, req)
+    persistence.save_requests(reqs)
+
+    pro_requests.reject_request(req["id"])
+
+    keys = licensing._keys()
+    assert keys[key]["revoked"] is True
