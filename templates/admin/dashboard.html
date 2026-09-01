@@ -18,6 +18,7 @@
       <div class="panel">
         <span class="panel__label">Pro requests</span>
         <div style="font-family:var(--display);font-size:2rem;">{{ pending_reqs }} <span style="font-size:1rem;color:var(--text-dim);">pending</span></div>
+        {% if pending_grace %}<div style="color:var(--brass-hi);font-size:0.78rem;margin-top:4px;">⏳ {{ pending_grace }} grace approval{{ 's' if pending_grace != 1 else '' }} awaiting finalization</div>{% endif %}
         <a href="{{ url_for('admin_requests') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Review requests</a>
       </div>
       <div class="panel">

@@ -64,6 +64,18 @@
             <button type="submit" name="action" value="approve" class="btn btn--jade btn--sm">Approve</button>
             <button type="submit" name="action" value="reject" class="btn btn--ghost btn--sm">Reject</button>
           </form>
+          {% elif r.access_type == 'grace' and not r.grace_finalized %}
+          <div style="background:rgba(232,169,60,0.12);border:1px solid rgba(232,169,60,0.3);border-radius:8px;padding:6px 10px;margin-bottom:8px;max-width:220px;margin-left:auto;">
+            <div style="color:var(--brass-hi);font-size:0.72rem;font-weight:700;">⏳ Grace access — not yet permanent</div>
+            <div style="color:var(--text-dim);font-size:0.7rem;margin-top:2px;">Expires {{ r.grace_expires }}</div>
+            {% if r.grace_expired_notified %}<div style="color:#e88;font-size:0.7rem;margin-top:2px;">⚠️ already lapsed</div>
+            {% elif r.grace_reminder_sent %}<div style="color:var(--text-dim);font-size:0.7rem;margin-top:2px;">reminder sent</div>{% endif %}
+          </div>
+          <form method="post" style="display:flex;gap:8px;justify-content:flex-end;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="req_id" value="{{ r.id }}">
+            <button type="submit" name="action" value="approve" class="btn btn--jade btn--sm">Grant Permanent</button>
+            <button type="submit" name="action" value="reject" class="btn btn--ghost btn--sm">Revoke</button>
+          </form>
           {% elif r.key_assigned %}
           <div style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);margin-top:6px;">{{ r.key_assigned }}</div>
           {% endif %}
