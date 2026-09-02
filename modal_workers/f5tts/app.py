@@ -143,7 +143,7 @@ class F5TTSWorker:
                 self.model,
                 self.vocoder,
                 mel_spec_type="vocos",
-                nfe_step=48,
+                nfe_step=24,
                 cfg_strength=2.0,
                 sway_sampling_coef=-1.0,
                 speed=0.95,
