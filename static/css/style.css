@@ -1511,3 +1511,43 @@ select.script-input:focus{
   color: var(--text-hi);
   font-weight: 600;
 }
+
+
+/* ---- Tools library (compact, grouped) ---- */
+.tools-group{margin-bottom:28px;}
+.tools-group__title{
+  font-family:var(--mono);
+  font-size:0.78rem;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--text-dim);
+  margin:0 0 12px;
+}
+.tool-grid--compact{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:12px;
+}
+.tool-card--compact{
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.tool-card--compact .tool-card__title{
+  font-size:1.05rem;
+  margin:6px 0 6px;
+}
+.tool-card--compact .tool-card__sub{
+  font-size:0.85rem;
+  line-height:1.45;
+  flex:1;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.tool-card--compact .tool-card__cta{
+  margin-top:10px;
+  font-size:0.82rem;
+}
