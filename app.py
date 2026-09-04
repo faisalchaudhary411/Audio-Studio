@@ -664,6 +664,10 @@ def usage_summary() -> dict:
         "speed": {"used": usage_tracking.get_daily_counter(request, "usage_speed"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "fade": {"used": usage_tracking.get_daily_counter(request, "usage_fade"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "split": {"used": usage_tracking.get_daily_counter(request, "usage_split"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "reverse": {"used": usage_tracking.get_daily_counter(request, "usage_reverse"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "mono": {"used": usage_tracking.get_daily_counter(request, "usage_mono"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "loop": {"used": usage_tracking.get_daily_counter(request, "usage_loop"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "eq": {"used": usage_tracking.get_daily_counter(request, "usage_eq"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
@@ -2919,10 +2923,13 @@ def api_speed():
     file = request.files.get("file")
     speed = float(request.form.get("speed", 1.0))
     output_format = request.form.get("output_format", "mp3")
+    preserve_pitch = request.form.get("preserve_pitch", "1") not in ("0", "false", "False")
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.change_speed(file.read(), file.filename, speed=speed, output_format=output_format)
+        out_bytes = audio_tools.change_speed(
+            file.read(), file.filename, speed=speed, output_format=output_format, preserve_pitch=preserve_pitch,
+        )
         _bump_counter("usage_speed")
         return jsonify({
             "audio_b64": base64.b64encode(out_bytes).decode("ascii"),
@@ -2983,15 +2990,106 @@ def api_split_silence():
         )
         _bump_counter("usage_split")
         clips = []
-        for p in parts:
-            clips.append({
-                "idx": p["idx"],
-                "filename": p["filename"],
-                "duration_sec": p["duration_sec"],
-                "audio_b64": base64.b64encode(p["bytes"]).decode("ascii"),
-                "size_kb": round(len(p["bytes"]) / 1024, 1),
-            })
-        return jsonify({"clips": clips, "count": len(clips)})
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in parts:
+                clips.append({
+                    "idx": p["idx"],
+                    "filename": p["filename"],
+                    "duration_sec": p["duration_sec"],
+                    "audio_b64": base64.b64encode(p["bytes"]).decode("ascii"),
+                    "size_kb": round(len(p["bytes"]) / 1024, 1),
+                })
+                zf.writestr(p["filename"], p["bytes"])
+        zip_buf.seek(0)
+        return jsonify({
+            "clips": clips,
+            "count": len(clips),
+            "zip_b64": base64.b64encode(zip_buf.getvalue()).decode("ascii"),
+            "zip_filename": f"VoxCraft-Split-{int(time.time())}.zip",
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+@app.route("/api/tools/reverse", methods=["POST"])
+def api_reverse():
+    lim = get_limits()
+    if not _under_limit("usage_reverse", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    output_format = request.form.get("output_format", "mp3")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.reverse_audio(file.read(), file.filename, output_format=output_format)
+        _bump_counter("usage_reverse")
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                        "filename": f"VoxCraft-Reverse-{int(time.time())}.{output_format}",
+                        "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/mono", methods=["POST"])
+def api_mono():
+    lim = get_limits()
+    if not _under_limit("usage_mono", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    output_format = request.form.get("output_format", "mp3")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.to_mono(file.read(), file.filename, output_format=output_format)
+        _bump_counter("usage_mono")
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                        "filename": f"VoxCraft-Mono-{int(time.time())}.{output_format}",
+                        "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/loop", methods=["POST"])
+def api_loop():
+    lim = get_limits()
+    if not _under_limit("usage_loop", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    loops = int(request.form.get("loops", 2))
+    output_format = request.form.get("output_format", "mp3")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.loop_audio(file.read(), file.filename, loops=loops, output_format=output_format)
+        _bump_counter("usage_loop")
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                        "filename": f"VoxCraft-Loop-{int(time.time())}.{output_format}",
+                        "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/eq", methods=["POST"])
+def api_eq():
+    lim = get_limits()
+    if not _under_limit("usage_eq", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    bass_db = float(request.form.get("bass_db", 0))
+    treble_db = float(request.form.get("treble_db", 0))
+    output_format = request.form.get("output_format", "mp3")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.simple_eq(
+            file.read(), file.filename, bass_db=bass_db, treble_db=treble_db, output_format=output_format,
+        )
+        _bump_counter("usage_eq")
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                        "filename": f"VoxCraft-EQ-{int(time.time())}.{output_format}",
+                        "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

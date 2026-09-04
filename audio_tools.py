@@ -411,21 +411,57 @@ def change_volume(file_bytes: bytes, filename: str, gain_db: float = 0.0,
 # Speed change (also shifts pitch — practical for Shorts pacing)
 # ---------------------------------------------------------------------------
 def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
-                 output_format: str = "mp3") -> bytes:
-    """Change playback speed. speed=1.25 is 25% faster; also shifts pitch.
+                 output_format: str = "mp3", preserve_pitch: bool = True) -> bytes:
+    """Change playback speed.
 
-    Range limited to 0.5x–2.0x for usable quality without a time-stretch library.
+    preserve_pitch=True (default): time-stretch with librosa so pitch stays the same.
+    preserve_pitch=False: classic resample (pitch moves with speed).
+    Range 0.5x–2.0x.
     """
+    import numpy as np
     check_file_size(file_bytes)
     speed = max(0.5, min(2.0, float(speed)))
     audio = _load_segment(file_bytes, filename)
     if abs(speed - 1.0) < 0.01:
         return _export_bytes(audio, output_format)
-    # pydub: change frame rate then reset → speed+pitch change
-    new_rate = int(audio.frame_rate * speed)
-    sped = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
-    sped = sped.set_frame_rate(audio.frame_rate)
-    return _export_bytes(sped, output_format)
+
+    if not preserve_pitch:
+        new_rate = int(audio.frame_rate * speed)
+        sped = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
+        sped = sped.set_frame_rate(audio.frame_rate)
+        return _export_bytes(sped, output_format)
+
+    # Pitch-preserving time stretch via librosa
+    try:
+        import librosa
+        samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+        if audio.channels > 1:
+            samples = samples.reshape((-1, audio.channels)).T  # (channels, samples)
+            stretched_ch = []
+            for ch in samples:
+                y = ch / 32768.0
+                y_st = librosa.effects.time_stretch(y, rate=speed)
+                stretched_ch.append(y_st)
+            # Match lengths
+            min_len = min(len(c) for c in stretched_ch)
+            interleaved = np.stack([c[:min_len] for c in stretched_ch], axis=1).reshape(-1)
+        else:
+            y = samples / 32768.0
+            interleaved = librosa.effects.time_stretch(y, rate=speed)
+        stretched = np.clip(interleaved * 32768.0, -32768, 32767).astype(np.int16)
+        out = AudioSegment(
+            stretched.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=audio.channels,
+        )
+        return _export_bytes(out, output_format)
+    except Exception:
+        # Fallback to resample if librosa fails
+        new_rate = int(audio.frame_rate * speed)
+        sped = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
+        sped = sped.set_frame_rate(audio.frame_rate)
+        return _export_bytes(sped, output_format)
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +487,92 @@ def fade_audio(file_bytes: bytes, filename: str, fade_in_ms: int = 0,
 # ---------------------------------------------------------------------------
 # Split by silence → multiple clips
 # ---------------------------------------------------------------------------
+
+
+def reverse_audio(file_bytes: bytes, filename: str, output_format: str = "mp3") -> bytes:
+    check_file_size(file_bytes)
+    audio = _load_segment(file_bytes, filename)
+    return _export_bytes(audio.reverse(), output_format)
+
+
+def to_mono(file_bytes: bytes, filename: str, output_format: str = "mp3") -> bytes:
+    check_file_size(file_bytes)
+    audio = _load_segment(file_bytes, filename)
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    return _export_bytes(audio, output_format)
+
+
+def loop_audio(file_bytes: bytes, filename: str, loops: int = 2,
+               output_format: str = "mp3") -> bytes:
+    """Repeat the clip N times (2–10)."""
+    check_file_size(file_bytes)
+    loops = max(2, min(10, int(loops or 2)))
+    audio = _load_segment(file_bytes, filename)
+    out = audio
+    for _ in range(loops - 1):
+        out += audio
+    return _export_bytes(out, output_format)
+
+
+def simple_eq(file_bytes: bytes, filename: str, bass_db: float = 0.0,
+              treble_db: float = 0.0, output_format: str = "mp3") -> bytes:
+    """Very simple 2-band EQ using low/high shelf via scipy if available, else gain tilt."""
+    import numpy as np
+    check_file_size(file_bytes)
+    bass_db = max(-12.0, min(12.0, float(bass_db)))
+    treble_db = max(-12.0, min(12.0, float(treble_db)))
+    audio = _load_segment(file_bytes, filename)
+    if abs(bass_db) < 0.1 and abs(treble_db) < 0.1:
+        return _export_bytes(audio, output_format)
+
+    samples = np.array(audio.get_array_of_samples()).astype(np.float64)
+    channels = audio.channels
+    n = len(samples) // channels
+    # Reshape to (n, channels)
+    if channels > 1:
+        x = samples.reshape((n, channels))
+    else:
+        x = samples.reshape((n, 1))
+
+    # Crude shelf EQ: low-pass residual for bass boost, high-pass residual for treble
+    # One-pole filters
+    sr = float(audio.frame_rate)
+    def one_pole_lp(sig, cutoff):
+        rc = 1.0 / (2 * np.pi * cutoff)
+        dt = 1.0 / sr
+        a = dt / (rc + dt)
+        y = np.zeros_like(sig)
+        for i in range(1, len(sig)):
+            y[i] = y[i - 1] + a * (sig[i] - y[i - 1])
+        return y
+
+    out = np.zeros_like(x)
+    for c in range(channels):
+        sig = x[:, c]
+        low = one_pole_lp(sig, 250.0)
+        high = sig - one_pole_lp(sig, 3000.0)
+        mid = sig - low - high
+        # Apply gains
+        low_g = 10 ** (bass_db / 20.0)
+        high_g = 10 ** (treble_db / 20.0)
+        y = low * low_g + mid + high * high_g
+        out[:, c] = y
+
+    flat = out.reshape(-1)
+    peak = np.max(np.abs(flat)) or 1.0
+    if peak > 32000:
+        flat = flat * (32000.0 / peak)
+    flat = np.clip(flat, -32768, 32767).astype(np.int16)
+    seg = AudioSegment(
+        flat.tobytes(),
+        frame_rate=audio.frame_rate,
+        sample_width=audio.sample_width,
+        channels=audio.channels,
+    )
+    return _export_bytes(seg, output_format)
+
+
 def split_by_silence(file_bytes: bytes, filename: str, min_silence_ms: int = 500,
                      silence_thresh_db: int = -40, keep_silence_ms: int = 200,
                      output_format: str = "mp3") -> list:
