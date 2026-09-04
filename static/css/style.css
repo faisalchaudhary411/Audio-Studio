@@ -828,13 +828,64 @@ select.studio-select{
   background:var(--brass);cursor:pointer;border:none;
 }
 
+.mode-panel .panel__label{margin-bottom:12px;}
 .mode-tabs{
-  display:flex;gap:4px;flex-wrap:wrap;
-  background:rgba(0,0,0,0.25);
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+}
+.mode-tab{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  text-align:left;
+  padding:14px 16px;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,0.2);
+  color:var(--text-mid);
+  cursor:pointer;
+  font:inherit;
+  transition:border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.mode-tab:hover{
+  border-color:var(--line-strong);
+  color:var(--text-hi);
+  background:rgba(245,242,234,0.04);
+}
+.mode-tab.is-active{
+  border-color:rgba(232,169,60,0.55);
+  background:linear-gradient(180deg, rgba(232,169,60,0.16), rgba(232,169,60,0.06));
+  box-shadow:0 0 0 1px rgba(232,169,60,0.15), 0 8px 24px rgba(0,0,0,0.2);
+  color:var(--text-hi);
+}
+.mode-tab__title{
+  font-family:var(--display);
+  font-size:1.05rem;
+  color:inherit;
+}
+.mode-tab.is-active .mode-tab__title{color:var(--brass-hi);}
+.mode-tab__hint{
+  font-size:0.78rem;
+  color:var(--text-dim);
+  line-height:1.35;
+}
+.mode-pro-links{
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin-top:14px;
+}
+.mode-pro-chip{
+  font-family:var(--mono);
+  font-size:0.72rem;
+  letter-spacing:0.02em;
+  color:var(--text-mid);
   border:1px solid var(--line);
   border-radius:999px;
-  padding:4px;
+  padding:6px 12px;
+  text-decoration:none;
+  transition:border-color .15s ease, color .15s ease;
 }
+.mode-pro-chip:hover{color:var(--brass-hi);border-color:rgba(232,169,60,0.4);}
+
+/* legacy pill mode-tabs (if any remain) */
 .mode-tabs .btn{
   border:none;background:transparent;color:var(--text-mid);
   box-shadow:none;border-radius:999px;
@@ -1674,41 +1725,90 @@ select.script-input:focus{
 }
 
 /* Pricing comparison */
+.pricing-compare-wrap{
+  max-width:820px;
+  margin:32px auto 0;
+  padding:0 4px;
+}
+.pricing-compare-heading{
+  text-align:center;
+  color:var(--text-dim);
+  font-size:0.85rem;
+  margin:0 0 12px;
+}
+.pricing-compare-scroll{
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--ink-panel);
+}
 .pricing-compare{
   width:100%;
+  min-width:480px;
   border-collapse:collapse;
-  margin:28px auto 8px;
-  max-width:820px;
-  font-size:0.9rem;
+  font-size:0.88rem;
+  table-layout:fixed;
 }
 .pricing-compare th, .pricing-compare td{
-  padding:12px 14px;
-  text-align:left;
+  padding:12px 10px;
+  text-align:center;
   border-bottom:1px solid var(--line);
+  vertical-align:middle;
+  word-break:normal;
+  overflow-wrap:anywhere;
 }
-.pricing-compare th{
+.pricing-compare thead th{
   font-family:var(--mono);
-  font-size:0.75rem;
+  font-size:0.72rem;
   text-transform:uppercase;
   letter-spacing:0.04em;
   color:var(--text-dim);
   font-weight:500;
+  background:rgba(0,0,0,0.2);
+  position:sticky;top:0;
+}
+.pricing-compare tbody th[scope="row"]{
+  text-align:left;
+  font-weight:500;
+  color:var(--text-hi);
+  font-size:0.85rem;
+  text-transform:none;
+  letter-spacing:0;
+  font-family:var(--body);
 }
 .pricing-compare td{color:var(--text-mid);}
-.pricing-compare tr:hover td{background:rgba(245,242,234,0.03);}
-.pricing-compare .is-yes{color:var(--jade-hi);}
+.pricing-compare tr:last-child th,
+.pricing-compare tr:last-child td{border-bottom:none;}
+.pricing-compare tr:hover td,
+.pricing-compare tr:hover th[scope="row"]{background:rgba(245,242,234,0.03);}
+.pricing-compare .is-yes{color:var(--jade-hi);font-weight:500;}
 .pricing-compare .is-no{color:var(--text-dim);}
 .pricing-recommend{
   display:inline-block;
   font-family:var(--mono);
-  font-size:0.68rem;
+  font-size:0.62rem;
   color:var(--ink);
   background:var(--brass);
-  padding:2px 8px;
+  padding:2px 7px;
   border-radius:999px;
-  margin-left:6px;
+  margin-left:4px;
   vertical-align:middle;
+  white-space:nowrap;
 }
+.pricing-compare-note{
+  text-align:center;
+  color:var(--text-dim);
+  font-size:0.85rem;
+  margin:14px 8px 0;
+  line-height:1.5;
+}
+.pricing-compare-note strong{color:var(--brass-hi);font-weight:600;}
+@media (max-width:520px){
+  .pricing-compare{min-width:420px;font-size:0.8rem;}
+  .pricing-compare th, .pricing-compare td{padding:10px 8px;}
+}
+
 
 /* Loading pulse on status */
 .render-status.is-busy::after{
