@@ -1,29 +1,42 @@
 // ===== VoxCraft main.js =====
 
-// ---- Hero waveform (organic idle motion + audio-reactive preview) ----
+// ---- Hero waveform (oscilloscope-style animated bars) ----
 function initWave(){
-  const wrap=document.querySelector('.hero-wave'), svg=document.querySelector('.wave');
-  if(!wrap||!svg)return;
-  const barsLayer=svg.querySelector('.wave-bars'), coreLayer=svg.querySelector('.wave-core');
-  const NS='http://www.w3.org/2000/svg',count=72,W=1000,H=140,center=70,gap=6,barW=(W-gap*(count-1))/count;
-  const bars=[],cores=[];
-  for(let i=0;i<count;i++){
-    const x=i*(barW+gap);
-    for(const [layer,list,cls] of [[barsLayer,bars,'wave-bar'],[coreLayer,cores,'wave-core-bar']]){
-      const r=document.createElementNS(NS,'rect');r.setAttribute('class',cls);r.setAttribute('x',x.toFixed(2));r.setAttribute('width',barW.toFixed(2));r.setAttribute('rx',Math.min(barW/2,2.5));layer.appendChild(r);list.push(r);}
+  const svg = document.querySelector('.wave');
+  if(!svg) return;
+  const barCount = 64;
+  const w = 1000, h = 120;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const gap = 4;
+  const barWidth = (w / barCount) - gap;
+  const bars = [];
+
+  for(let i=0;i<barCount;i++){
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('width', barWidth);
+    rect.setAttribute('rx', 2);
+    rect.setAttribute('x', i * (barWidth+gap));
+    svg.appendChild(rect);
+    bars.push(rect);
   }
-  const envelope=x=>{const peaks=[[.08,.38,.07],[.17,.78,.065],[.27,.48,.07],[.37,.95,.075],[.49,.55,.065],[.59,.88,.07],[.70,.48,.06],[.79,.78,.07],[.91,.52,.075]];let v=.08;for(const [p,a,w] of peaks)v+=a*Math.exp(-((x-p)/w)**2);return Math.min(1,v);};
-  let analyser=null,data=null;
-  window.__voxWave={
-    setAudio(audio){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)throw 0;const ctx=window.__voxAudioContext||(window.__voxAudioContext=new C());if(!audio.__voxAnalyser){const src=ctx.createMediaElementSource(audio);analyser=ctx.createAnalyser();analyser.fftSize=128;analyser.smoothingTimeConstant=.8;data=new Uint8Array(analyser.frequencyBinCount);src.connect(analyser);analyser.connect(ctx.destination);audio.__voxAnalyser=analyser;}else{analyser=audio.__voxAnalyser;data=new Uint8Array(analyser.frequencyBinCount);}if(ctx.state==='suspended')ctx.resume();}catch(e){}wrap.classList.add('is-playing');},
-    stop(){wrap.classList.remove('is-playing');}
-  };
-  function frame(now){
-    const t=now*.001;if(analyser&&data)analyser.getByteFrequencyData(data);
-    for(let i=0;i<count;i++){const x=i/(count-1),env=envelope(x),a=.5+.5*Math.sin(t*2.2+i*.42),b=.5+.5*Math.sin(t*.91-i*.18),c=.5+.5*Math.sin(t*3.7+i*.73);let audio=0;if(data)audio=data[Math.min(data.length-1,Math.floor(x*data.length))]/255;const amp=Math.max(.06,env*(.48+.28*a+.16*b+.08*c+audio*.95));const h=8+amp*112;bars[i].setAttribute('y',(center-h/2).toFixed(1));bars[i].setAttribute('height',h.toFixed(1));const ch=Math.max(4,h*.22);cores[i].setAttribute('y',(center-ch/2).toFixed(1));cores[i].setAttribute('height',ch.toFixed(1));}
-    requestAnimationFrame(frame);
+
+  let t = 0;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function frame(){
+    t += 0.045;
+    bars.forEach((rect, i) => {
+      const phase = i * 0.35;
+      const amp = (Math.sin(t + phase) * 0.5 + 0.5) * 0.7
+                + (Math.sin(t*2.3 + phase*1.7) * 0.5 + 0.5) * 0.3;
+      const barH = 8 + amp * (h - 16);
+      rect.setAttribute('height', barH.toFixed(1));
+      rect.setAttribute('y', ((h - barH) / 2).toFixed(1));
+    });
+    if(!reduced) requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  frame();
 }
 
 // ---- Studio: voice picker + character counter + mock generate ----
@@ -123,12 +136,11 @@ function initVoicePreviews(){
       if(currentAudio && currentBtn !== btn){
         currentAudio.pause();
         currentBtn.classList.remove('is-playing');
-        window.__voxWave?.stop();
       }
 
       if(!audio){
         audio = new Audio(src);
-        audio.addEventListener('ended', () => { btn.classList.remove('is-playing'); window.__voxWave?.stop(); });
+        audio.addEventListener('ended', () => btn.classList.remove('is-playing'));
         audio.addEventListener('error', () => {
           btn.disabled = true;
           btn.title = 'Preview coming soon';
@@ -139,7 +151,7 @@ function initVoicePreviews(){
       currentAudio = audio;
       currentBtn = btn;
       audio.currentTime = 0;
-      audio.play().then(() => { window.__voxWave?.setAudio(audio); }).catch(() => {});
+      audio.play().catch(() => {});
       btn.classList.add('is-playing');
     });
   });
