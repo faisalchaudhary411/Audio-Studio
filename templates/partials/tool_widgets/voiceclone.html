@@ -6,7 +6,19 @@
       <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference clip: 5–10s, one speaker</span>
     </div>
     <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:4px;">Upload a clear reference clip and generate new speech in that voice.</p>
-    <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:12px;">Write in English, Hindi (Devanagari), or Urdu (Nastaliq) — language is detected automatically. Urdu text is converted to spoken Hindi pronunciation behind the scenes (there's no separate Urdu voice model yet, but Urdu and Hindi sound the same when spoken — only the script differs). Clean audio with a single speaker and minimal background noise gives the best voice match.</p>
+    <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:12px;">Write in English, Hindi (Devanagari), or Urdu (Nastaliq) — language is detected automatically. Urdu text is converted to spoken Hindi pronunciation behind the scenes (there's no separate Urdu voice model yet, but Urdu and Hindi sound the same when spoken — only the script differs).</p>
+
+    <div class="panel" style="margin-bottom:14px;background:rgba(232,169,60,0.06);border-color:rgba(232,169,60,0.25);padding:12px;">
+      <span class="panel__label">Ideal reference checklist</span>
+      <ul style="margin:6px 0 0;padding-left:18px;color:var(--text-mid);font-size:0.82rem;line-height:1.65;">
+        <li>5–15 seconds of <strong>one speaker</strong> only</li>
+        <li>Quiet room — no music, TV, or other voices</li>
+        <li>Natural speech (not whispering or shouting)</li>
+        <li>Clear mic, not tiny laptop far-field audio</li>
+      </ul>
+      <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-dim);">Only clone voices you own or have explicit permission to use.</p>
+    </div>
+    <div id="clone-quality-warn" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(232,169,60,0.4);color:var(--brass-hi);font-size:0.82rem;line-height:1.5;"></div>
 
     <div style="margin-bottom:12px;">
       <label class="studio-label" for="clone-voice-select">Voice source</label>
@@ -50,12 +62,17 @@
       <span style="color:var(--jade-hi);" id="clone-lang-detect"></span>
       <span id="clone-char-count">0 / {{ clone_char_limit }} characters</span>
     </div>
-    <div class="render-bar" style="margin-top:12px;">
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:var(--text-mid);line-height:1.45;margin:12px 0;cursor:pointer;">
+      <input type="checkbox" id="clone-gen-consent" style="margin-top:3px;">
+      <span>I own this voice or have explicit permission to clone it. I will not use cloning to impersonate someone without consent.</span>
+    </label>
+    <div class="render-bar" style="margin-top:4px;">
       <button class="btn btn--brass" id="generate-clone-btn" type="button">Clone &amp; generate</button>
       <span class="render-status" data-clone-status></span>
     </div>
     <div class="gen-progress" id="clone-progress" aria-hidden="true"><div class="gen-progress__bar"></div></div>
-    <p class="privacy-note" style="margin-top:12px;">Voice cloning runs on a GPU and can take 30–90 seconds — don't close this tab while it's working. Longer text is automatically split into shorter pieces and stitched back together for better quality.</p>
+    <p id="clone-progress-label" style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;"></p>
+    <p class="privacy-note" style="margin-top:12px;">Voice cloning runs on a GPU and can take 30–90 seconds — don't close this tab while it's working. Longer text is automatically split and stitched for stable quality.</p>
     <div id="clone-result" style="margin-top:16px;"></div>
 
     <!-- Consent modal — shown before any voice is ever saved for reuse.
