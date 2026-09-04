@@ -251,6 +251,14 @@
       if (gapLabel) gapLabel.textContent = mergeGap.value;
     });
   }
+  const mergeCrossfade = document.getElementById('merge-crossfade');
+  if (mergeCrossfade) {
+    const cfLabel = document.getElementById('merge-crossfade-label');
+    if (cfLabel) cfLabel.textContent = mergeCrossfade.value;
+    mergeCrossfade.addEventListener('input', () => {
+      if (cfLabel) cfLabel.textContent = mergeCrossfade.value;
+    });
+  }
   if (mergeFileList) renderMergeList();
   if (mergeAddBtn && mergeFilesInput) {
     mergeAddBtn.addEventListener('click', () => mergeFilesInput.click());
@@ -343,7 +351,7 @@
         cutterDurationSec = data.duration_sec;
         if (cutterDuration) cutterDuration.textContent = `Duration: ${cutterDurationSec.toFixed(1)}s`;
         const endEl = document.getElementById('cutter-end');
-        const splitEl = document.getElementById('cutter-split-at');
+        const splitEl = document.getElementById('cutter-split') || document.getElementById('cutter-split-at');
         if (endEl) endEl.value = cutterDurationSec.toFixed(1);
         if (splitEl) splitEl.value = (cutterDurationSec / 2).toFixed(1);
       } catch (e) {
@@ -422,9 +430,31 @@
   // ---- Denoise ----
   const denoiseStrength = document.getElementById('denoise-strength');
   const denoiseStrengthLabel = document.getElementById('denoise-strength-label');
+  function denoiseLabel(v) {
+    const n = parseFloat(v);
+    if (n <= 0.4) return 'Light';
+    if (n <= 0.65) return 'Medium';
+    return 'Strong';
+  }
   if (denoiseStrength && denoiseStrengthLabel) {
+    denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
     denoiseStrength.addEventListener('input', () => {
-      denoiseStrengthLabel.textContent = denoiseStrength.value;
+      denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
+    });
+  }
+  document.querySelectorAll('[data-denoise-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!denoiseStrength) return;
+      denoiseStrength.value = btn.dataset.denoisePreset;
+      if (denoiseStrengthLabel) denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
+    });
+  });
+  // Voice dry/wet label
+  const vcDryWet = document.getElementById('voicechange-drywet');
+  const vcDryWetLabel = document.getElementById('voicechange-drywet-label');
+  if (vcDryWet && vcDryWetLabel) {
+    vcDryWet.addEventListener('input', () => {
+      vcDryWetLabel.textContent = Math.round(parseFloat(vcDryWet.value) * 100) + '%';
     });
   }
   const denoiseBtn = document.getElementById('denoise-btn');
@@ -558,38 +588,6 @@
     }
   }
 
-
-  // Denoise strength presets + label
-  const denoiseStrength = document.getElementById('denoise-strength');
-  const denoiseStrengthLabel = document.getElementById('denoise-strength-label');
-  function denoiseLabel(v) {
-    const n = parseFloat(v);
-    if (n <= 0.4) return 'Light';
-    if (n <= 0.65) return 'Medium';
-    return 'Strong';
-  }
-  if (denoiseStrength && denoiseStrengthLabel) {
-    denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
-    denoiseStrength.addEventListener('input', () => {
-      denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
-    });
-  }
-  document.querySelectorAll('[data-denoise-preset]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!denoiseStrength) return;
-      denoiseStrength.value = btn.dataset.denoisePreset;
-      if (denoiseStrengthLabel) denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
-    });
-  });
-
-  // Voice dry/wet label
-  const vcDryWet = document.getElementById('voicechange-drywet');
-  const vcDryWetLabel = document.getElementById('voicechange-drywet-label');
-  if (vcDryWet && vcDryWetLabel) {
-    vcDryWet.addEventListener('input', () => {
-      vcDryWetLabel.textContent = Math.round(parseFloat(vcDryWet.value) * 100) + '%';
-    });
-  }
 
   // ---- Video Extract ----
   const vxFile = document.getElementById('videoxtract-file');
