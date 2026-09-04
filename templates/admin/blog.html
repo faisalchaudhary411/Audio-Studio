@@ -6,27 +6,36 @@
   <div class="section__head">
     <span class="section__eyebrow">Admin</span>
     <h2 class="section__title">Blog</h2>
+    <p class="section__sub" style="max-width:52ch;">Write long-form guides with screenshots, comparison tables and clear structure. These posts are what AdSense reviewers look at.</p>
   </div>
 
   <div class="panel" style="margin-bottom:20px;">
     <span class="panel__label">{{ 'Edit post' if edit_post else 'Write new post' }}</span>
-    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       {% if edit_post %}
         <input type="hidden" name="action" value="update">
         <input type="hidden" name="post_id" value="{{ edit_post.id }}">
       {% else %}
         <input type="hidden" name="action" value="create">
       {% endif %}
-      <input type="text" name="title" placeholder="Title" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.title if edit_post else '' }}" required>
-      <input type="text" name="category" placeholder="Category (e.g. Updates, Tips)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.category if edit_post else '' }}">
-      <input type="text" name="tags" placeholder="Tags, comma-separated (e.g. urdu, tts, tutorial)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ (edit_post.tags | join(', ')) if edit_post and edit_post.tags else '' }}">
-      <input type="text" name="excerpt" placeholder="Short excerpt (shown in list)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.excerpt if edit_post else '' }}">
+
+      <input type="text" name="title" placeholder="Title (clear and specific)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.title if edit_post else '' }}" required>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+        <input type="text" name="category" placeholder="Category (e.g. Tutorials, Guides, Comparison)" class="script-input" style="min-height:auto;padding:12px;" value="{{ edit_post.category if edit_post else '' }}">
+        <input type="text" name="tags" placeholder="Tags, comma-separated (urdu, tts, youtube)" class="script-input" style="min-height:auto;padding:12px;" value="{{ (edit_post.tags | join(', ')) if edit_post and edit_post.tags else '' }}">
+      </div>
+
+      <input type="text" name="excerpt" placeholder="Short excerpt (1–2 sentences, shown in list & meta description)" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" value="{{ edit_post.excerpt if edit_post else '' }}">
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
         <input type="text" name="author" placeholder="Author (default: VoxCraft Team)" class="script-input" style="min-height:auto;padding:12px;" value="{{ edit_post.author if edit_post else 'VoxCraft Team' }}">
         <input type="date" name="updated_date" class="script-input" style="min-height:auto;padding:12px;" value="{{ edit_post.updated_date if edit_post and edit_post.updated_date else (edit_post.date if edit_post else '') }}">
       </div>
+
       <select name="related_tool" class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;">
-        <option value="">Related tool (optional)</option>
+        <option value="">Related tool (optional — shows CTA on the post)</option>
         {% set selected_tool = edit_post.related_tool if edit_post else '' %}
         <option value="tts" {% if selected_tool == 'tts' %}selected{% endif %}>Text-to-Speech / Studio</option>
         <option value="urdu-tts" {% if selected_tool == 'urdu-tts' %}selected{% endif %}>Urdu TTS</option>
@@ -42,9 +51,66 @@
         <option value="video to audio" {% if selected_tool == 'video to audio' %}selected{% endif %}>Video to Audio</option>
         <option value="music" {% if selected_tool == 'music' %}selected{% endif %}>Music Generator</option>
       </select>
-      <textarea name="body" placeholder="Full post body (Markdown supported)" class="script-input" style="min-height:200px;margin-bottom:10px;" required>{{ edit_post.body if edit_post else '' }}</textarea>
-      <label style="font-size:0.9rem;color:var(--text-mid);"><input type="checkbox" name="published" {% if (edit_post and edit_post.published) or not edit_post %}checked{% endif %}> Publish{{ ' (visible on site)' if edit_post else ' immediately' }}</label>
-      <button type="submit" class="btn btn--brass" style="margin-top:14px;display:block;">{{ 'Update post' if edit_post else 'Save post' }}</button>
+
+      {# —— Image upload helper —— #}
+      <div class="panel" style="margin-bottom:14px;background:rgba(232,169,60,0.06);border-color:rgba(232,169,60,0.25);">
+        <span class="panel__label">Screenshots & images</span>
+        <p style="color:var(--text-mid);font-size:0.88rem;margin:6px 0 10px;line-height:1.55;">
+          Upload a screenshot (PNG/JPG/WebP, max 4 MB). It is saved and the Markdown image line is inserted into the body for you. Use this for Studio screenshots, before/after comparisons, step images, etc.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+          <input type="file" name="image" accept="image/png,image/jpeg,image/webp,image/gif" class="script-input" style="min-height:auto;padding:8px;flex:1;min-width:180px;">
+          <input type="text" name="image_alt" placeholder="Alt text (e.g. VoxCraft Studio Urdu voice selected)" class="script-input" style="min-height:auto;padding:10px;flex:1;min-width:180px;">
+        </div>
+        <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;">
+          Tip: after upload the form will reload with the image Markdown already added near the end of the body. Move it where you want.
+        </p>
+        {% if uploaded_image_md %}
+        <p style="margin-top:10px;color:var(--jade-hi);font-size:0.88rem;">
+          ✓ Image uploaded. Markdown added to body:<br>
+          <code style="font-size:0.8rem;word-break:break-all;">{{ uploaded_image_md }}</code>
+        </p>
+        {% endif %}
+      </div>
+
+      <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:6px;">
+        Full post body (Markdown) — aim for 1,000–1,500+ words for AdSense quality
+      </label>
+      <textarea name="body" id="blog-body" placeholder="## Introduction&#10;&#10;Write the full guide here…&#10;&#10;## Step 1&#10;&#10;![Screenshot description](/static/blog/your-image.png)&#10;&#10;## Comparison&#10;&#10;| Feature | Option A | Option B |&#10;|---------|----------|----------|&#10;| Speed   | Fast     | Slow     |" class="script-input" style="min-height:420px;margin-bottom:10px;font-family:var(--mono);font-size:0.88rem;line-height:1.55;" required>{{ edit_post.body if edit_post else '' }}</textarea>
+
+      {# —— Markdown cheat sheet for quality content —— #}
+      <details style="margin-bottom:14px;">
+        <summary style="cursor:pointer;color:var(--brass-hi);font-size:0.88rem;">Markdown cheat sheet for screenshots & comparisons</summary>
+        <div style="margin-top:10px;padding:12px;background:rgba(0,0,0,0.2);border-radius:10px;font-size:0.82rem;color:var(--text-mid);line-height:1.7;font-family:var(--mono);">
+          <strong style="color:var(--text-hi);">Headings</strong><br>
+          ## Section title<br>
+          ### Subsection<br><br>
+          <strong style="color:var(--text-hi);">Image / screenshot</strong><br>
+          ![Alt text describing the image](/static/blog/filename.png)<br><br>
+          <strong style="color:var(--text-hi);">Comparison table</strong><br>
+          | Feature | Free | Pro |<br>
+          |---------|------|-----|<br>
+          | Daily generations | 5 | Unlimited |<br>
+          | Voices | 27 | 88+ |<br><br>
+          <strong style="color:var(--text-hi);">Bold / italic / list</strong><br>
+          **bold** · *italic* · - bullet item<br><br>
+          <strong style="color:var(--text-hi);">Link</strong><br>
+          [Open Voice Studio](/studio)
+        </div>
+      </details>
+
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:8px;">
+        <label style="font-size:0.9rem;color:var(--text-mid);">
+          <input type="checkbox" name="published" {% if (edit_post and edit_post.published) or not edit_post %}checked{% endif %}>
+          Publish{{ ' (visible on site)' if edit_post else ' immediately' }}
+        </label>
+        <label style="font-size:0.9rem;color:var(--text-mid);display:flex;align-items:center;gap:6px;">
+          Schedule date (optional):
+          <input type="date" name="publish_date" class="script-input" style="min-height:auto;padding:8px;width:auto;" value="{{ edit_post.publish_date if edit_post and edit_post.publish_date else '' }}">
+        </label>
+      </div>
+
+      <button type="submit" class="btn btn--brass" style="margin-top:10px;display:block;">{{ 'Update post' if edit_post else 'Save post' }}</button>
       {% if edit_post %}<a href="{{ url_for('admin_blog') }}" class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-block;">Cancel edit</a>{% endif %}
     </form>
   </div>
@@ -54,7 +120,11 @@
     <div class="panel" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
       <div>
         <strong>{{ p.title }}</strong>
-        <div style="color:var(--text-dim);font-size:0.8rem;">{{ p.date }} · {{ 'Published' if p.published else 'Draft' }} · {{ p.author or 'VoxCraft Team' }}{% if p.tags %} · {{ p.tags | join(', ') }}{% endif %}</div>
+        <div style="color:var(--text-dim);font-size:0.8rem;">
+          {{ p.date }} · {{ 'Published' if p.published else 'Draft' }} · {{ p.author or 'VoxCraft Team' }}
+          {% if p.tags %} · {{ p.tags | join(', ') }}{% endif %}
+          {% if p.body %} · ~{{ (p.body.split()|length / 220)|round|int }} min{% endif %}
+        </div>
       </div>
       <div style="display:flex;gap:8px;">
         <a href="{{ url_for('admin_blog', edit=p.id) }}" class="btn btn--ghost btn--sm">Edit</a>
