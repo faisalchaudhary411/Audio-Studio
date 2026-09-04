@@ -41,10 +41,78 @@
     mime = mime || 'audio/mpeg';
     return `
       <div class="result-panel">
-        <audio controls style="width:100%;" src="data:${mime};base64,${b64}"></audio>
-        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
+        <audio controls src="data:${mime};base64,${b64}"></audio>
+        <div class="result-panel__actions">
+          <a class="btn btn--brass btn--sm" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
+          <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
+        </div>
+        <div class="result-panel__next">
+          <span class="result-panel__next-label">Next step</span>
+          <div class="result-panel__next-links">
+            <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Trim</a>
+            <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Denoise</a>
+            <a class="btn btn--ghost btn--sm" href="/tools/normalize-audio-volume">Normalize</a>
+            <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Merge</a>
+            <a class="btn btn--ghost btn--sm" href="/tools/convert-audio-format">Convert</a>
+          </div>
+        </div>
       </div>
     `;
+  }
+
+  // Upgrade plain file inputs into drop zones (empty-state UX)
+  function enhanceFileInputs() {
+    document.querySelectorAll('input.file-input[type="file"]').forEach((input) => {
+      if (input.dataset.dropEnhanced === '1') return;
+      if (input.closest('.dropzone')) return;
+      // Skip hidden multi inputs used by merge-add pattern
+      if (input.style.display === 'none' || input.getAttribute('style') && input.getAttribute('style').includes('display:none')) return;
+      input.dataset.dropEnhanced = '1';
+      const zone = document.createElement('div');
+      zone.className = 'dropzone';
+      const title = document.createElement('div');
+      title.className = 'dropzone__title';
+      title.textContent = 'Drop a file here';
+      const hint = document.createElement('div');
+      hint.className = 'dropzone__hint';
+      hint.textContent = input.multiple
+        ? 'or tap to choose files · up to 10MB each'
+        : 'or tap to choose · usually under 10MB';
+      const name = document.createElement('div');
+      name.className = 'dropzone__name';
+      input.parentNode.insertBefore(zone, input);
+      zone.appendChild(title);
+      zone.appendChild(hint);
+      zone.appendChild(input);
+      zone.appendChild(name);
+      const updateName = () => {
+        const files = input.files;
+        if (!files || !files.length) { name.textContent = ''; return; }
+        if (files.length === 1) name.textContent = files[0].name;
+        else name.textContent = files.length + ' files selected';
+      };
+      input.addEventListener('change', updateName);
+      zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('is-drag'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('is-drag'));
+      zone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        zone.classList.remove('is-drag');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          try {
+            input.files = e.dataTransfer.files;
+          } catch (err) {
+            // some browsers block setting files; fall through to click
+          }
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          updateName();
+        }
+      });
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', enhanceFileInputs);
+  } else {
+    enhanceFileInputs();
   }
 
   // Shared helpers matching studio.js generate-button behaviour
@@ -52,6 +120,13 @@
     if (!btn) return;
     btn.disabled = !!on;
     btn.classList.toggle('is-loading', !!on);
+    // Pair status text with pulse when present
+    const panel = btn.closest('.panel');
+    if (panel) {
+      panel.querySelectorAll('.render-status').forEach((s) => {
+        s.classList.toggle('is-busy', !!on);
+      });
+    }
   }
 
   function ensureProgress(afterEl) {

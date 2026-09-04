@@ -82,8 +82,8 @@
   // ---- SSML toggle ----
   const ssmlToggle = document.getElementById('ssml-toggle');
   const ssmlCheatsheet = document.getElementById('ssml-cheatsheet');
-  ssmlToggle.addEventListener('change', () => {
-    ssmlCheatsheet.style.display = ssmlToggle.checked ? 'block' : 'none';
+  if (ssmlToggle) ssmlToggle.addEventListener('change', () => {
+    if (ssmlCheatsheet) ssmlCheatsheet.style.display = ssmlToggle.checked ? 'block' : 'none';
   });
   document.querySelectorAll('[data-ssml-insert]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -318,6 +318,8 @@
   }
   renderHistory();
 
+  const stickyGen = document.getElementById('generate-single-sticky');
+  if (stickyGen) stickyGen.addEventListener('click', () => generateSingleBtn && generateSingleBtn.click());
   generateSingleBtn.addEventListener('click', () => {
     if (!singleText.value.trim()) {
       singleStatus.textContent = 'Please enter some text first.';
