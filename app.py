@@ -1538,18 +1538,56 @@ def admin_blog():
                 out.append(t)
         return out
 
+    def _save_blog_image(file_storage):
+        """Save an uploaded screenshot into static/blog/ and return the
+        public URL path, or None if the file is missing/invalid.
+        Accepts PNG, JPG, WebP, GIF up to 4 MB."""
+        if not file_storage or not getattr(file_storage, "filename", None):
+            return None
+        filename = secure_filename(file_storage.filename)
+        if not filename:
+            return None
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+            return None
+        data = file_storage.read()
+        if not data or len(data) > 4 * 1024 * 1024:
+            return None
+        blog_dir = os.path.join(app.static_folder or "static", "blog")
+        os.makedirs(blog_dir, exist_ok=True)
+        unique = f"{int(time.time())}_{secrets.token_hex(4)}{ext}"
+        dest = os.path.join(blog_dir, unique)
+        with open(dest, "wb") as f:
+            f.write(data)
+        return f"/static/blog/{unique}"
+
     posts = persistence.load_blogs()
+    uploaded_image_md = None
+
     if request.method == "POST":
         action = request.form.get("action")
+
+        # Optional screenshot upload — works on both create and update.
+        # The image Markdown is appended to the body so the author can
+        # move it to the correct place after the form reloads.
+        image_file = request.files.get("image")
+        image_url = _save_blog_image(image_file)
+        if image_url:
+            alt = (request.form.get("image_alt") or "Screenshot").strip() or "Screenshot"
+            uploaded_image_md = f"![{alt}]({image_url})"
+
         if action == "create":
             today = dt.datetime.now().strftime("%Y-%m-%d")
+            body = request.form.get("body", "").strip()
+            if uploaded_image_md:
+                body = (body + "\n\n" + uploaded_image_md).strip()
             new_post = {
                 "id": str(int(time.time() * 1000)),
                 "title": request.form.get("title", "").strip(),
                 "category": request.form.get("category", "").strip(),
                 "tags": parse_tags(request.form.get("tags", "")),
                 "excerpt": request.form.get("excerpt", "").strip(),
-                "body": request.form.get("body", "").strip(),
+                "body": body,
                 "author": request.form.get("author", "").strip() or "VoxCraft Team",
                 "updated_date": request.form.get("updated_date", "").strip() or today,
                 "related_tool": request.form.get("related_tool", "").strip().lower(),
@@ -1559,15 +1597,21 @@ def admin_blog():
             }
             posts.insert(0, new_post)
             persistence.save_blogs(posts)
+            # Stay on the edit screen so the author can place the new image
+            if uploaded_image_md:
+                return redirect(url_for("admin_blog", edit=new_post["id"]))
         elif action == "update":
             post_id = request.form.get("post_id")
             for p in posts:
                 if str(p["id"]) == post_id:
+                    body = request.form.get("body", "").strip()
+                    if uploaded_image_md:
+                        body = (body + "\n\n" + uploaded_image_md).strip()
                     p["title"] = request.form.get("title", "").strip()
                     p["category"] = request.form.get("category", "").strip()
                     p["tags"] = parse_tags(request.form.get("tags", ""))
                     p["excerpt"] = request.form.get("excerpt", "").strip()
-                    p["body"] = request.form.get("body", "").strip()
+                    p["body"] = body
                     p["author"] = request.form.get("author", "").strip() or p.get("author") or "VoxCraft Team"
                     p["updated_date"] = request.form.get("updated_date", "").strip() or dt.datetime.now().strftime("%Y-%m-%d")
                     p["related_tool"] = request.form.get("related_tool", "").strip().lower()
@@ -1577,6 +1621,8 @@ def admin_blog():
                     # editing content shouldn't bump a post back to the top
                     # of a date-sorted list as if it were brand new.
             persistence.save_blogs(posts)
+            if uploaded_image_md and post_id:
+                return redirect(url_for("admin_blog", edit=post_id))
         elif action == "toggle_publish":
             post_id = request.form.get("post_id")
             for p in posts:
@@ -1593,7 +1639,12 @@ def admin_blog():
     edit_post = None
     if edit_id:
         edit_post = next((p for p in posts if str(p["id"]) == edit_id), None)
-    return render_template("admin/blog.html", posts=posts, edit_post=edit_post)
+    return render_template(
+        "admin/blog.html",
+        posts=posts,
+        edit_post=edit_post,
+        uploaded_image_md=uploaded_image_md,
+    )
 
 
 @app.route("/admin/notifications", methods=["GET", "POST"])
