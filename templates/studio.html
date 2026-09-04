@@ -97,12 +97,30 @@
       [pause:500ms] · [strong]…[/strong] · [em]…[/em] · [slow]/[fast] · [high]/[low] · [whisper]<br>
       Expression: [excited] [cheerful] [calm] [serious] [sad]
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
-      <button type="button" class="btn btn--ghost btn--sm" id="section-intro-btn">Use as Intro</button>
-      <button type="button" class="btn btn--ghost btn--sm" id="section-body-btn">Use as Body</button>
-      <button type="button" class="btn btn--ghost btn--sm" id="section-outro-btn">Use as Outro</button>
-      <span style="font-size:0.75rem;color:var(--text-dim);align-self:center;">Optional labels for multi-part videos</span>
+    <div style="margin-bottom:10px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:6px;">Part (optional — only affects download name, never spoken)</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+        <button type="button" class="btn btn--ghost btn--sm" data-section="none" id="section-none-btn">Full script</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-section="Intro" id="section-intro-btn">Intro</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-section="Body" id="section-body-btn">Body</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-section="Outro" id="section-outro-btn">Outro</button>
+        <span id="section-active-label" style="font-size:0.75rem;color:var(--jade-hi);margin-left:4px;">Full script</span>
+      </div>
     </div>
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:0.85rem;color:var(--text-mid);">Pronunciation fixes (this browser)</summary>
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:6px 0;">Replace a word before speaking — e.g. find <code>VoxCraft</code> → say <code>Vox Craft</code>. Stored only on this device.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:6px;">
+        <input type="text" class="studio-input" id="pron-find" placeholder="Find word">
+        <input type="text" class="studio-input" id="pron-say" placeholder="Say as">
+        <button type="button" class="btn btn--ghost btn--sm" id="pron-add-btn">Add</button>
+      </div>
+      <div id="pron-list" style="font-size:0.8rem;color:var(--text-mid);"></div>
+    </details>
+    <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:var(--text-mid);margin-bottom:8px;cursor:pointer;">
+      <input type="checkbox" id="auto-pause-toggle" checked>
+      Natural pauses between sentences
+    </label>
     <textarea class="script-input" id="single-text" placeholder="Type or paste your text here…"></textarea>
     <p id="script-tip" style="display:none;font-size:0.8rem;color:var(--brass-hi);margin:6px 0 0;"></p>
     <div class="script-meta">
@@ -124,7 +142,7 @@
 <!-- ===== Batch tab ===== -->
 <div class="section" id="tab-batch" style="padding-top:0;display:none;">
   <div class="panel">
-    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:10px;">Each non-empty line becomes a separate clip — up to {{ batch_max }} lines.</p>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:10px;">Each non-empty line becomes a separate clip — up to {{ batch_max }} lines. After generate you can download a ZIP or one merged file.</p>
     <textarea class="script-input" id="batch-text" placeholder="Line one — clip 1&#10;Line two — clip 2&#10;Line three — clip 3"></textarea>
     <div class="script-meta">
       <span data-line-count>0 / {{ batch_max }} lines</span>
