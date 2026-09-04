@@ -1,16 +1,42 @@
-{# Included from base.html only when NOT pro. #}
-
+{# Sticky mobile ad — reserved space so it never covers footer content #}
 <style>
-.adsterra-sticky-footer { position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; display: none; height: 80px; overflow: hidden; }
-@media (max-width: 768px) { .adsterra-sticky-footer { display: block; } }
-.adsterra-sticky-footer iframe { width: 100%; height: 80px; border: 0; display: block; background: rgba(16,24,32,0.95); }
+.adsterra-sticky-footer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 30; /* below nav dropdowns, above page */
+  display: none;
+  height: 56px;
+  overflow: hidden;
+  background: rgba(12,17,23,0.96);
+  border-top: 1px solid rgba(245,242,234,0.08);
+  backdrop-filter: blur(8px);
+}
+.adsterra-sticky-footer iframe {
+  width: 100%; height: 56px; border: 0; display: block;
+}
+@media (max-width: 768px) {
+  .adsterra-sticky-footer { display: block; }
+  body.has-sticky-ad {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  body.has-sticky-ad .footer {
+    padding-bottom: calc(40px + 56px + env(safe-area-inset-bottom, 0px));
+  }
+  body.has-sticky-ad .studio-sticky-bar {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+  body.has-sticky-ad .sticky-cta {
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
 </style>
-<div class="adsterra-sticky-footer">
-  <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no"></iframe>
+<div class="adsterra-sticky-footer" id="adsterra-sticky-footer" aria-hidden="true">
+  <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no" title="Advertisement"></iframe>
 </div>
-
-{# In-page push (groleegni.net) intentionally removed — it injects an
-   uncontrolled floating UI element with no fixed position/z-index we can set,
-   which was overlapping the nav hamburger button. Re-add only if you can
-   confirm Adsterra's zone settings pin it somewhere that won't collide with
-   the nav. #}
+<script>
+(function () {
+  if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+    document.body.classList.add('has-sticky-ad');
+  }
+})();
+</script>
