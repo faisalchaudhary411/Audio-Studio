@@ -237,9 +237,16 @@ def _concat_wav_segments(wav_bytes_list: list) -> bytes:
     combined = AudioSegment.empty()
     for i, raw in enumerate(wav_bytes_list):
         seg = AudioSegment.from_file(io.BytesIO(raw), format="wav")
-        if i > 0:
-            combined += AudioSegment.silent(duration=90)
-        combined += seg
+        if i == 0:
+            combined = seg
+        else:
+            # Short crossfade removes clicks between stitched chunks
+            cf = min(40, len(combined) // 4, len(seg) // 4)
+            if cf > 5:
+                combined = combined.append(seg, crossfade=cf)
+            else:
+                combined += AudioSegment.silent(duration=60)
+                combined += seg
     buf = io.BytesIO()
     combined.export(buf, format="wav")
     return buf.getvalue()

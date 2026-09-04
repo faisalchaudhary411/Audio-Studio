@@ -2891,7 +2891,9 @@ def api_preview():
     if not _under_limit("usage_previews", lim["FREE_PREVIEW_LIMIT"]):
         return jsonify({"error": f"Free preview limit reached ({lim['FREE_PREVIEW_LIMIT']}/day). Upgrade to Pro for unlimited previews."}), 402
 
-    text = default_preview_text(language)
+    # Prefer user's first-line sample when provided (Studio "Preview my first line")
+    custom = (data.get("text") or "").strip()
+    text = custom[:200] if custom else default_preview_text(language)
     rate_str = f"{speed_pct - 100:+d}%"
     try:
         audio = tts_dispatch(text, voice_id, rate=rate_str, speed_pct=speed_pct)
@@ -2928,8 +2930,14 @@ def api_generate():
 
     rate_str = f"{speed_pct - 100:+d}%"
     text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
+    do_normalize = bool(data.get("normalize", False))
     try:
         audio = tts_dispatch(text, voice_id, rate=rate_str, ssml_mode=ssml_mode, speed_pct=speed_pct)
+        if do_normalize and audio:
+            try:
+                audio = audio_tools.normalize(audio, "gen.mp3", target_dbfs=-3.0)
+            except Exception:
+                pass
     except Exception as e:
         # Don't leak internal stack traces to the client
         return jsonify({"error": "Could not generate audio right now. Please try again in a moment."}), 500
@@ -3132,7 +3140,30 @@ def api_clone_upload():
     ref_id = f"{int(time.time())}_{secure_filename(file.filename)}"
     path = os.path.join(CLONE_UPLOAD_DIR, ref_id)
     file.save(path)
-    return jsonify({"reference_id": ref_id})
+
+    # Lightweight reference quality hints (duration + level) — non-blocking warnings
+    quality = {"ok": True, "warnings": []}
+    try:
+        from pydub import AudioSegment
+        seg = AudioSegment.from_file(path)
+        dur = len(seg) / 1000.0
+        if dur < 3:
+            quality["warnings"].append("Reference is very short (<3s). 5–15 seconds of clear speech works best.")
+            quality["ok"] = False
+        elif dur < 5:
+            quality["warnings"].append("Reference is under 5s — results may be weaker. Aim for 5–15s.")
+        elif dur > 45:
+            quality["warnings"].append("Reference is long (>45s). Consider using a clean 10–20s section for better match.")
+        if seg.dBFS < -40:
+            quality["warnings"].append("Reference is very quiet. Record closer to the mic or raise input level.")
+        if seg.dBFS > -3:
+            quality["warnings"].append("Reference may be clipping. Use a slightly quieter recording.")
+        quality["duration_sec"] = round(dur, 2)
+        quality["dbfs"] = round(seg.dBFS, 1)
+    except Exception:
+        pass
+
+    return jsonify({"reference_id": ref_id, "quality": quality})
 
 
 @app.route("/api/clone/voices/save", methods=["POST"])
