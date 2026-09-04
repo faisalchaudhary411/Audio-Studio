@@ -1,50 +1,17 @@
-# VoxCraft — existing tools improvements
+# Voice Changer fix
 
-## What was improved
-
-### Backend (`audio_tools.py`)
-| Tool | Improvements |
-|------|----------------|
-| **Transcribe** | Urdu in language list; richer result (word_count, duration, simple SRT) |
-| **Convert** | Named presets: youtube, social, podcast, edit_master, archive |
-| **Merge** | Optional **crossfade** between clips (removes join clicks) |
-| **Cutter** | **Auto-trim silence**; split-on-silence helper available |
-| **Denoise** | Strength control + **stationary** mode (better for fan/AC) |
-| **Voice change** | **Dry/wet** mix; presets: slight_deeper, anon |
-| **Video extract** | Optional **start_sec / end_sec** time range |
-| **Normalize** | New peak-normalize helper + API |
-
-Whisper still not enabled (needs GPU worker). Google Speech remains the free path; SRT is time-sliced (not word-aligned) until Whisper timestamps exist.
-
-### API (`app.py`)
-- Convert accepts `preset`
-- Merge accepts `crossfade_ms`
-- Denoise accepts `stationary`
-- Voice change accepts `dry_wet`
-- Video extract accepts `start_sec`, `end_sec`
-- New: `POST /api/tools/cutter/auto-trim`
-- New: `POST /api/tools/normalize`
-
-### UI widgets
-Updated controls for convert presets, merge crossfade, denoise Light/Medium/Strong + stationary, cutter auto-trim mode, video time range, voice dry/wet + presets, transcribe languages + SRT download.
-
-### JS (`static/js/tools.js`)
-Wired all new fields; SRT download on transcribe; auto-trim mode; denoise presets; dry/wet label.
+## Problems fixed
+1. **Dual voice (original + effect)** — broken dry/wet used `overlay()`, which layered two full voices. Replaced with sample-level blend; presets always run at 100% effect only.
+2. **Weak effects** — stronger robot modulation, clearer echo (2 taps), better preset pitch amounts (slight_deeper −4, anon −6 + mild ring, deep −7, chipmunk +7).
 
 ## Deploy
-
 ```bash
-cp audio_tools.py /path/to/repo/
-cp app.py /path/to/repo/          # or merge carefully
-cp static/js/tools.js /path/to/repo/static/js/
-cp templates/partials/tool_widgets/*.html /path/to/repo/templates/partials/tool_widgets/
+cp audio_tools.py /your/repo/
+cp static/js/tools.js /your/repo/static/js/
+cp templates/partials/tool_widgets/voicechange.html /your/repo/templates/partials/tool_widgets/
 ```
+Hard-refresh the browser.
 
-Restart the app.
-
-## Still recommended later (not in this pack)
-1. Whisper transcription on GPU worker
-2. Waveform UI on cutter
-3. Before/after player on denoise
-4. Tool chaining buttons (“Send to Denoise / Trim”)
-5. New tools: vocal separator, loudness to -14 LUFS, etc.
+## How to use
+- **Presets** (Slight deeper, Anon, Chipmunk, Deep): full effect, no mix slider.
+- **Pitch Shift / Robot / Echo**: adjust controls; Effect amount at 100% = only processed voice.

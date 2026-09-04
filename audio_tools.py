@@ -393,100 +393,149 @@ def normalize(file_bytes: bytes, filename: str, target_dbfs: float = -3.0,
 # ---------------------------------------------------------------------------
 # Voice change (with dry/wet)
 # ---------------------------------------------------------------------------
+def _segment_from_samples(samples, frame_rate: int, sample_width: int, channels: int) -> AudioSegment:
+    import numpy as np
+    samples = np.clip(samples, -32768, 32767).astype(np.int16)
+    return AudioSegment(
+        samples.tobytes(),
+        frame_rate=frame_rate,
+        sample_width=sample_width,
+        channels=channels,
+    )
+
+
+def _pitch_resample(audio: AudioSegment, semitones: float) -> AudioSegment:
+    """Change pitch by resampling (also changes duration slightly). Clean single voice."""
+    if abs(semitones) < 0.01:
+        return audio
+    rate_ratio = 2 ** (float(semitones) / 12.0)
+    new_rate = max(1000, int(audio.frame_rate * rate_ratio))
+    shifted = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
+    return shifted.set_frame_rate(audio.frame_rate)
+
+
+def _blend_dry_wet(dry: AudioSegment, wet: AudioSegment, dry_wet: float) -> AudioSegment:
+    """Sample-level blend. dry_wet=1 → full effect only; 0 → original only. No dual-voice overlay."""
+    import numpy as np
+    dry_wet = max(0.0, min(1.0, float(dry_wet)))
+    if dry_wet >= 0.999:
+        return wet
+    if dry_wet <= 0.001:
+        return dry
+    # Match length and channel layout
+    n = min(len(dry), len(wet))
+    dry, wet = dry[:n], wet[:n]
+    if dry.channels != wet.channels:
+        wet = wet.set_channels(dry.channels)
+    if dry.frame_rate != wet.frame_rate:
+        wet = wet.set_frame_rate(dry.frame_rate)
+    d = np.array(dry.get_array_of_samples(), dtype=np.float64)
+    w = np.array(wet.get_array_of_samples(), dtype=np.float64)
+    m = min(len(d), len(w))
+    mixed = (1.0 - dry_wet) * d[:m] + dry_wet * w[:m]
+    return _segment_from_samples(mixed, dry.frame_rate, dry.sample_width, dry.channels)
+
+
 def voice_change(file_bytes: bytes, filename: str, effect: str,
                  dry_wet: float = 1.0, **params) -> bytes:
-    """Apply a voice effect. dry_wet 0=original, 1=full effect (default)."""
+    """Apply a voice effect. Output is a single processed voice (not original+effect layered).
+
+    dry_wet: 0 = original only, 1 = full effect (default). Only used when the user
+    deliberately lowers the mix; presets always run at full effect.
+    """
     check_file_size(file_bytes)
     import numpy as np
 
     audio = _load_segment(file_bytes, filename)
-    dry_wet = max(0.0, min(1.0, float(dry_wet if dry_wet is not None else 1.0)))
+    # Force mono for cleaner processing / consistent effect strength
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+
+    effect = (effect or "pitch_shift").strip().lower()
+    # Presets always full wet — dual-voice was caused by broken overlay mix
+    if effect in ("anon", "slight_deeper", "chipmunk", "deep_voice"):
+        dry_wet = 1.0
+    else:
+        dry_wet = max(0.0, min(1.0, float(dry_wet if dry_wet is not None else 1.0)))
 
     if effect == "pitch_shift":
-        # Pitch shift without changing duration (rough resampling approach)
         semitones = float(params.get("semitones", 0))
-        if semitones == 0:
-            result = audio
-        else:
-            rate_ratio = 2 ** (semitones / 12.0)
-            shifted = audio._spawn(
-                audio.raw_data,
-                overrides={"frame_rate": int(audio.frame_rate * rate_ratio)},
-            ).set_frame_rate(audio.frame_rate)
-            # Time-correct by frame-rate trick inverse would need rubberband;
-            # keep current practical behaviour (slight duration change on extreme shifts)
-            result = shifted
+        result = _pitch_resample(audio, semitones)
+
+    elif effect == "slight_deeper":
+        # Clear lower pitch, still intelligible
+        result = _pitch_resample(audio, -4)
+
+    elif effect == "anon":
+        # Stronger pitch down + light ring-mod so it doesn't sound like the same person
+        pitched = _pitch_resample(audio, -6)
+        samples = np.array(pitched.get_array_of_samples(), dtype=np.float64)
+        # Per-channel frame count
+        n_frames = len(samples) // pitched.channels
+        t = np.linspace(0, n_frames / pitched.frame_rate, n_frames, endpoint=False)
+        # Mild ring modulation (not full robot) for anonymity
+        carrier = np.sin(2 * np.pi * 40 * t)
+        if pitched.channels == 2:
+            carrier = np.repeat(carrier, 2)
+        samples = samples * (0.85 + 0.15 * carrier)
+        result = _segment_from_samples(samples, pitched.frame_rate, pitched.sample_width, pitched.channels)
 
     elif effect == "robot":
-        intensity = float(params.get("intensity", 0.5))
-        samples = np.array(audio.get_array_of_samples()).astype(np.float64)
-        t = np.linspace(0, len(samples) / audio.frame_rate, len(samples), endpoint=False)
-        carrier = np.sin(2 * np.pi * 60 * t)
-        depth = 0.75 * intensity
-        robot_samples = samples * (1 - depth + depth * carrier)
-        robot_samples = np.clip(robot_samples, -32768, 32767).astype(np.int16)
-        result = AudioSegment(
-            robot_samples.tobytes(),
-            frame_rate=audio.frame_rate,
-            sample_width=audio.sample_width,
-            channels=audio.channels,
-        )
+        intensity = float(params.get("intensity", 0.65))
+        intensity = max(0.15, min(1.0, intensity))
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float64)
+        n_frames = len(samples) // audio.channels
+        t = np.linspace(0, n_frames / audio.frame_rate, n_frames, endpoint=False)
+        # Classic robot: amplitude modulation + slight bitcrush feel
+        carrier = np.sin(2 * np.pi * 50 * t)
+        if audio.channels == 2:
+            carrier = np.repeat(carrier, 2)
+        depth = 0.55 + 0.4 * intensity  # stronger default than before
+        robot = samples * ((1.0 - depth) + depth * (0.5 + 0.5 * carrier))
+        # Soft clip
+        peak = np.max(np.abs(robot)) or 1.0
+        if peak > 30000:
+            robot = robot * (30000.0 / peak)
+        result = _segment_from_samples(robot, audio.frame_rate, audio.sample_width, audio.channels)
 
     elif effect == "echo":
-        delay_ms = int(params.get("delay_ms", 200))
-        decay = float(params.get("decay", 0.5))
-        samples = np.array(audio.get_array_of_samples()).astype(np.float64)
+        delay_ms = int(params.get("delay_ms", 280))
+        decay = float(params.get("decay", 0.45))
+        delay_ms = max(40, min(900, delay_ms))
+        decay = max(0.15, min(0.75, decay))
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float64)
         delay_samples = int(delay_ms * audio.frame_rate / 1000) * audio.channels
         echoed = samples.copy()
+        # 2 taps for a clearer echo instead of a faint ghost
         if delay_samples < len(samples):
             echoed[delay_samples:] += samples[:-delay_samples] * decay
-        echoed = np.clip(echoed, -32768, 32767).astype(np.int16)
-        result = AudioSegment(
-            echoed.tobytes(),
-            frame_rate=audio.frame_rate,
-            sample_width=audio.sample_width,
-            channels=audio.channels,
-        )
+        delay2 = delay_samples * 2
+        if delay2 < len(samples):
+            echoed[delay2:] += samples[:-delay2] * (decay * 0.45)
+        peak = np.max(np.abs(echoed)) or 1.0
+        if peak > 32000:
+            echoed = echoed * (32000.0 / peak)
+        result = _segment_from_samples(echoed, audio.frame_rate, audio.sample_width, audio.channels)
 
     elif effect == "chipmunk":
-        new_rate = int(audio.frame_rate * 1.5)
-        result = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
-        result = result.set_frame_rate(audio.frame_rate)
+        # Higher + faster — intentional character voice
+        result = _pitch_resample(audio, 7)
+        # Extra speed-up character
+        new_rate = int(result.frame_rate * 1.15)
+        result = result._spawn(result.raw_data, overrides={"frame_rate": new_rate}).set_frame_rate(audio.frame_rate)
 
     elif effect == "deep_voice":
-        new_rate = int(audio.frame_rate * 0.7)
-        result = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
-        result = result.set_frame_rate(audio.frame_rate)
-
-    elif effect in ("anon", "slight_deeper"):
-        # Practical presets built on pitch_shift
-        semitones = -3 if effect == "slight_deeper" else -5
-        rate_ratio = 2 ** (semitones / 12.0)
-        result = audio._spawn(
-            audio.raw_data,
-            overrides={"frame_rate": int(audio.frame_rate * rate_ratio)},
-        ).set_frame_rate(audio.frame_rate)
+        result = _pitch_resample(audio, -7)
 
     else:
         raise ValueError(f"Unknown effect: {effect}")
 
-    # Dry/wet mix
-    if dry_wet < 1.0 and effect not in ("chipmunk", "deep_voice"):
-        # Overlay wet on dry with gain
-        dry = audio
-        wet = result
-        # Match lengths
-        min_len = min(len(dry), len(wet))
-        dry = dry[:min_len]
-        wet = wet[:min_len]
-        dry = dry - (20 * (1 - (1 - dry_wet)))  # rough blend via gain
-        # Simpler: use overlay with wet quieter when dry_wet low
-        if dry_wet <= 0.01:
-            result = audio
-        else:
-            result = dry.overlay(wet.apply_gain(-6 * (1 - dry_wet)))
+    # Optional mix — sample blend only (never overlay two full voices)
+    if dry_wet < 0.999:
+        result = _blend_dry_wet(audio, result, dry_wet)
 
     return _export_bytes(result, "mp3")
+
 
 
 # ---------------------------------------------------------------------------
