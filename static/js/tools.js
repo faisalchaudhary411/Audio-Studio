@@ -37,8 +37,78 @@
     return AUDIO_MIME[fmt] || 'audio/mpeg';
   }
 
+  const TRANSFER_KEY = 'voxcraft_transfer_v1';
+  const NEXT_TOOLS = [
+    { slug: 'trim-cut-audio', label: 'Trim' },
+    { slug: 'remove-background-noise', label: 'Denoise' },
+    { slug: 'normalize-audio-volume', label: 'Normalize' },
+    { slug: 'merge-audio-files', label: 'Merge' },
+    { slug: 'convert-audio-format', label: 'Convert' },
+    { slug: 'change-audio-speed', label: 'Speed' },
+    { slug: 'fade-audio', label: 'Fade' },
+  ];
+
+  function saveTransfer(b64, filename, mime) {
+    try {
+      sessionStorage.setItem(TRANSFER_KEY, JSON.stringify({
+        b64: b64,
+        filename: filename || 'audio.mp3',
+        mime: mime || 'audio/mpeg',
+        ts: Date.now(),
+      }));
+    } catch (e) {
+      // quota exceeded — ignore
+    }
+  }
+
+  function loadTransfer() {
+    try {
+      const raw = sessionStorage.getItem(TRANSFER_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // Expire after 30 minutes
+      if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > 30 * 60 * 1000) {
+        sessionStorage.removeItem(TRANSFER_KEY);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearTransfer() {
+    try { sessionStorage.removeItem(TRANSFER_KEY); } catch (e) {}
+  }
+
+  function fileFromTransfer(data) {
+    const bin = atob(data.b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new File([arr], data.filename || 'audio.mp3', { type: data.mime || 'audio/mpeg' });
+  }
+
+  function applyTransferToInput(input, data) {
+    if (!input || !data) return false;
+    try {
+      const file = fileFromTransfer(data);
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function audioPlayerHtml(b64, filename, mime) {
     mime = mime || 'audio/mpeg';
+    // Persist for cross-tool send
+    saveTransfer(b64, filename, mime);
+    const links = NEXT_TOOLS.map((t) =>
+      `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
+    ).join('');
     return `
       <div class="result-panel">
         <audio controls src="data:${mime};base64,${b64}"></audio>
@@ -47,18 +117,52 @@
           <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
         </div>
         <div class="result-panel__next">
-          <span class="result-panel__next-label">Next step</span>
-          <div class="result-panel__next-links">
-            <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Trim</a>
-            <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Denoise</a>
-            <a class="btn btn--ghost btn--sm" href="/tools/normalize-audio-volume">Normalize</a>
-            <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Merge</a>
-            <a class="btn btn--ghost btn--sm" href="/tools/convert-audio-format">Convert</a>
-          </div>
+          <span class="result-panel__next-label">Send to another tool</span>
+          <div class="result-panel__next-links">${links}</div>
         </div>
       </div>
     `;
   }
+
+  // When landing on a tool with a saved transfer, offer to load it
+  function offerIncomingTransfer() {
+    const data = loadTransfer();
+    if (!data) return;
+    const input = document.querySelector('input.file-input[type="file"]:not([style*="display:none"])');
+    if (!input) return;
+    const panel = input.closest('.panel') || document.body;
+    if (panel.querySelector('[data-transfer-banner]')) return;
+    const ban = document.createElement('div');
+    ban.setAttribute('data-transfer-banner', '1');
+    ban.style.cssText = 'margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(79,166,156,0.35);background:rgba(79,166,156,0.08);font-size:0.85rem;color:var(--text-mid);display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
+    ban.innerHTML = `<span>Audio from previous tool ready: <strong style="color:var(--text-hi)">${(data.filename || 'file').replace(/[<>]/g,'')}</strong></span>`;
+    const useBtn = document.createElement('button');
+    useBtn.type = 'button';
+    useBtn.className = 'btn btn--brass btn--sm';
+    useBtn.textContent = 'Use this file';
+    useBtn.addEventListener('click', () => {
+      if (applyTransferToInput(input, data)) {
+        ban.innerHTML = '<span style="color:var(--jade-hi)">File loaded — adjust settings and run the tool.</span>';
+      } else {
+        ban.innerHTML = '<span style="color:var(--brass-hi)">Could not load automatically — please choose the file again.</span>';
+      }
+    });
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn btn--ghost btn--sm';
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => { clearTransfer(); ban.remove(); });
+    ban.appendChild(useBtn);
+    ban.appendChild(dismiss);
+    panel.insertBefore(ban, panel.firstChild);
+  }
+
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-send-tool]');
+    if (!a) return;
+    // transfer already saved by audioPlayerHtml; navigation proceeds
+  });
+
 
   // Upgrade plain file inputs into drop zones (empty-state UX)
   function enhanceFileInputs() {
@@ -153,10 +257,20 @@
   }
 
   function friendlyError(data, fallback) {
-    if (data && typeof data.error === 'string' && data.error.trim()) {
-      return data.error.trim();
+    const msg = (data && (data.error || data.message)) || fallback || 'Something went wrong.';
+    if (/limit|quota|daily|monthly/i.test(msg)) {
+      return msg + ' — Upgrade on the Pricing page for higher limits.';
     }
-    return fallback || 'Something went wrong. Please try again.';
+    if (/network|fetch|failed to fetch/i.test(msg)) {
+      return 'Network error — check your connection and try again.';
+    }
+    if (/too large|file size|10mb|50mb/i.test(msg)) {
+      return msg + ' Try a shorter clip or compress first.';
+    }
+    if (/no file|choose a file|upload/i.test(msg)) {
+      return 'Choose an audio file first.';
+    }
+    return msg;
   }
 
   function bindFileLabel(input) {

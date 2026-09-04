@@ -47,14 +47,10 @@
   const tabButtons = {
     single: document.getElementById('tab-single-btn'),
     batch: document.getElementById('tab-batch-btn'),
-    clone: document.getElementById('tab-clone-btn'),
-    music: document.getElementById('tab-music-btn'),
   };
   const tabPanels = {
     single: document.getElementById('tab-single'),
     batch: document.getElementById('tab-batch'),
-    clone: document.getElementById('tab-clone'),
-    music: document.getElementById('tab-music'),
   };
   function showTab(name) {
     Object.keys(tabPanels).forEach((key) => {
@@ -75,7 +71,11 @@
   // they clicked on, instead of dropping them on Single and making them
   // hunt for the right button.
   const initialTab = (window.location.hash || '').replace('#', '');
-  if (initialTab && tabPanels[initialTab]) {
+  if (initialTab === 'clone') {
+    window.location.replace('/voice-cloning');
+  } else if (initialTab === 'music') {
+    window.location.replace('/tools/ai-music-generator');
+  } else if (initialTab && tabPanels[initialTab]) {
     showTab(initialTab);
   }
 
@@ -367,6 +367,14 @@
       const ext = (document.getElementById('export-format') || {}).value === 'wav' ? 'wav' : 'mp3';
       const secTag = (activeSection && activeSection !== 'none') ? ('-' + activeSection) : '';
       const fname = (data.filename || ('VoxCraft-Narration' + secTag + '.mp3')).replace(/\.mp3$/i, secTag + '.' + ext).replace(/--+/g, '-');
+      try {
+        sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
+          b64: data.audio_b64,
+          filename: fname,
+          mime: 'audio/mpeg',
+          ts: Date.now(),
+        }));
+      } catch (e) {}
       singleResult.innerHTML = `
         <div class="result-panel">
           <div class="result-panel__label">Your narration</div>
@@ -374,9 +382,16 @@
           <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
             <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/mpeg;base64,${data.audio_b64}">Download</a>
             <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
-            <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Send to Trim →</a>
-            <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Send to Denoise →</a>
-            <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Send to Merge →</a>
+          </div>
+          <div class="result-panel__next">
+            <span class="result-panel__next-label">Send to another tool</span>
+            <div class="result-panel__next-links">
+              <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Trim</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Denoise</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/normalize-audio-volume">Normalize</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Merge</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/convert-audio-format">Convert</a>
+            </div>
           </div>
         </div>
       `;
