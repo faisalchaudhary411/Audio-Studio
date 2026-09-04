@@ -1,42 +1,24 @@
 // ===== VoxCraft main.js =====
 
-// ---- Hero waveform (oscilloscope-style animated bars) ----
+// ---- Hero waveform (CSS-animated div bars) ----
 function initWave(){
-  const svg = document.querySelector('.wave');
-  if(!svg) return;
-  const barCount = 64;
-  const w = 1000, h = 120;
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  svg.setAttribute('preserveAspectRatio', 'none');
-  const gap = 4;
-  const barWidth = (w / barCount) - gap;
-  const bars = [];
-
-  for(let i=0;i<barCount;i++){
-    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('width', barWidth);
-    rect.setAttribute('rx', 2);
-    rect.setAttribute('x', i * (barWidth+gap));
-    svg.appendChild(rect);
-    bars.push(rect);
-  }
-
-  let t = 0;
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function frame(){
-    t += 0.045;
-    bars.forEach((rect, i) => {
-      const phase = i * 0.35;
-      const amp = (Math.sin(t + phase) * 0.5 + 0.5) * 0.7
-                + (Math.sin(t*2.3 + phase*1.7) * 0.5 + 0.5) * 0.3;
-      const barH = 8 + amp * (h - 16);
-      rect.setAttribute('height', barH.toFixed(1));
-      rect.setAttribute('y', ((h - barH) / 2).toFixed(1));
+  const wave = document.querySelector('.wave');
+  if(!wave) return;
+  // The waveform is now pure CSS-driven with 80 div bars.
+  // No JS animation loop needed — CSS handles the breathing animation.
+  // We just ensure the container exists and is ready.
+  const container = wave.querySelector('.wave-container');
+  if(!container) return;
+  // Optional: add a subtle entrance animation on load
+  wave.style.opacity = '0';
+  wave.style.transform = 'translateY(12px)';
+  wave.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      wave.style.opacity = '1';
+      wave.style.transform = 'translateY(0)';
     });
-    if(!reduced) requestAnimationFrame(frame);
-  }
-  frame();
+  });
 }
 
 // ---- Studio: voice picker + character counter + mock generate ----
