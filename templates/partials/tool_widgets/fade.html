@@ -1,0 +1,23 @@
+  <div class="panel">
+    <span class="panel__label">Fade in / fade out</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Smooth starts and ends so clips don't click when you drop them into a video or merge. Up to 10MB.</p>
+    <input type="file" class="file-input" id="fade-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Fade in: <span id="fade-in-label">500</span> ms</label>
+        <input type="range" class="studio-range" id="fade-in" min="0" max="5000" step="50" value="500" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Fade out: <span id="fade-out-label">500</span> ms</label>
+        <input type="range" class="studio-range" id="fade-out" min="0" max="5000" step="50" value="500" style="width:100%;">
+      </div>
+    </div>
+    <select id="fade-format" class="studio-select" style="margin-bottom:12px;">
+      <option value="mp3">MP3</option><option value="wav">WAV</option>
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="fade-btn">Apply fades</button>
+      <span class="render-status" data-fade-status></span>
+    </div>
+    <div id="fade-result" style="margin-top:14px;"></div>
+  </div>

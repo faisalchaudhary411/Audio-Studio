@@ -1,0 +1,15 @@
+  <div class="panel">
+    <span class="panel__label">Normalize volume</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Raise quiet recordings or tame loud ones so peak level is consistent. Good before merging clips or uploading to YouTube. Up to 10MB.</p>
+    <input type="file" class="file-input" id="normalize-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Target peak: <span id="normalize-target-label">-3</span> dBFS</label>
+    <input type="range" class="studio-range" id="normalize-target" min="-12" max="-1" step="1" value="-3" style="width:100%;margin-bottom:12px;">
+    <select id="normalize-format" class="studio-select" style="margin-bottom:12px;">
+      <option value="mp3">MP3</option><option value="wav">WAV</option>
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="normalize-btn">Normalize</button>
+      <span class="render-status" data-normalize-status></span>
+    </div>
+    <div id="normalize-result" style="margin-top:14px;"></div>
+  </div>
