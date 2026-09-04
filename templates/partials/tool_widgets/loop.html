@@ -1,0 +1,15 @@
+  <div class="panel">
+    <span class="panel__label">Loop audio</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Repeat a short clip 2–10 times (intros, beds, stingers). Up to 10MB.</p>
+    <input type="file" class="file-input" id="loop-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Repeats: <span id="loop-count-label">2</span></label>
+    <input type="range" class="studio-range" id="loop-count" min="2" max="10" step="1" value="2" style="width:100%;margin-bottom:12px;">
+    <select id="loop-format" class="studio-select" style="margin-bottom:12px;">
+      <option value="mp3">MP3</option><option value="wav">WAV</option>
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="loop-btn">Loop</button>
+      <span class="render-status" data-loop-status></span>
+    </div>
+    <div id="loop-result" style="margin-top:14px;"></div>
+  </div>

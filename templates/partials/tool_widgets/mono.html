@@ -1,0 +1,13 @@
+  <div class="panel">
+    <span class="panel__label">Stereo to mono</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Collapse stereo to a single mono channel — smaller files, simpler voiceovers. Up to 10MB.</p>
+    <input type="file" class="file-input" id="mono-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
+    <select id="mono-format" class="studio-select" style="margin-bottom:12px;">
+      <option value="mp3">MP3</option><option value="wav">WAV</option>
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="mono-btn">Convert to mono</button>
+      <span class="render-status" data-mono-status></span>
+    </div>
+    <div id="mono-result" style="margin-top:14px;"></div>
+  </div>
