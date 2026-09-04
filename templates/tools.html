@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Free Online Audio Tools — Transcribe, Convert, Merge & More{% endblock %}
-{% block meta_description %}Free online audio toolkit: transcribe, convert format, merge, trim, denoise, change voice, extract from video, or generate music. Pick a tool below.{% endblock %}
+{% block meta_description %}Free online audio tools: transcribe, convert, merge, trim, denoise, normalize, speed, fade, split, and more. Simple browser tools for creators.{% endblock %}
 
 {% block content %}
-<div class="section" style="padding-bottom:0;">
+<div class="section" style="padding-bottom:8px;">
   <div class="section__head">
-    <span class="section__eyebrow">Audio toolkit</span>
-    <h1 class="section__title">Free online audio tools for everyday creator workflows.</h1>
-    <p class="section__sub">Transcribe recordings, convert formats, combine clips, trim audio, reduce steady background noise, change voice effects and extract audio from video. Each tool is designed to handle a specific job without requiring a full desktop editor.</p>
+    <span class="section__eyebrow">Toolkit</span>
+    <h1 class="section__title">Audio tools</h1>
+    <p class="section__sub">Pick a tool, upload a file, download the result. No install.</p>
   </div>
 </div>
 
@@ -16,112 +16,87 @@
 {% endif %}
 
 <div class="section" style="padding-top:0;">
-  <div class="tool-grid">
-    {% for tool in ordered_tools %}
-    <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card">
-      <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
-      <h2 class="tool-card__title">{{ tool.h1 }}</h2>
-      <p class="tool-card__sub">{{ tool.sub }}</p>
-      <span class="tool-card__cta">Open tool →</span>
-    </a>
-    {% endfor %}
-    {% if filedesk_url %}
-    <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="tool-card">
-      <span class="tool-card__tag">PDF Tools</span>
-      <h2 class="tool-card__title">FileDesk — PDF tools</h2>
-      <p class="tool-card__sub">Merge, split, compress and convert PDFs — a separate free toolkit, opens in a new tab.</p>
-      <span class="tool-card__cta">Open FileDesk ↗</span>
-    </a>
-    {% endif %}
+  {# Group tools into simple categories for a cleaner library #}
+  {% set groups = [
+    ("Speech & text", ["transcribe-audio-to-text", "voice-changer"]),
+    ("Edit & clean", ["trim-cut-audio", "merge-audio-files", "remove-background-noise", "split-audio-by-silence", "fade-audio"]),
+    ("Volume & tone", ["normalize-audio-volume", "adjust-audio-volume", "simple-audio-eq"]),
+    ("Format & channels", ["convert-audio-format", "stereo-to-mono", "extract-audio-from-video"]),
+    ("Time & effects", ["change-audio-speed", "loop-audio", "reverse-audio"]),
+    ("Create", ["ai-music-generator"]),
+  ] %}
+  {% set by_slug = {} %}
+  {% for t in ordered_tools %}
+    {% set _ = by_slug.update({t.slug: t}) %}
+  {% endfor %}
+
+  {% for group_name, slugs in groups %}
+  <div class="tools-group">
+    <h2 class="tools-group__title">{{ group_name }}</h2>
+    <div class="tool-grid tool-grid--compact">
+      {% for slug in slugs %}
+        {% set tool = by_slug.get(slug) %}
+        {% if tool %}
+        <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact">
+          <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
+          <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
+          <p class="tool-card__sub">{{ tool.sub }}</p>
+          <span class="tool-card__cta">Open →</span>
+        </a>
+        {% endif %}
+      {% endfor %}
+    </div>
   </div>
+  {% endfor %}
+
+  {# Any tool not listed in groups still appears #}
+  {% set listed = [] %}
+  {% for g, slugs in groups %}
+    {% for s in slugs %}{% set _ = listed.append(s) %}{% endfor %}
+  {% endfor %}
+  {% set extras = [] %}
+  {% for t in ordered_tools %}
+    {% if t.slug not in listed %}{% set _ = extras.append(t) %}{% endif %}
+  {% endfor %}
+  {% if extras %}
+  <div class="tools-group">
+    <h2 class="tools-group__title">More</h2>
+    <div class="tool-grid tool-grid--compact">
+      {% for tool in extras %}
+      <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact">
+        <span class="tool-card__tag">{{ tool.eyebrow }}</span>
+        <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
+        <p class="tool-card__sub">{{ tool.sub }}</p>
+        <span class="tool-card__cta">Open →</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if filedesk_url %}
+  <div class="tools-group">
+    <h2 class="tools-group__title">Also from us</h2>
+    <div class="tool-grid tool-grid--compact">
+      <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="tool-card tool-card--compact">
+        <span class="tool-card__tag">PDF</span>
+        <h3 class="tool-card__title">FileDesk</h3>
+        <p class="tool-card__sub">Merge, split, and compress PDFs — opens in a new tab.</p>
+        <span class="tool-card__cta">Open ↗</span>
+      </a>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
-<section class="section" style="padding-top:10px;max-width:900px;">
-  <div class="section__head">
-    <span class="section__eyebrow">Choosing a tool</span>
-    <h2 class="section__title">Which VoxCraft tool should you use?</h2>
-    <p class="section__sub">Pick the smallest tool that matches the job. Keeping the workflow focused can make processing faster and helps preserve the original recording when you only need a simple change.</p>
-  </div>
-
-  <div class="chain" style="margin-top:0;">
-    <div class="chain__node">
-      <h3>Need text from speech?</h3>
-      <p>Use <a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi);"><strong>Transcribe</strong></a> to turn supported audio recordings into text. Clear speech and limited background noise generally produce better transcripts.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>Need a different file format?</h3>
-      <p>Use <a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--brass-hi);"><strong>Convert</strong></a> when you need MP3, WAV, OGG, M4A or FLAC output. Keep the original file if you may need to make a different conversion later.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>Need to edit a recording?</h3>
-      <p>Use <a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--brass-hi);"><strong>Merge</strong></a>, <a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--brass-hi);"><strong>Cutter</strong></a> or <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi);"><strong>Denoise</strong></a> for common editing tasks without opening a full desktop editor.</p>
-    </div>
-  </div>
-
-  <div class="chain" style="margin-top:16px;">
-    <div class="chain__node">
-      <h3>Need a voice effect?</h3>
-      <p><a href="{{ url_for('tool_page', slug='voice-changer') }}" style="color:var(--brass-hi);"><strong>Voice Changer</strong></a> provides pitch, robot, echo, chipmunk and deep-voice effects for clips where a deliberate character or processing effect is wanted.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>Need audio from a video?</h3>
-      <p><a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--brass-hi);"><strong>Video to Audio</strong></a> extracts an audio track from supported video formats so you can continue editing or converting it separately.</p>
-    </div>
-    <span class="chain__arrow" style="visibility:hidden;">→</span>
-    <div class="chain__node">
-      <h3>Need a quick music bed?</h3>
-      <p><a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--brass-hi);"><strong>Music Generator</strong></a> is available to Pro+ users for generating tracks from a description. Check the current licensing information before using generated music commercially.</p>
-    </div>
-  </div>
-
-  <div class="panel" style="margin-top:24px;">
-    <span class="panel__label">Before processing an important recording</span>
-    <p style="margin:8px 0;color:var(--text-mid);line-height:1.7;">
-      Keep an untouched copy of the original. Choose a sensible output format, avoid repeated lossy conversions,
-      and listen to the result before deleting your source. Processing cannot reliably restore information that
-      was never captured or was already lost through heavy compression.
-    </p>
-  </div>
-
-  <div class="section__head" style="margin-top:38px;">
-    <span class="section__eyebrow">Audio workflow tips</span>
-    <h2 class="section__title">Start with the cleanest source you can.</h2>
-    <p class="section__sub">Good microphone placement, moderate recording levels and a quiet room usually produce better results than aggressive processing after the fact. For speech, keep the speaker reasonably close to the microphone and avoid clipping the input.</p>
-  </div>
-
-  <div style="display:grid;gap:12px;margin-top:16px;">
-    <div class="panel">
-      <h3 style="font-family:var(--display);margin-bottom:7px;">For transcription</h3>
-      <p style="color:var(--text-mid);line-height:1.7;margin:0;">Use a recording with clear speech and as little competing sound as possible. If several people speak at once, review the generated transcript rather than assuming every word will be separated perfectly.</p>
-    </div>
-    <div class="panel">
-      <h3 style="font-family:var(--display);margin-bottom:7px;">For noise removal</h3>
-      <p style="color:var(--text-mid);line-height:1.7;margin:0;">Steady room noise is a better candidate for denoising than sudden sounds. Start with moderate processing: excessive noise reduction can make speech sound metallic or unnatural.</p>
-    </div>
-    <div class="panel">
-      <h3 style="font-family:var(--display);margin-bottom:7px;">For format conversion</h3>
-      <p style="color:var(--text-mid);line-height:1.7;margin:0;">Choose WAV or FLAC when preserving quality matters and MP3 when a smaller, broadly compatible file is more useful. Converting an already compressed MP3 to another lossy format does not restore the lost detail.</p>
-    </div>
-  </div>
-
-  <div class="panel" style="margin-top:24px;">
-    <span class="panel__label">Frequently asked questions</span>
-    <details style="margin-top:10px;">
-      <summary>Are my files permanently stored?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;">Check the VoxCraft Privacy page for the current handling and retention information for uploaded files and generated results.</p>
-    </details>
-    <details style="margin-top:10px;">
-      <summary>What happens if a file is too large?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;">Each tool shows its current file limit before processing. A file above that limit should be reduced or split before uploading.</p>
-    </details>
-    <details style="margin-top:10px;">
-      <summary>Should I keep my original file?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;">Yes. Keeping an untouched original is the safest way to retry with different settings or formats.</p>
-    </details>
+<section class="section" style="padding-top:8px;max-width:720px;">
+  <div class="panel">
+    <span class="panel__label">Quick tips</span>
+    <ul style="margin:8px 0 0;padding-left:18px;color:var(--text-mid);line-height:1.75;font-size:0.92rem;">
+      <li>Keep an original copy before editing.</li>
+      <li>Clean noise before transcribe or split for better results.</li>
+      <li>Normalize before merge if levels jump between clips.</li>
+    </ul>
   </div>
 </section>
-
 {% endblock %}
