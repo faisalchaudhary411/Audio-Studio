@@ -517,11 +517,18 @@
   const vcProgress = ensureProgress(vcResult);
 
   if (vcEffect) {
-    vcEffect.addEventListener('change', () => {
-      if (vcPitchControls) vcPitchControls.style.display = vcEffect.value === 'pitch_shift' ? '' : 'none';
-      if (vcRobotControls) vcRobotControls.style.display = vcEffect.value === 'robot' ? '' : 'none';
-      if (vcEchoControls) vcEchoControls.style.display = vcEffect.value === 'echo' ? '' : 'none';
-    });
+    const vcDryWetWrap = document.getElementById('voicechange-drywet-wrap');
+    function syncVcControls() {
+      const v = vcEffect.value;
+      if (vcPitchControls) vcPitchControls.style.display = v === 'pitch_shift' ? '' : 'none';
+      if (vcRobotControls) vcRobotControls.style.display = v === 'robot' ? '' : 'none';
+      if (vcEchoControls) vcEchoControls.style.display = v === 'echo' ? '' : 'none';
+      // Presets are always full effect — hide mix slider to avoid confusion
+      const isPreset = ['slight_deeper','anon','chipmunk','deep_voice'].indexOf(v) >= 0;
+      if (vcDryWetWrap) vcDryWetWrap.style.display = isPreset ? 'none' : '';
+    }
+    vcEffect.addEventListener('change', syncVcControls);
+    syncVcControls();
     if (vcSemitones && vcSemitonesLabel) {
       vcSemitones.addEventListener('input', () => {
         vcSemitonesLabel.textContent = vcSemitones.value;
@@ -563,8 +570,10 @@
     const form = new FormData();
     form.append('file', file);
     form.append('effect', vcEffect.value);
+    const effectVal = vcEffect ? vcEffect.value : 'pitch_shift';
+    const isPreset = ['slight_deeper','anon','chipmunk','deep_voice'].indexOf(effectVal) >= 0;
     const dw = document.getElementById('voicechange-drywet');
-    form.append('dry_wet', dw ? dw.value : '1');
+    form.append('dry_wet', isPreset ? '1' : (dw ? dw.value : '1'));
     if (vcEffect.value === 'pitch_shift' && vcSemitones) form.append('semitones', vcSemitones.value);
     if (vcEffect.value === 'robot' && vcIntensity) form.append('intensity', vcIntensity.value);
     if (vcEffect.value === 'echo') {
