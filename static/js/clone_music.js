@@ -206,13 +206,31 @@
   }
 
   if (cloneRefInput && cloneSaveBtn) {
-    cloneRefInput.addEventListener('change', () => {
+    cloneRefInput.addEventListener('change', async () => {
       pendingReferenceId = null;
       cloneSaveBtn.disabled = !cloneRefInput.files.length;
       if (cloneSaveHint) cloneSaveHint.textContent = cloneRefInput.files.length
         ? 'Uploads the clip, then asks for your consent before saving.'
         : 'Upload a clip first, then save it to reuse later.';
       if (cloneRefText) cloneRefText.value = '';
+      const qw = document.getElementById('clone-quality-warn');
+      if (qw) { qw.style.display = 'none'; qw.innerHTML = ''; }
+      // Eager upload for quality feedback
+      if (cloneRefInput.files.length) {
+        try {
+          const form = new FormData();
+          form.append('reference_audio', cloneRefInput.files[0]);
+          const uploadRes = await fetch('/api/clone/upload', { method: 'POST', body: form });
+          const uploadData = await uploadRes.json();
+          if (uploadRes.ok) {
+            pendingReferenceId = uploadData.reference_id;
+            if (qw && uploadData.quality && uploadData.quality.warnings && uploadData.quality.warnings.length) {
+              qw.style.display = '';
+              qw.innerHTML = uploadData.quality.warnings.map(w => '• ' + w).join('<br>');
+            }
+          }
+        } catch (e) {}
+      }
       // Auto-transcribe as soon as a new clip is picked, so by the time the
       // person is ready to generate, the Devanagari box is already filled
       // in — they only need to skim and correct it, not type it from
@@ -369,6 +387,11 @@
 
   if (cloneBtn) {
     cloneBtn.addEventListener('click', async () => {
+      const genConsent = document.getElementById('clone-gen-consent');
+      if (genConsent && !genConsent.checked) {
+        cloneStatus.textContent = 'Confirm you have permission to clone this voice before generating.';
+        return;
+      }
       const savedVoiceId = usingSavedVoice() ? cloneVoiceSelect.value : null;
       if (!savedVoiceId && !cloneRefInput.files.length) {
         cloneStatus.textContent = 'Upload a reference clip or pick a saved voice first.';
@@ -385,10 +408,12 @@
       }
       cloneBtn.disabled = true;
       cloneResult.innerHTML = '';
+      const progressLabel = document.getElementById('clone-progress-label');
       try {
         let referenceId = null;
         if (!savedVoiceId) {
           cloneStatus.textContent = 'Uploading reference clip…';
+          if (progressLabel) progressLabel.textContent = 'Step 1/3 — Upload';
           if (pendingReferenceId) {
             referenceId = pendingReferenceId;
           } else {
@@ -401,10 +426,21 @@
               return;
             }
             referenceId = uploadData.reference_id;
+            pendingReferenceId = referenceId;
+            // Surface quality warnings from server
+            const qw = document.getElementById('clone-quality-warn');
+            if (qw && uploadData.quality && uploadData.quality.warnings && uploadData.quality.warnings.length) {
+              qw.style.display = '';
+              qw.innerHTML = uploadData.quality.warnings.map(w => '• ' + w).join('<br>');
+            } else if (qw) {
+              qw.style.display = 'none';
+              qw.innerHTML = '';
+            }
           }
         }
 
         cloneStatus.textContent = 'Submitting cloning job…';
+        if (progressLabel) progressLabel.textContent = 'Step 2/3 — Queue on GPU';
         const refText = (engine === 'f5tts' && cloneRefText) ? cloneRefText.value.trim() : '';
         const genRes = await fetch('/api/clone/generate', {
           method: 'POST',
@@ -421,24 +457,37 @@
           return;
         }
 
-        const result = await pollJob(`/api/clone/status/${genData.job_id}`, (status) => {
+        const result = await pollJob(`/api/clone/status/${genData.job_id}`, (status, data) => {
           const lang = detectScriptShort(cloneText.value);
+          const pl = document.getElementById('clone-progress-label');
           if (status === 'generating') {
             cloneStatus.textContent = `Generating on GPU (${lang})… long scripts can take 1–4 minutes. Keep this tab open.`;
+            if (pl) {
+              const n = (data && data.chunks_generated) ? ` · chunk progress noted` : '';
+              pl.textContent = 'Step 3/3 — Generating' + n;
+            }
           } else if (status === 'queued') {
             cloneStatus.textContent = 'Queued… waiting for a free GPU worker.';
+            if (pl) pl.textContent = 'Step 2/3 — Queued';
           } else {
             cloneStatus.textContent = 'Still working… please wait (do not close this tab).';
+            if (pl) pl.textContent = 'Step 3/3 — Working…';
           }
         });
         if (result.status === 'done') {
           cloneStatus.textContent = 'Done.';
+          const pl = document.getElementById('clone-progress-label');
+          if (pl) pl.textContent = 'Complete';
           const ts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
           const cloneName = `VoxCraft-Clone-${ts}.wav`;
           cloneResult.innerHTML = `
             <audio controls style="width:100%;" src="data:audio/wav;base64,${result.audio_b64}"></audio>
-            <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-               download="${cloneName}" href="data:audio/wav;base64,${result.audio_b64}">Download WAV</a>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+              <a class="btn btn--brass btn--sm" download="${cloneName}" href="data:audio/wav;base64,${result.audio_b64}">Download WAV</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Send to Trim →</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Send to Denoise →</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Send to Merge →</a>
+            </div>
           `;
         } else {
           cloneStatus.textContent = result.error || 'Generation failed.';

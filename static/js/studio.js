@@ -17,8 +17,27 @@
       voiceSelect.appendChild(opt);
     });
   }
-  langSelect.addEventListener('change', populateVoices);
+  langSelect.addEventListener('change', () => {
+    populateVoices();
+    try { localStorage.setItem('vox_lang', langSelect.value); } catch (e) {}
+  });
+  // Restore last language + voice
+  try {
+    const savedLang = localStorage.getItem('vox_lang');
+    if (savedLang && VOICES[savedLang]) langSelect.value = savedLang;
+  } catch (e) {}
   populateVoices();
+  try {
+    const savedVoice = localStorage.getItem('vox_voice');
+    if (savedVoice) {
+      for (const opt of voiceSelect.options) {
+        if (opt.value === savedVoice) { voiceSelect.value = savedVoice; break; }
+      }
+    }
+  } catch (e) {}
+  voiceSelect.addEventListener('change', () => {
+    try { localStorage.setItem('vox_voice', voiceSelect.value); } catch (e) {}
+  });
 
   speedSlider.addEventListener('input', () => {
     speedLabel.textContent = speedSlider.value + '%';
@@ -66,23 +85,65 @@
   ssmlToggle.addEventListener('change', () => {
     ssmlCheatsheet.style.display = ssmlToggle.checked ? 'block' : 'none';
   });
+  document.querySelectorAll('[data-ssml-insert]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tag = btn.getAttribute('data-ssml-insert') || '';
+      const ta = document.getElementById('single-text');
+      if (!ta) return;
+      const start = ta.selectionStart || 0;
+      const end = ta.selectionEnd || 0;
+      const before = ta.value.slice(0, start);
+      const selected = ta.value.slice(start, end);
+      const after = ta.value.slice(end);
+      // If tag is pair like [strong][/strong], put selection inside
+      const m = tag.match(/^(\[[^\]]+\])(\[\/[^\]]+\])$/);
+      let insert = tag;
+      let cursor = start + tag.length;
+      if (m) {
+        insert = m[1] + (selected || '…') + m[2];
+        cursor = start + m[1].length + (selected || '…').length;
+      }
+      ta.value = before + insert + after;
+      ta.focus();
+      ta.setSelectionRange(cursor, cursor);
+      ta.dispatchEvent(new Event('input'));
+    });
+  });
+  // Section labels (optional helpers)
+  function prependSection(label) {
+    const ta = document.getElementById('single-text');
+    if (!ta) return;
+    const t = ta.value.trim();
+    ta.value = (t ? `[${label}]\n` + t : `[${label}]\n`);
+    ta.dispatchEvent(new Event('input'));
+  }
+  const si = document.getElementById('section-intro-btn');
+  const sb = document.getElementById('section-body-btn');
+  const so = document.getElementById('section-outro-btn');
+  if (si) si.addEventListener('click', () => prependSection('Intro'));
+  if (sb) sb.addEventListener('click', () => prependSection('Body'));
+  if (so) so.addEventListener('click', () => prependSection('Outro'));
 
   // ---- Preview ----
   const previewBtn = document.getElementById('preview-btn');
   const previewPlayer = document.getElementById('preview-player');
   const previewStatus = document.querySelector('[data-preview-status]');
-  previewBtn.addEventListener('click', async () => {
+  async function runPreview(customText) {
     previewBtn.disabled = true;
+    const psBtn = document.getElementById('preview-script-btn');
+    if (psBtn) psBtn.disabled = true;
     previewStatus.textContent = 'Loading preview…';
     try {
+      const body = {
+        language: langSelect.value,
+        voice_id: voiceSelect.value,
+        speed_pct: parseInt(speedSlider.value, 10),
+      };
+      if (customText) body.text = customText;
       const res = await fetch('/api/tts/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: langSelect.value,
-          voice_id: voiceSelect.value,
-          speed_pct: parseInt(speedSlider.value, 10),
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -93,13 +154,27 @@
       previewPlayer.src = URL.createObjectURL(blob);
       previewPlayer.style.display = 'block';
       previewPlayer.play();
-      previewStatus.textContent = '';
+      previewStatus.textContent = customText ? 'Playing your first line' : '';
     } catch (e) {
       previewStatus.textContent = 'Network error.';
     } finally {
       previewBtn.disabled = false;
+      if (psBtn) psBtn.disabled = false;
     }
-  });
+  }
+  previewBtn.addEventListener('click', () => runPreview(null));
+  const previewScriptBtn = document.getElementById('preview-script-btn');
+  if (previewScriptBtn) {
+    previewScriptBtn.addEventListener('click', () => {
+      const raw = (document.getElementById('single-text') || {}).value || '';
+      const first = raw.split(/[\n.?!۔؟]/).map(s => s.trim()).filter(Boolean)[0];
+      if (!first) {
+        previewStatus.textContent = 'Type some script first.';
+        return;
+      }
+      runPreview(first.slice(0, 200));
+    });
+  }
 
   // ---- Single generation ----
   const singleText = document.getElementById('single-text');
@@ -111,10 +186,38 @@
   const historyList = document.getElementById('history-list');
 
   function updateSingleMeta() {
-    const len = singleText.value.length;
-    const words = singleText.value.trim().split(/\s+/).filter(Boolean).length;
+    const text = singleText.value;
+    const len = text.length;
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
     charCount.textContent = `${len} chars`;
     durationEst.textContent = `~${(words / 2.5).toFixed(1)}s`;
+    // Mixed script / Roman Urdu tip
+    const tip = document.getElementById('script-tip');
+    if (tip) {
+      const hasUrdu = /[\u0600-\u06FF]/.test(text);
+      const hasDeva = /[\u0900-\u097F]/.test(text);
+      const hasLatin = /[A-Za-z]{4,}/.test(text);
+      const lang = (langSelect.value || '').toLowerCase();
+      if ((lang.includes('urdu') || lang.includes('hindi')) && hasLatin && !hasUrdu && !hasDeva && words > 3) {
+        tip.style.display = '';
+        tip.textContent = 'Tip: For clearer Urdu/Hindi pronunciation, write in native script (Nastaliq / Devanagari) instead of Roman letters.';
+      } else if (hasUrdu && hasLatin) {
+        tip.style.display = '';
+        tip.textContent = 'Mixed Urdu + English detected — preview a short line to check pronunciation of English words.';
+      } else {
+        tip.style.display = 'none';
+        tip.textContent = '';
+      }
+    }
+    const budget = document.getElementById('char-budget-warn');
+    if (budget) {
+      if (len > 2500) {
+        budget.style.display = '';
+        budget.textContent = 'Long script — consider generating in sections for better control.';
+      } else {
+        budget.style.display = 'none';
+      }
+    }
   }
   singleText.addEventListener('input', updateSingleMeta);
   updateSingleMeta();
@@ -183,6 +286,8 @@
           voice_id: voiceSelect.value,
           speed_pct: parseInt(speedSlider.value, 10),
           ssml_mode: ssmlToggle.checked,
+          normalize: !!(document.getElementById('normalize-toggle') || {}).checked,
+          export_format: (document.getElementById('export-format') || {}).value || 'mp3',
         }),
       });
       const data = await res.json();
@@ -199,13 +304,18 @@
       }
       const secs = ((Date.now() - started) / 1000).toFixed(1);
       singleStatus.textContent = `Ready · ${data.size_kb} KB · ${secs}s`;
+      const ext = (document.getElementById('export-format') || {}).value === 'wav' ? 'wav' : 'mp3';
+      const fname = (data.filename || 'VoxCraft-Narration.mp3').replace(/\.mp3$/i, '.' + ext);
       singleResult.innerHTML = `
         <div class="result-panel">
           <div class="result-panel__label">Your narration</div>
           <audio controls src="data:audio/mpeg;base64,${data.audio_b64}"></audio>
-          <div class="result-panel__actions">
-            <a class="btn btn--brass btn--sm" download="${data.filename}" href="data:audio/mpeg;base64,${data.audio_b64}">Download MP3</a>
+          <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
+            <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/mpeg;base64,${data.audio_b64}">Download</a>
             <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
+            <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Send to Trim →</a>
+            <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Send to Denoise →</a>
+            <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Send to Merge →</a>
           </div>
         </div>
       `;
