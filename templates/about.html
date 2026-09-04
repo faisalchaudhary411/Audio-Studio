@@ -1,60 +1,67 @@
 {% extends "base.html" %}
-{% block title %}About VoxCraft — Audio Tools for Creators{% endblock %}
+{% block title %}About VoxCraft — Who We Are & Why We Built It{% endblock %}
+{% block meta_description %}VoxCraft is an independent browser-based audio studio focused on high-quality text-to-speech for Urdu, Hindi and 25+ languages, plus practical tools for creators. Learn who runs it and how we work.{% endblock %}
+
 {% block content %}
 <section class="section" style="max-width:820px;">
   <div class="section__head">
     <span class="section__eyebrow">About VoxCraft</span>
     <h1 class="section__title">Practical audio tools for people who make things.</h1>
-    <p class="section__sub">VoxCraft is an independent audio creation platform built around text-to-speech, voice tools, transcription and everyday audio editing.</p>
+    <p class="section__sub">VoxCraft is an independently built and operated browser-based studio for text-to-speech, voice tools, transcription and everyday audio editing — with first-class support for Urdu, Hindi and other South Asian languages.</p>
   </div>
 
   <div style="color:var(--text-mid);line-height:1.8;font-size:1rem;">
-    <p>VoxCraft was created to make common audio tasks easier to access from one place. Instead of requiring a separate service for narration, transcription, conversion and basic editing, the platform brings those workflows together in a simple browser-based studio.</p>
+    <h2 style="font-family:var(--display);margin-top:8px;color:var(--text-hi);">Who runs VoxCraft</h2>
+    <p>VoxCraft is built and maintained by a small independent team, not a large corporation. The product is operated from Pakistan and is focused on the real needs of creators who work in Urdu, Hindi, English and other languages every day. We handle support, licensing, content and product decisions ourselves.</p>
+    <p>Because we are a small team, we can move quickly on feedback and prioritise the languages and workflows that larger platforms often treat as secondary. If something is broken or missing, you can reach us directly through the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact page</a> or by emailing <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>.</p>
 
-    <p>The platform is particularly focused on multilingual voice creation, including Urdu, Hindi and other languages that are often treated as secondary options in creator tools. The voice library, previews and generation workflow are designed to let creators judge a voice for themselves before committing to it.</p>
-
-    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">What you can do with VoxCraft</h2>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">What VoxCraft is</h2>
+    <p>VoxCraft brings common audio tasks into one place so you do not need a different service for every small job. The free tier works without an account. Paid plans remove daily limits and unlock advanced features such as voice cloning and AI music generation.</p>
     <ul>
-      <li>Create narration from text in the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a>, with adjustable voice settings.</li>
-      <li><a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi);">Transcribe</a> supported audio files into text.</li>
-      <li><a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--brass-hi);">Convert</a> audio between common formats.</li>
-      <li><a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--brass-hi);">Merge</a> clips, <a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--brass-hi);">trim recordings and split audio</a>.</li>
-      <li><a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi);">Reduce steady background noise</a> in recordings.</li>
+      <li>Create narration from text in the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a> (88 neural voices across 27 languages).</li>
+      <li><a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi);">Transcribe</a> audio into text.</li>
+      <li><a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--brass-hi);">Convert</a> between common audio formats.</li>
+      <li><a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--brass-hi);">Merge</a> clips, <a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--brass-hi);">trim and split</a> recordings.</li>
+      <li><a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi);">Reduce steady background noise</a>.</li>
       <li>Apply <a href="{{ url_for('tool_page', slug='voice-changer') }}" style="color:var(--brass-hi);">voice effects</a> and <a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--brass-hi);">extract audio from video</a>.</li>
-      <li><a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi);">Clone a voice</a> from a short reference clip, or <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--brass-hi);">generate music</a> from a text description, with eligible plans.</li>
+      <li>On eligible plans: <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi);">clone a voice</a> from a short reference clip or <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--brass-hi);">generate instrumental music</a> from a text description.</li>
     </ul>
 
-    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Why VoxCraft exists</h2>
-    <p>Most audio tasks are small and specific — transcribe this one interview, trim the dead air off this one clip, get a rough narration draft for this one video. Doing each of those with a different service, or a full desktop editor meant for much bigger jobs, adds friction that's out of proportion to the actual task. VoxCraft exists to make that middle ground — tasks too small for a full editor, too specific for a general-purpose tool — fast and free to start.</p>
-    <p>Multilingual support was a deliberate priority from the start, not an add-on. Urdu and Hindi narration in particular are often treated as an afterthought by tools built primarily for English, with pronunciation quality to match. Getting that right for South Asian creators specifically shaped a lot of the platform's design.</p>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Why we built it this way</h2>
+    <p>Most everyday audio tasks are small and specific: get a clear Urdu or Hindi narration for a YouTube video, clean a short interview, convert a file, or pull the audio track out of a clip. Doing each of those with a different service or a full desktop editor creates unnecessary friction.</p>
+    <p>Multilingual support was a deliberate priority from the start, not an add-on. Urdu and Hindi narration in particular are often treated as an afterthought by tools built primarily for English. Getting pronunciation, code-switching and natural delivery right for South Asian creators shaped a large part of the product design.</p>
 
-    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Built around real creator workflows</h2>
-    <p>VoxCraft is designed for YouTube creators, educators, podcasters, developers, freelancers and anyone who needs practical audio processing without installing a desktop editor for every small task.</p>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Editorial standards & content</h2>
+    <p>The guides and articles on this site are written to help creators complete real workflows. We aim to describe capabilities and limitations clearly rather than over-promise. Where a guide includes a comparison or recommendation, we explain the criteria so readers can judge for themselves.</p>
+    <p>Our testing approach for voices and tools is documented on the <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">How we test</a> page. For practical tutorials and deeper guides, see the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">blog</a>.</p>
 
-    <p>We aim to describe the capabilities and limitations of the tools clearly rather than promise perfect results. Where a guide includes a comparison or recommendation, the goal is to explain how the result was obtained so readers can make their own informed choice.</p>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Transparency & policies</h2>
+    <p>We publish a clear <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">Privacy Policy</a> that explains what data each tool processes and how long it is kept, and <a href="{{ url_for('terms') }}" style="color:var(--brass-hi);">Terms of Service</a> that cover free and paid use, voice cloning rules, and prohibited activity. Contact details and a support form are always available on the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">Contact</a> page.</p>
 
-    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Privacy and transparency</h2>
-    <p>VoxCraft publishes its <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">privacy policy</a>, <a href="{{ url_for('terms') }}" style="color:var(--brass-hi);">terms</a> and <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact information</a> so visitors can understand how the service operates. Specific processing and retention details are described in the privacy policy.</p>
-
-    <p style="margin-top:28px;">For the methodology behind our voice and tool comparisons, see <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">How We Test</a>. For guides, tutorials, and deeper dives into specific tools, see the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">blog</a>.</p>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Commercial use</h2>
+    <p>Audio you generate with VoxCraft is yours to use, including in monetised YouTube videos, client projects and commercial work, subject to the Terms of Service and any third-party rights in the material you upload.</p>
 
     <div class="panel" style="margin-top:34px;">
       <span class="panel__label">Frequently asked questions</span>
       <details style="margin-top:10px;">
         <summary>Is VoxCraft free to use?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">Yes — the free tier works with no signup, within daily and monthly usage limits. Pro removes those limits on text-to-speech; Pro+ adds voice cloning and AI music generation. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);">pricing</a> for details.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">Yes. The free tier works with no signup, within daily and monthly usage limits. Pro removes those limits on text-to-speech; Pro+ adds voice cloning and AI music generation. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);">pricing</a> for details.</p>
       </details>
       <details style="margin-top:10px;">
         <summary>Which languages does VoxCraft support?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">The Voice Studio supports 27 languages and 88 neural voices, with particular attention paid to Urdu and Hindi voice quality. Check the voice list in <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a> for the current lineup.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">The Voice Studio currently offers 88 neural voices across 27 languages, with particular attention paid to Urdu and Hindi quality. Check the live voice list inside <a href="{{ url_for('studio') }}" style="color:var(--brass-hi);">Voice Studio</a>.</p>
       </details>
       <details style="margin-top:10px;">
         <summary>Do I need to install anything?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">No — everything runs in your browser. There's nothing to download or install for any of the tools.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">No. Everything runs in the browser. There is nothing to download for any of the tools.</p>
       </details>
       <details style="margin-top:10px;">
-        <summary>Who is VoxCraft built by?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">VoxCraft is an independently built and maintained platform, not a large company product. That means faster iteration on feedback, but also a smaller team — if something's broken or missing, <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">let us know</a>.</p>
+        <summary>Who can I contact for support or business questions?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Use the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact form</a> or email <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>. We read every message and usually reply within a day.</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>Where is VoxCraft operated from?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">VoxCraft is independently operated, with a primary focus on creators in Pakistan, India and the wider South Asian diaspora, while remaining available worldwide.</p>
       </details>
     </div>
   </div>

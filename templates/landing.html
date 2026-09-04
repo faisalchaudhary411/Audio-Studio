@@ -66,6 +66,10 @@
   </div>
 </div>
 
+{% if not is_pro_ctx %}
+  {% include "partials/ads_banner.html" %}
+{% endif %}
+
 <section class="section section--tight" id="how-it-works">
   <div class="section__head">
     <span class="section__eyebrow">How it works</span>

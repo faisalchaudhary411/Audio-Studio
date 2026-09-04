@@ -57,6 +57,10 @@
     Annual = 10 months billed for 12 (save 2 months). Toggle Annual above, then Get Pro/Pro+ — your choice carries through to checkout, card or manual PKR.
   </p>
 
+  {% if not is_pro_ctx %}
+    {% include "partials/ads_banner.html" %}
+  {% endif %}
+
   <p style="text-align:center;color:var(--text-dim);font-size:0.88rem;margin-top:24px;">
     Already have a license key? <a href="{{ url_for('activate') }}" style="color:var(--brass-hi)">Activate it here</a>.
   </p>

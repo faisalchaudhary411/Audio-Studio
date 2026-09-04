@@ -35,6 +35,10 @@
   </p>
   {% endif %}
 
+  {% if not is_pro_ctx %}
+    {% include "partials/ads_banner.html" %}
+  {% endif %}
+
   {% if not posts %}
     <p style="color:var(--text-dim);">{% if active_tag %}No guides tagged "{{ active_tag }}" yet.{% else %}No published guides yet — check back soon.{% endif %}</p>
   {% else %}
