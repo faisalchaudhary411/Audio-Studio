@@ -66,19 +66,22 @@
     {% endif %}
   </div>
 
-  <div class="panel">
-    <span class="panel__label">Mode</span>
-    <div class="mode-tabs" role="tablist" style="margin-bottom:12px;">
-      <button type="button" class="btn btn--sm btn--brass is-active" id="tab-single-btn" role="tab" aria-selected="true">Single clip</button>
-      <button type="button" class="btn btn--sm" id="tab-batch-btn" role="tab" aria-selected="false">Batch (one line = one clip)</button>
+  <div class="panel mode-panel">
+    <span class="panel__label">How do you want to generate?</span>
+    <div class="mode-tabs" role="tablist" aria-label="Generation mode">
+      <button type="button" class="mode-tab is-active" id="tab-single-btn" role="tab" aria-selected="true">
+        <span class="mode-tab__title">Single</span>
+        <span class="mode-tab__hint">One script → one file</span>
+      </button>
+      <button type="button" class="mode-tab" id="tab-batch-btn" role="tab" aria-selected="false">
+        <span class="mode-tab__title">Batch</span>
+        <span class="mode-tab__hint">Each line → its own clip</span>
+      </button>
     </div>
-    <p style="font-size:0.82rem;color:var(--text-dim);margin:0;line-height:1.5;">
-      Need voice cloning or AI music?
-      <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi);">Voice Cloning</a>
-      ·
-      <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" style="color:var(--brass-hi);">Music generator</a>
-      {% if not has_clone_music_ctx %}<span style="color:var(--text-dim);"> (Pro+)</span>{% endif %}
-    </p>
+    <div class="mode-pro-links">
+      <a href="{{ url_for('voice_cloning') }}" class="mode-pro-chip">Voice cloning{% if not has_clone_music_ctx %} · Pro+{% endif %}</a>
+      <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" class="mode-pro-chip">AI music{% if not has_clone_music_ctx %} · Pro+{% endif %}</a>
+    </div>
   </div>
 </div>
 

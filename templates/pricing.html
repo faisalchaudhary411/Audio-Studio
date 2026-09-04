@@ -54,27 +54,59 @@
     {% endfor %}
   </div>
 
-  <div style="max-width:820px;margin:32px auto 0;overflow-x:auto;">
-    <p style="text-align:center;color:var(--text-dim);font-size:0.85rem;margin-bottom:8px;">Quick comparison</p>
-    <table class="pricing-compare">
-      <thead>
-        <tr>
-          <th>Feature</th>
-          <th>Free</th>
-          <th>Pro <span class="pricing-recommend">Popular</span></th>
-          <th>Pro+</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td>Text-to-speech</td><td class="is-yes">Daily limits</td><td class="is-yes">Unlimited</td><td class="is-yes">Unlimited</td></tr>
-        <tr><td>Audio tools</td><td class="is-yes">With daily limits</td><td class="is-yes">Unlimited</td><td class="is-yes">Unlimited</td></tr>
-        <tr><td>Voice cloning</td><td class="is-no">—</td><td class="is-no">—</td><td class="is-yes">Included</td></tr>
-        <tr><td>AI music</td><td class="is-no">—</td><td class="is-no">—</td><td class="is-yes">Included</td></tr>
-        <tr><td>Signup required</td><td class="is-yes">No</td><td class="is-yes">License key</td><td class="is-yes">License key</td></tr>
-        <tr><td>Commercial use</td><td class="is-yes">Yes</td><td class="is-yes">Yes</td><td class="is-yes">Yes</td></tr>
-      </tbody>
-    </table>
-    <p style="text-align:center;color:var(--text-dim);font-size:0.85rem;margin-top:12px;">Most creators start on <strong style="color:var(--brass-hi)">Pro</strong>. Choose Pro+ only if you need cloning or music.</p>
+  <div class="pricing-compare-wrap">
+    <p class="pricing-compare-heading">Quick comparison</p>
+    <div class="pricing-compare-scroll" role="region" aria-label="Plan comparison" tabindex="0">
+      <table class="pricing-compare">
+        <thead>
+          <tr>
+            <th scope="col">Feature</th>
+            <th scope="col">Free</th>
+            <th scope="col">Pro <span class="pricing-recommend">Popular</span></th>
+            <th scope="col">Pro+</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Text-to-speech</th>
+            <td class="is-yes">Daily limits</td>
+            <td class="is-yes">Unlimited</td>
+            <td class="is-yes">Unlimited</td>
+          </tr>
+          <tr>
+            <th scope="row">Audio tools</th>
+            <td class="is-yes">Daily limits</td>
+            <td class="is-yes">Unlimited</td>
+            <td class="is-yes">Unlimited</td>
+          </tr>
+          <tr>
+            <th scope="row">Voice cloning</th>
+            <td class="is-no">—</td>
+            <td class="is-no">—</td>
+            <td class="is-yes">Yes</td>
+          </tr>
+          <tr>
+            <th scope="row">AI music</th>
+            <td class="is-no">—</td>
+            <td class="is-no">—</td>
+            <td class="is-yes">Yes</td>
+          </tr>
+          <tr>
+            <th scope="row">Signup</th>
+            <td class="is-yes">No</td>
+            <td class="is-yes">License</td>
+            <td class="is-yes">License</td>
+          </tr>
+          <tr>
+            <th scope="row">Commercial use</th>
+            <td class="is-yes">Yes</td>
+            <td class="is-yes">Yes</td>
+            <td class="is-yes">Yes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="pricing-compare-note">Most creators start on <strong>Pro</strong>. Choose <strong>Pro+</strong> only if you need cloning or music.</p>
   </div>
 
   <p style="text-align:center;color:var(--text-dim);font-size:0.8rem;margin-top:16px;max-width:42ch;margin-left:auto;margin-right:auto;">
