@@ -10,10 +10,35 @@
     <p class="section__sub">VoxCraft is an independently built and operated browser-based studio for text-to-speech, voice tools, transcription and everyday audio editing — with first-class support for Urdu, Hindi and other South Asian languages.</p>
   </div>
 
+  {# ---- Founder ---- #}
+  <div class="panel founder-card" style="margin:28px 0;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+    <picture style="flex-shrink:0;">
+      <source srcset="{{ static_url('img/founder-final.webp') }}" type="image/webp">
+      <img src="{{ static_url('img/founder-final.jpg') }}"
+           alt="Faisal, founder of VoxCraft"
+           width="140" height="140"
+           loading="lazy"
+           style="width:140px;height:140px;border-radius:50%;object-fit:cover;display:block;border:2px solid var(--line);">
+    </picture>
+    <div style="flex:1;min-width:220px;">
+      <span class="panel__label">Founder</span>
+      <h2 style="font-family:var(--display);margin:4px 0 10px;color:var(--text-hi);font-size:1.25rem;">Faisal</h2>
+      <p style="color:var(--text-mid);line-height:1.7;margin:0 0 10px;">
+        Faisal is the founder and sole developer of VoxCraft. He designed, built, and maintains the entire product independently — from the backend architecture and voice cloning pipelines to infrastructure, security, and billing.
+      </p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:0 0 10px;">
+        VoxCraft was built to solve a specific problem: Urdu voice AI that sounds natural, not robotic. He continues to lead product development, with an ongoing focus on voice quality, platform reliability, and expanding the developer API.
+      </p>
+      <p style="font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:0;">
+        Kot Abdul Malik, Lahore, Punjab, Pakistan
+      </p>
+    </div>
+  </div>
+
   <div style="color:var(--text-mid);line-height:1.8;font-size:1rem;">
     <h2 style="font-family:var(--display);margin-top:8px;color:var(--text-hi);">Who runs VoxCraft</h2>
-    <p>VoxCraft is built and maintained by a small independent team, not a large corporation. The product is operated from Pakistan and is focused on the real needs of creators who work in Urdu, Hindi, English and other languages every day. We handle support, licensing, content and product decisions ourselves.</p>
-    <p>Because we are a small team, we can move quickly on feedback and prioritise the languages and workflows that larger platforms often treat as secondary. If something is broken or missing, you can reach us directly through the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact page</a> or by emailing <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>.</p>
+    <p>VoxCraft is built and maintained independently by Faisal — not a large corporation. The product is operated from Pakistan and is focused on the real needs of creators who work in Urdu, Hindi, English and other languages every day. Support, licensing, content and product decisions are handled directly.</p>
+    <p>Because it is a focused independent project, feedback can be acted on quickly, and languages and workflows that larger platforms often treat as secondary stay high priority. If something is broken or missing, reach out through the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact page</a> or email <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>.</p>
 
     <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">What VoxCraft is</h2>
     <p>VoxCraft brings common audio tasks into one place so you do not need a different service for every small job. The free tier works without an account. Paid plans remove daily limits and unlock advanced features such as voice cloning and AI music generation.</p>
@@ -31,11 +56,11 @@
     <p>Most everyday audio tasks are small and specific: get a clear Urdu or Hindi narration for a YouTube video, clean a short interview, convert a file, or pull the audio track out of a clip. Doing each of those with a different service or a full desktop editor creates unnecessary friction.</p>
     <p>Multilingual support was a deliberate priority from the start, not an add-on. Urdu and Hindi narration in particular are often treated as an afterthought by tools built primarily for English. Getting pronunciation, code-switching and natural delivery right for South Asian creators shaped a large part of the product design.</p>
 
-    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Editorial standards & content</h2>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Editorial standards &amp; content</h2>
     <p>The guides and articles on this site are written to help creators complete real workflows. We aim to describe capabilities and limitations clearly rather than over-promise. Where a guide includes a comparison or recommendation, we explain the criteria so readers can judge for themselves.</p>
     <p>Our testing approach for voices and tools is documented on the <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">How we test</a> page. For practical tutorials and deeper guides, see the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">blog</a>.</p>
 
-    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Transparency & policies</h2>
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Transparency &amp; policies</h2>
     <p>We publish a clear <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">Privacy Policy</a> that explains what data each tool processes and how long it is kept, and <a href="{{ url_for('terms') }}" style="color:var(--brass-hi);">Terms of Service</a> that cover free and paid use, voice cloning rules, and prohibited activity. Contact details and a support form are always available on the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">Contact</a> page.</p>
 
     <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Commercial use</h2>
@@ -57,11 +82,11 @@
       </details>
       <details style="margin-top:10px;">
         <summary>Who can I contact for support or business questions?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">Use the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact form</a> or email <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>. We read every message and usually reply within a day.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">Use the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact form</a> or email <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>. Every message is read and usually answered within a day.</p>
       </details>
       <details style="margin-top:10px;">
         <summary>Where is VoxCraft operated from?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">VoxCraft is independently operated, with a primary focus on creators in Pakistan, India and the wider South Asian diaspora, while remaining available worldwide.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">VoxCraft is independently operated by Faisal from Lahore, Punjab, Pakistan, with a primary focus on creators in Pakistan, India and the wider South Asian diaspora, while remaining available worldwide.</p>
       </details>
     </div>
   </div>
