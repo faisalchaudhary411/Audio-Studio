@@ -1,24 +1,27 @@
   <div class="panel">
-    <span class="panel__label">Merge</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Combine clips in order. Use a short crossfade to avoid clicks at joins, or a silence gap. Up to 10MB per file.</p>
-    <input type="file" class="file-input" id="merge-files" accept=".wav,.mp3,.ogg,.m4a,.flac" multiple style="margin-bottom:12px;">
+    <span class="panel__label">Merge — combine 2 or more clips, in order</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:4px;">Stitches multiple clips into one file. Use a short crossfade to avoid clicks, or a silence gap between sections. Up to 10MB per file.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;">Tap <strong>+ Add files</strong> as many times as you need — each pick <em>adds</em> to the list rather than replacing it.</p>
+    <button type="button" class="btn btn--ghost btn--sm" id="merge-add-btn" style="margin-bottom:10px;">+ Add files</button>
+    <input type="file" class="file-input" id="merge-files" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,audio/wav,audio/mpeg,audio/ogg,audio/mp4,audio/x-flac,audio/flac" multiple style="display:none;">
+    <div id="merge-file-list" style="margin-bottom:14px;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
       <div>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Gap between clips (ms)</label>
-        <input type="number" class="studio-input" id="merge-gap" value="0" min="0" max="5000" step="50" style="width:100%;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Gap: <span id="merge-gap-label">0</span> ms</label>
+        <input type="range" class="studio-range" min="0" max="3000" step="50" value="0" id="merge-gap" style="width:100%;">
       </div>
       <div>
-        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Crossfade (ms)</label>
-        <input type="number" class="studio-input" id="merge-crossfade" value="80" min="0" max="500" step="10" style="width:100%;">
-        <span style="font-size:0.72rem;color:var(--text-dim);">Overrides gap when &gt; 0</span>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Crossfade: <span id="merge-crossfade-label">80</span> ms</label>
+        <input type="range" class="studio-range" min="0" max="400" step="10" value="80" id="merge-crossfade" style="width:100%;">
       </div>
     </div>
     <select id="merge-format" class="studio-select" style="margin-bottom:12px;">
       <option value="mp3">MP3</option>
       <option value="wav">WAV</option>
+      <option value="ogg">OGG</option>
     </select>
     <div class="render-bar">
-      <button class="btn btn--brass" id="merge-btn">Merge</button>
+      <button class="btn btn--brass" id="merge-btn">Merge audio</button>
       <span class="render-status" data-merge-status></span>
     </div>
     <div id="merge-result" style="margin-top:14px;"></div>
