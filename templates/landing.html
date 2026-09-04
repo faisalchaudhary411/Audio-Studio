@@ -6,7 +6,24 @@
 <section class="hero">
   <span class="hero__eyebrow">// Text-to-speech, engineered for creators</span>
   <h1 class="hero__title">Every script deserves a <em>voice</em> that fits.</h1>
-  <svg class="wave" role="img" aria-label="Animated audio waveform"></svg>
+  <div class="hero-wave" aria-hidden="true">
+  <svg class="wave" viewBox="0 0 1000 180" preserveAspectRatio="none" role="img" aria-label="Animated audio waveform">
+    <defs>
+      <linearGradient id="waveGradient" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="var(--brass-hi)"/>
+        <stop offset="48%" stop-color="var(--brass)"/>
+        <stop offset="100%" stop-color="var(--jade-hi)"/>
+      </linearGradient>
+      <filter id="waveGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g class="wave__ghost"></g>
+    <g class="wave__bars" filter="url(#waveGlow)"></g>
+    <g class="wave__core"></g>
+  </svg>
+</div>
   <p class="hero__sub">
     VoxCraft turns scripts into natural narration across Urdu, Hindi, Bengali, Punjabi,
     Tamil, Telugu, English, and 20 more languages — built for YouTube creators, dubbers,
