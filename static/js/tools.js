@@ -658,6 +658,197 @@
     }
   }
 
+
+  // ---- Normalize ----
+  (function () {
+    const btn = document.getElementById('normalize-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-normalize-status]');
+    const result = document.getElementById('normalize-result');
+    const progress = ensureProgress(result);
+    const target = document.getElementById('normalize-target');
+    const targetLabel = document.getElementById('normalize-target-label');
+    if (target && targetLabel) {
+      target.addEventListener('input', () => { targetLabel.textContent = target.value; });
+    }
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const file = document.getElementById('normalize-file').files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Normalizing…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('target_dbfs', target ? target.value : '-3');
+      form.append('output_format', (document.getElementById('normalize-format') || {}).value || 'mp3');
+      try {
+        const res = await fetch('/api/tools/normalize', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Normalize failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
+  // ---- Volume ----
+  (function () {
+    const btn = document.getElementById('volume-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-volume-status]');
+    const result = document.getElementById('volume-result');
+    const progress = ensureProgress(result);
+    const gain = document.getElementById('volume-gain');
+    const gainLabel = document.getElementById('volume-gain-label');
+    if (gain && gainLabel) gain.addEventListener('input', () => { gainLabel.textContent = gain.value; });
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const file = document.getElementById('volume-file').files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Adjusting volume…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('gain_db', gain ? gain.value : '0');
+      form.append('output_format', (document.getElementById('volume-format') || {}).value || 'mp3');
+      try {
+        const res = await fetch('/api/tools/volume', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Volume adjust failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
+  // ---- Speed ----
+  (function () {
+    const btn = document.getElementById('speed-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-speed-status]');
+    const result = document.getElementById('speed-result');
+    const progress = ensureProgress(result);
+    const rate = document.getElementById('speed-rate');
+    const rateLabel = document.getElementById('speed-rate-label');
+    function syncRate() {
+      if (rate && rateLabel) rateLabel.textContent = parseFloat(rate.value).toFixed(2);
+    }
+    if (rate) rate.addEventListener('input', syncRate);
+    document.querySelectorAll('[data-speed-preset]').forEach((b) => {
+      b.addEventListener('click', () => {
+        if (!rate) return;
+        rate.value = b.getAttribute('data-speed-preset');
+        syncRate();
+      });
+    });
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const file = document.getElementById('speed-file').files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Changing speed…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('speed', rate ? rate.value : '1');
+      form.append('output_format', (document.getElementById('speed-format') || {}).value || 'mp3');
+      try {
+        const res = await fetch('/api/tools/speed', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Speed change failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
+  // ---- Fade ----
+  (function () {
+    const btn = document.getElementById('fade-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-fade-status]');
+    const result = document.getElementById('fade-result');
+    const progress = ensureProgress(result);
+    const fin = document.getElementById('fade-in');
+    const fout = document.getElementById('fade-out');
+    const finL = document.getElementById('fade-in-label');
+    const foutL = document.getElementById('fade-out-label');
+    if (fin && finL) fin.addEventListener('input', () => { finL.textContent = fin.value; });
+    if (fout && foutL) fout.addEventListener('input', () => { foutL.textContent = fout.value; });
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const file = document.getElementById('fade-file').files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Applying fades…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('fade_in_ms', fin ? fin.value : '0');
+      form.append('fade_out_ms', fout ? fout.value : '0');
+      form.append('output_format', (document.getElementById('fade-format') || {}).value || 'mp3');
+      try {
+        const res = await fetch('/api/tools/fade', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Fade failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
+  // ---- Split by silence ----
+  (function () {
+    const btn = document.getElementById('split-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-split-status]');
+    const result = document.getElementById('split-result');
+    const progress = ensureProgress(result);
+    const sil = document.getElementById('split-silence');
+    const thr = document.getElementById('split-thresh');
+    const silL = document.getElementById('split-silence-label');
+    const thrL = document.getElementById('split-thresh-label');
+    if (sil && silL) sil.addEventListener('input', () => { silL.textContent = sil.value; });
+    if (thr && thrL) thr.addEventListener('input', () => { thrL.textContent = thr.value; });
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const file = document.getElementById('split-file').files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Splitting on silence…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('min_silence_ms', sil ? sil.value : '500');
+      form.append('silence_thresh_db', thr ? thr.value : '-40');
+      form.append('output_format', (document.getElementById('split-format') || {}).value || 'mp3');
+      try {
+        const res = await fetch('/api/tools/split-silence', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Split failed.'); return; }
+        const clips = data.clips || [];
+        if (status) status.textContent = `${clips.length} clip${clips.length === 1 ? '' : 's'} ready`;
+        if (result) {
+          result.innerHTML = clips.map((c) => `
+            <div class="batch-clip" style="margin-bottom:12px;">
+              <div class="batch-clip__idx">Part ${c.idx} · ${c.duration_sec}s · ${c.size_kb} KB</div>
+              <audio controls src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
+              <a class="btn btn--ghost btn--sm" style="margin-top:6px;display:inline-flex;"
+                 download="${c.filename}" href="data:audio/mpeg;base64,${c.audio_b64}">Download</a>
+            </div>
+          `).join('');
+        }
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
   // Soft-fail if ads helper is missing so tools still work on pages without ads.js
   if (!window.VoxCraftAds) {
     window.VoxCraftAds = { showInterstitial: function (cb) { if (typeof cb === 'function') cb(); } };
