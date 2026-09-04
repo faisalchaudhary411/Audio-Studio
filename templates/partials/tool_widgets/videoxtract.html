@@ -1,14 +1,26 @@
   <div class="panel">
-    <span class="panel__label">Video to Audio</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Extracts the audio track from a video file. Supports MP4, AVI, MOV, MKV, WEBM — <strong style="color:var(--brass-hi);">up to 50MB</strong> (larger than the other tools, since video files are naturally bigger). Files over the limit, or corrupted/incomplete uploads, will fail with an error rather than a silent hang.</p>
-    <input type="file" class="file-input" id="videoxtract-file" accept=".mp4,.avi,.mov,.mkv,.webm" style="margin-bottom:12px;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <span class="panel__label">Extract audio from video</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Pull audio from MP4/MOV/MKV/WebM. Optional start/end so you only extract what you need. Up to 50MB.</p>
+    <input type="file" class="file-input" id="videoxtract-file" accept=".mp4,.mov,.mkv,.webm,.avi,.m4v" style="margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Start (sec, optional)</label>
+        <input type="number" class="studio-input" id="videoxtract-start" min="0" step="0.1" placeholder="0" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">End (sec, optional)</label>
+        <input type="number" class="studio-input" id="videoxtract-end" min="0" step="0.1" placeholder="full" style="width:100%;">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
       <select id="videoxtract-format" class="studio-select">
-        <option value="mp3">MP3</option><option value="wav">WAV</option><option value="ogg">OGG</option>
+        <option value="mp3">MP3</option>
+        <option value="wav">WAV (for editing)</option>
+        <option value="ogg">OGG</option>
       </select>
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Quality: <span id="videoxtract-quality-label">192</span> kbps</label>
-        <input type="range" class="studio-range" id="videoxtract-quality" min="64" max="320" step="16" value="192" style="width:100%;">
+        <input type="range" class="studio-range" min="64" max="320" step="16" value="192" id="videoxtract-quality" style="width:100%;">
       </div>
     </div>
     <div class="render-bar">

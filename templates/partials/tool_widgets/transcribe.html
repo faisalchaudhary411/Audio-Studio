@@ -1,11 +1,22 @@
   <div class="panel">
     <span class="panel__label">Transcribe</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Converts speech in an audio file to text. Supports WAV, MP3, M4A, OGG, FLAC — up to 10MB. Long files are processed in chunks, so it works for anything from a voice memo to a full interview.</p>
-    <input type="file" class="file-input" id="transcribe-file" accept=".wav,.mp3,.m4a,.ogg,.flac" style="margin-bottom:12px;">
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Speech to text. Choose language (Urdu and Hindi included). Returns text plus a simple SRT for captions. Up to 10MB.</p>
+    <input type="file" class="file-input" id="transcribe-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
     <select id="transcribe-lang" class="studio-select" style="margin-bottom:12px;">
-      {% for name, code in lang_options.items() %}
-      <option value="{{ code }}">{{ name }}</option>
-      {% endfor %}
+      <option value="en-US">English (US)</option>
+      <option value="en-GB">English (UK)</option>
+      <option value="ur-PK">Urdu</option>
+      <option value="hi-IN">Hindi</option>
+      <option value="ar-SA">Arabic</option>
+      <option value="es-ES">Spanish</option>
+      <option value="fr-FR">French</option>
+      <option value="de-DE">German</option>
+      <option value="pt-BR">Portuguese</option>
+      <option value="zh-CN">Chinese (Mandarin)</option>
+      <option value="ja-JP">Japanese</option>
+      <option value="ko-KR">Korean</option>
+      <option value="tr-TR">Turkish</option>
+      <option value="ru-RU">Russian</option>
     </select>
     <div class="render-bar">
       <button class="btn btn--brass" id="transcribe-btn">Transcribe</button>

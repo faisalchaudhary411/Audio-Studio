@@ -1,7 +1,16 @@
   <div class="panel">
     <span class="panel__label">Convert</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Changes an audio file's format and bitrate. Supports MP3, WAV, OGG, M4A, FLAC — up to 10MB.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Change format and bitrate. Use a preset for common jobs, or set format manually. Up to 10MB.</p>
     <input type="file" class="file-input" id="convert-file" accept=".wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:6px;">Preset (optional)</label>
+    <select id="convert-preset" class="studio-select" style="margin-bottom:12px;">
+      <option value="">Custom</option>
+      <option value="youtube">YouTube voiceover (MP3 192k)</option>
+      <option value="social">Social / Shorts (MP3 160k)</option>
+      <option value="podcast">Podcast delivery (MP3 128k)</option>
+      <option value="edit_master">Edit master (WAV)</option>
+      <option value="archive">Archive (FLAC)</option>
+    </select>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <select id="convert-format" class="studio-select">
         <option value="mp3">MP3</option><option value="wav">WAV</option>

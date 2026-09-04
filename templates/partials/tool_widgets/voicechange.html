@@ -1,15 +1,16 @@
   <div class="panel">
     <span class="panel__label">Voice Changer</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Applies an effect to a voice clip — Pitch Shift preserves the original speaking speed while changing pitch; Chipmunk/Deep Voice intentionally change both pitch and speed for a character-voice effect. Up to 10MB.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Pitch shift keeps speed; Chipmunk/Deep change pitch and speed. Dry/wet keeps speech clearer. Up to 10MB.</p>
     <input type="file" class="file-input" id="voicechange-file" accept=".wav,.mp3,.ogg,.m4a" style="margin-bottom:12px;">
     <select id="voicechange-effect" class="studio-select" style="margin-bottom:12px;">
       <option value="pitch_shift">Pitch Shift</option>
+      <option value="slight_deeper">Slight deeper (preset)</option>
+      <option value="anon">Anon / interview (preset)</option>
       <option value="robot">Robot</option>
       <option value="echo">Echo</option>
       <option value="chipmunk">Chipmunk</option>
       <option value="deep_voice">Deep Voice</option>
     </select>
-
     <div id="voicechange-pitch-controls">
       <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Semitones: <span id="voicechange-semitones-label">0</span></label>
       <input type="range" class="studio-range" id="voicechange-semitones" min="-12" max="12" step="1" value="0" style="width:100%;margin-bottom:10px;">
@@ -24,7 +25,10 @@
       <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Decay: <span id="voicechange-decay-label">0.5</span></label>
       <input type="range" class="studio-range" id="voicechange-decay" min="0.1" max="0.9" step="0.05" value="0.5" style="width:100%;margin-bottom:10px;">
     </div>
-
+    <div>
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Effect mix (dry → wet): <span id="voicechange-drywet-label">100%</span></label>
+      <input type="range" class="studio-range" id="voicechange-drywet" min="0" max="1" step="0.05" value="1" style="width:100%;margin-bottom:10px;">
+    </div>
     <div class="render-bar">
       <button class="btn btn--brass" id="voicechange-btn">Apply effect</button>
       <span class="render-status" data-voicechange-status></span>
