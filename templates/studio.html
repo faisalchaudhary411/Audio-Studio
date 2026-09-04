@@ -34,9 +34,25 @@
       <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Speed: <span id="speed-label">100%</span></label>
       <input id="speed-slider" class="studio-range" type="range" min="50" max="200" step="5" value="100">
     </div>
+    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Export format</label>
+        <select id="export-format" class="studio-select">
+          <option value="mp3">MP3 (share / YouTube)</option>
+          <option value="wav">WAV (edit master)</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:flex-end;">
+        <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:var(--text-mid);cursor:pointer;">
+          <input type="checkbox" id="normalize-toggle" checked>
+          Normalize loudness
+        </label>
+      </div>
+    </div>
 
-    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+    <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <button class="btn btn--ghost btn--sm" id="preview-btn">▶ Preview voice</button>
+      <button class="btn btn--ghost btn--sm" id="preview-script-btn" type="button">▶ Preview my first line</button>
       <span class="render-status" data-preview-status></span>
     </div>
     <audio id="preview-player" style="display:none;width:100%;margin-top:8px;" controls></audio>
@@ -69,15 +85,30 @@
       <input type="checkbox" id="ssml-toggle"> Markup mode (pause / emphasis / pitch tags)
     </label>
     <div id="ssml-cheatsheet" style="display:none;font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin-bottom:10px;line-height:1.7;">
-      [pause:500ms] silence &nbsp;·&nbsp; [strong]…[/strong] strong emphasis &nbsp;·&nbsp; [em]…[/em] moderate emphasis<br>
-      [slow]…[/slow] slow rate &nbsp;·&nbsp; [fast]…[/fast] fast rate &nbsp;·&nbsp; [high]…[/high] higher pitch<br>
-      [low]…[/low] lower pitch &nbsp;·&nbsp; [whisper]…[/whisper] soft whisper<br>
-      <span style="color:var(--text-dim);">Expression presets:</span> [excited]…[/excited] &nbsp;·&nbsp; [cheerful]…[/cheerful] &nbsp;·&nbsp; [calm]…[/calm] &nbsp;·&nbsp; [serious]…[/serious] &nbsp;·&nbsp; [sad]…[/sad]
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[pause:500ms]">+ pause</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[strong][/strong]">+ strong</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[em][/em]">+ em</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[slow][/slow]">+ slow</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[fast][/fast]">+ fast</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[calm][/calm]">+ calm</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-ssml-insert="[serious][/serious]">+ serious</button>
+      </div>
+      [pause:500ms] · [strong]…[/strong] · [em]…[/em] · [slow]/[fast] · [high]/[low] · [whisper]<br>
+      Expression: [excited] [cheerful] [calm] [serious] [sad]
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+      <button type="button" class="btn btn--ghost btn--sm" id="section-intro-btn">Use as Intro</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="section-body-btn">Use as Body</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="section-outro-btn">Use as Outro</button>
+      <span style="font-size:0.75rem;color:var(--text-dim);align-self:center;">Optional labels for multi-part videos</span>
     </div>
     <textarea class="script-input" id="single-text" placeholder="Type or paste your text here…"></textarea>
+    <p id="script-tip" style="display:none;font-size:0.8rem;color:var(--brass-hi);margin:6px 0 0;"></p>
     <div class="script-meta">
       <span data-char-count>0 chars</span>
       <span data-duration-est>~0.0s</span>
+      <span id="char-budget-warn" style="color:var(--brass-hi);display:none;"></span>
     </div>
     <div class="render-bar">
       <button class="btn btn--brass" id="generate-single-btn">Generate speech</button>
