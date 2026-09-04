@@ -1,110 +1,29 @@
 // ===== VoxCraft main.js =====
 
-// ---- Hero waveform (organic VoxCraft voice signal) ----
+// ---- Hero waveform (organic idle motion + audio-reactive preview) ----
 function initWave(){
-  const svg = document.querySelector('.wave');
-  if(!svg) return;
-
-  const NS = 'http://www.w3.org/2000/svg';
-  const W = 1000, H = 124, CY = H / 2;
-  const count = 58;
-  const step = W / count;
-  const barW = Math.max(7, step * 0.42);
-  const bars = [];
-
-  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-  svg.setAttribute('preserveAspectRatio', 'none');
-  svg.innerHTML = `
-    <defs>
-      <linearGradient id="voxWaveGradient" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%" stop-color="#f3b33f"/>
-        <stop offset="46%" stop-color="#e9a93d"/>
-        <stop offset="72%" stop-color="#62b9ad"/>
-        <stop offset="100%" stop-color="#48aaa3"/>
-      </linearGradient>
-      <filter id="voxWaveBlur" x="-30%" y="-30%" width="160%" height="160%">
-        <feGaussianBlur stdDeviation="5"/>
-      </filter>
-    </defs>
-    <path class="wave-track" d="M0 ${CY} H${W}"/>
-    <path class="wave-glow" d="M0 ${CY} H${W}"/>
-    <g class="wave-bars"></g>
-    <rect class="wave-sweep" x="0" y="${CY-42}" width="3" height="84" rx="1.5"/>
-  `;
-
-  const group = svg.querySelector('.wave-bars');
-  const sweep = svg.querySelector('.wave-sweep');
-
-  // A handcrafted envelope: quiet edges, four natural speech clusters,
-  // and a small breathing valley in the middle.
-  const envelope = Array.from({length:count}, (_, i) => {
-    const x = i / (count - 1);
-    const peaks = [
-      [0.12, .92, .075],
-      [0.31, .70, .085],
-      [0.53, .84, .095],
-      [0.73, .62, .085],
-      [0.89, .90, .075]
-    ];
-    let v = .13;
-    for(const [p,a,s] of peaks) v += a * Math.exp(-Math.pow((x-p)/s,2));
-    return Math.min(1, v);
-  });
-
+  const wrap=document.querySelector('.hero-wave'), svg=document.querySelector('.wave');
+  if(!wrap||!svg)return;
+  const barsLayer=svg.querySelector('.wave-bars'), coreLayer=svg.querySelector('.wave-core');
+  const NS='http://www.w3.org/2000/svg',count=72,W=1000,H=140,center=70,gap=6,barW=(W-gap*(count-1))/count;
+  const bars=[],cores=[];
   for(let i=0;i<count;i++){
-    const rect = document.createElementNS(NS,'rect');
-    rect.classList.add('wave-bar');
-    rect.setAttribute('x', (i*step + (step-barW)/2).toFixed(2));
-    rect.setAttribute('width', barW.toFixed(2));
-    rect.setAttribute('rx', (barW/2).toFixed(2));
-    rect.setAttribute('y', CY);
-    rect.setAttribute('height', 4);
-    group.appendChild(rect);
-    bars.push(rect);
+    const x=i*(barW+gap);
+    for(const [layer,list,cls] of [[barsLayer,bars,'wave-bar'],[coreLayer,cores,'wave-core-bar']]){
+      const r=document.createElementNS(NS,'rect');r.setAttribute('class',cls);r.setAttribute('x',x.toFixed(2));r.setAttribute('width',barW.toFixed(2));r.setAttribute('rx',Math.min(barW/2,2.5));layer.appendChild(r);list.push(r);}
   }
-
-  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let t = 0;
-  let playing = false;
-  let raf = 0;
-  let visible = true;
-
-  function draw(){
-    t += playing ? .055 : .032;
-    bars.forEach((bar,i)=>{
-      const x = i/(count-1);
-      const speech = .5 + .5*Math.sin(t*1.8 + i*.48);
-      const texture = .5 + .5*Math.sin(t*3.7 - i*.93 + Math.sin(t*.7)*.5);
-      const travelling = .5 + .5*Math.sin(t*.72 - i*.18);
-      const energy = playing ? (0.82 + .18*speech) : (0.88 + .12*speech);
-      const h = 4 + envelope[i] * (H*.83) * (.55 + .28*speech + .12*texture) * energy * (.88 + .12*travelling);
-      const y = CY - h/2;
-      bar.setAttribute('y', y.toFixed(2));
-      bar.setAttribute('height', h.toFixed(2));
-      bar.style.opacity = (0.62 + envelope[i]*.34).toFixed(2);
-    });
-
-    const sweepX = ((t*92) % (W+160)) - 80;
-    sweep.setAttribute('x', sweepX.toFixed(1));
-    sweep.style.opacity = playing ? '.72' : '.18';
-
-    if(!reduced && visible) raf = requestAnimationFrame(draw);
-  }
-
-  const io = 'IntersectionObserver' in window ? new IntersectionObserver(entries=>{
-    visible = entries[0].isIntersecting;
-    if(visible && !reduced && !raf) raf=requestAnimationFrame(draw);
-    if(!visible && raf){ cancelAnimationFrame(raf); raf=0; }
-  }, {threshold:.05}) : null;
-  if(io) io.observe(svg);
-
-  svg._setPlaying = value => {
-    playing = !!value;
-    svg.classList.toggle('is-playing', playing);
+  const envelope=x=>{const peaks=[[.08,.38,.07],[.17,.78,.065],[.27,.48,.07],[.37,.95,.075],[.49,.55,.065],[.59,.88,.07],[.70,.48,.06],[.79,.78,.07],[.91,.52,.075]];let v=.08;for(const [p,a,w] of peaks)v+=a*Math.exp(-((x-p)/w)**2);return Math.min(1,v);};
+  let analyser=null,data=null;
+  window.__voxWave={
+    setAudio(audio){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)throw 0;const ctx=window.__voxAudioContext||(window.__voxAudioContext=new C());if(!audio.__voxAnalyser){const src=ctx.createMediaElementSource(audio);analyser=ctx.createAnalyser();analyser.fftSize=128;analyser.smoothingTimeConstant=.8;data=new Uint8Array(analyser.frequencyBinCount);src.connect(analyser);analyser.connect(ctx.destination);audio.__voxAnalyser=analyser;}else{analyser=audio.__voxAnalyser;data=new Uint8Array(analyser.frequencyBinCount);}if(ctx.state==='suspended')ctx.resume();}catch(e){}wrap.classList.add('is-playing');},
+    stop(){wrap.classList.remove('is-playing');}
   };
-  draw();
-
-  window.addEventListener('beforeunload', ()=>{ if(raf) cancelAnimationFrame(raf); }, {once:true});
+  function frame(now){
+    const t=now*.001;if(analyser&&data)analyser.getByteFrequencyData(data);
+    for(let i=0;i<count;i++){const x=i/(count-1),env=envelope(x),a=.5+.5*Math.sin(t*2.2+i*.42),b=.5+.5*Math.sin(t*.91-i*.18),c=.5+.5*Math.sin(t*3.7+i*.73);let audio=0;if(data)audio=data[Math.min(data.length-1,Math.floor(x*data.length))]/255;const amp=Math.max(.06,env*(.48+.28*a+.16*b+.08*c+audio*.95));const h=8+amp*112;bars[i].setAttribute('y',(center-h/2).toFixed(1));bars[i].setAttribute('height',h.toFixed(1));const ch=Math.max(4,h*.22);cores[i].setAttribute('y',(center-ch/2).toFixed(1));cores[i].setAttribute('height',ch.toFixed(1));}
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 }
 
 // ---- Studio: voice picker + character counter + mock generate ----
@@ -196,39 +115,32 @@ function initVoicePreviews(){
     btn.addEventListener('click', () => {
       if(btn.disabled) return;
 
-      const wave = document.querySelector('.wave');
       if(currentAudio && currentBtn === btn && !currentAudio.paused){
         currentAudio.pause();
         btn.classList.remove('is-playing');
-        if(wave && wave._setPlaying) wave._setPlaying(false);
         return;
       }
       if(currentAudio && currentBtn !== btn){
         currentAudio.pause();
         currentBtn.classList.remove('is-playing');
-        if(wave && wave._setPlaying) wave._setPlaying(false);
+        window.__voxWave?.stop();
       }
 
       if(!audio){
         audio = new Audio(src);
-        audio.addEventListener('ended', () => {
-          btn.classList.remove('is-playing');
-          if(wave && wave._setPlaying) wave._setPlaying(false);
-        });
+        audio.addEventListener('ended', () => { btn.classList.remove('is-playing'); window.__voxWave?.stop(); });
         audio.addEventListener('error', () => {
           btn.disabled = true;
           btn.title = 'Preview coming soon';
           btn.style.opacity = '0.35';
           btn.style.cursor = 'not-allowed';
-          if(wave && wave._setPlaying) wave._setPlaying(false);
         });
       }
       currentAudio = audio;
       currentBtn = btn;
       audio.currentTime = 0;
-      audio.play().catch(() => {});
+      audio.play().then(() => { window.__voxWave?.setAudio(audio); }).catch(() => {});
       btn.classList.add('is-playing');
-      if(wave && wave._setPlaying) wave._setPlaying(true);
     });
   });
 }
