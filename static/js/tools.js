@@ -138,10 +138,16 @@
       }
       if (transcribeStatus) transcribeStatus.textContent = `Done (${data.method || 'ok'})`;
       if (transcribeResult) {
+        const meta = data.word_count ? ` · ${data.word_count} words` : '';
         transcribeResult.innerHTML = `
+          <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">${data.method || ''}${meta}</p>
           <textarea class="script-input" style="min-height:140px;" readonly>${data.text || ''}</textarea>
-          <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-             download="transcription.txt" href="data:text/plain;charset=utf-8,${encodeURIComponent(data.text || '')}">Download TXT</a>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+            <a class="btn btn--ghost btn--sm" download="transcription.txt"
+               href="data:text/plain;charset=utf-8,${encodeURIComponent(data.text || '')}">Download TXT</a>
+            ${data.srt ? `<a class="btn btn--ghost btn--sm" download="captions.srt"
+               href="data:text/plain;charset=utf-8,${encodeURIComponent(data.srt)}">Download SRT</a>` : ''}
+          </div>
         `;
       }
     } catch (e) {
@@ -184,6 +190,8 @@
     form.append('file', file);
     form.append('output_format', document.getElementById('convert-format').value);
     form.append('quality', convertQuality ? convertQuality.value : '192');
+    const presetEl = document.getElementById('convert-preset');
+    if (presetEl && presetEl.value) form.append('preset', presetEl.value);
     try {
       const res = await fetch('/api/tools/convert', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
@@ -271,6 +279,8 @@
     const form = new FormData();
     for (const f of mergeSelectedFiles) form.append('files', f);
     form.append('gap_ms', mergeGap ? mergeGap.value : '500');
+    const cf = document.getElementById('merge-crossfade');
+    form.append('crossfade_ms', cf && cf.value !== '' ? cf.value : '0');
     form.append('output_format', document.getElementById('merge-format').value);
     try {
       const res = await fetch('/api/tools/merge', { method: 'POST', body: form });
@@ -359,7 +369,17 @@
     const form = new FormData();
     form.append('file', file);
     try {
-      if (cutterMode === 'trim') {
+      if (cutterMode === 'auto') {
+        if (cutterStatus) cutterStatus.textContent = 'Auto-trimming silence…';
+        const res = await fetch('/api/tools/cutter/auto-trim', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (cutterStatus) cutterStatus.textContent = friendlyError(data, 'Auto-trim failed.');
+          return;
+        }
+        if (cutterStatus) cutterStatus.textContent = 'Silence trimmed';
+        if (cutterResult) cutterResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      } else if (cutterMode === 'trim') {
         if (cutterStatus) cutterStatus.textContent = 'Trimming…';
         form.append('start_sec', document.getElementById('cutter-start').value);
         form.append('end_sec', document.getElementById('cutter-end').value);
@@ -373,7 +393,8 @@
         if (cutterResult) cutterResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
       } else {
         if (cutterStatus) cutterStatus.textContent = 'Splitting…';
-        form.append('split_sec', document.getElementById('cutter-split-at').value);
+        const splitEl = document.getElementById('cutter-split') || document.getElementById('cutter-split-at');
+        form.append('split_sec', splitEl ? splitEl.value : '0');
         const res = await fetch('/api/tools/cutter/split', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -428,6 +449,8 @@
     const form = new FormData();
     form.append('file', file);
     form.append('strength', denoiseStrength ? denoiseStrength.value : '0.5');
+    const st = document.getElementById('denoise-stationary');
+    form.append('stationary', st && st.checked ? '1' : '0');
     try {
       const res = await fetch('/api/tools/denoise', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
@@ -510,6 +533,8 @@
     const form = new FormData();
     form.append('file', file);
     form.append('effect', vcEffect.value);
+    const dw = document.getElementById('voicechange-drywet');
+    form.append('dry_wet', dw ? dw.value : '1');
     if (vcEffect.value === 'pitch_shift' && vcSemitones) form.append('semitones', vcSemitones.value);
     if (vcEffect.value === 'robot' && vcIntensity) form.append('intensity', vcIntensity.value);
     if (vcEffect.value === 'echo') {
@@ -531,6 +556,39 @@
       setLoading(vcBtn, false);
       showProgress(vcProgress, false);
     }
+  }
+
+
+  // Denoise strength presets + label
+  const denoiseStrength = document.getElementById('denoise-strength');
+  const denoiseStrengthLabel = document.getElementById('denoise-strength-label');
+  function denoiseLabel(v) {
+    const n = parseFloat(v);
+    if (n <= 0.4) return 'Light';
+    if (n <= 0.65) return 'Medium';
+    return 'Strong';
+  }
+  if (denoiseStrength && denoiseStrengthLabel) {
+    denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
+    denoiseStrength.addEventListener('input', () => {
+      denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
+    });
+  }
+  document.querySelectorAll('[data-denoise-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!denoiseStrength) return;
+      denoiseStrength.value = btn.dataset.denoisePreset;
+      if (denoiseStrengthLabel) denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
+    });
+  });
+
+  // Voice dry/wet label
+  const vcDryWet = document.getElementById('voicechange-drywet');
+  const vcDryWetLabel = document.getElementById('voicechange-drywet-label');
+  if (vcDryWet && vcDryWetLabel) {
+    vcDryWet.addEventListener('input', () => {
+      vcDryWetLabel.textContent = Math.round(parseFloat(vcDryWet.value) * 100) + '%';
+    });
   }
 
   // ---- Video Extract ----
@@ -572,6 +630,10 @@
     form.append('file', file);
     form.append('output_format', document.getElementById('videoxtract-format').value);
     form.append('quality', vxQuality ? vxQuality.value : '192');
+    const vxs = document.getElementById('videoxtract-start');
+    const vxe = document.getElementById('videoxtract-end');
+    if (vxs && vxs.value !== '') form.append('start_sec', vxs.value);
+    if (vxe && vxe.value !== '') form.append('end_sec', vxe.value);
     try {
       const res = await fetch('/api/tools/videoxtract', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
