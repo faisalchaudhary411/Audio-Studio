@@ -1,55 +1,50 @@
-# VoxCraft — API discoverability (the /developers page)
+# VoxCraft — existing tools improvements
 
-5 files, same repo structure. app.py confirmed built on the correct base
-(CLONE_CHAR_LIMIT = 1400 intact).
+## What was improved
 
-## Files
-- app.py (MODIFIED)
-- templates/base.html (MODIFIED — footer link)
-- templates/pricing.html (MODIFIED — cross-link)
-- templates/contact.html (MODIFIED — new topic option)
-- templates/developers.html (NEW)
+### Backend (`audio_tools.py`)
+| Tool | Improvements |
+|------|----------------|
+| **Transcribe** | Urdu in language list; richer result (word_count, duration, simple SRT) |
+| **Convert** | Named presets: youtube, social, podcast, edit_master, archive |
+| **Merge** | Optional **crossfade** between clips (removes join clicks) |
+| **Cutter** | **Auto-trim silence**; split-on-silence helper available |
+| **Denoise** | Strength control + **stationary** mode (better for fan/AC) |
+| **Voice change** | **Dry/wet** mix; presets: slight_deeper, anon |
+| **Video extract** | Optional **start_sec / end_sec** time range |
+| **Normalize** | New peak-normalize helper + API |
 
-## The gap this fixes
+Whisper still not enabled (needs GPU worker). Google Speech remains the free path; SRT is time-sliced (not word-aligned) until Whisper timestamps exist.
 
-The API itself (POST /api/v1/tts, admin key issuance, quota tracking)
-worked, but nothing on the site told anyone it existed. No nav link, no
-footer link, no page explaining what it does or how to get access — the
-only place "API" appeared was inside the admin panel and in an email that
-only gets sent AFTER someone has already paid, which they can't do if
-they never knew to ask in the first place.
+### API (`app.py`)
+- Convert accepts `preset`
+- Merge accepts `crossfade_ms`
+- Denoise accepts `stationary`
+- Voice change accepts `dry_wet`
+- Video extract accepts `start_sec`, `end_sec`
+- New: `POST /api/tools/cutter/auto-trim`
+- New: `POST /api/tools/normalize`
 
-## What this adds
+### UI widgets
+Updated controls for convert presets, merge crossfade, denoise Light/Medium/Strong + stationary, cutter auto-trim mode, video time range, voice dry/wet + presets, transcribe languages + SRT download.
 
-**New page: /developers** — explains what the API does, a real curl
-example, the response format (including the X-Quota-* headers), stated
-limits (fixed monthly allowance, per-request cap, quota-only-on-success),
-an honest explanation of why plans are sized per-customer rather than
-fixed tiers (matches how admin_api_keys.html actually works — quota is a
-free-form number, not a dropdown of preset plans), an FAQ with FAQPage
-schema, and a "Request API access" CTA.
+### JS (`static/js/tools.js`)
+Wired all new fields; SRT download on transcribe; auto-trim mode; denoise presets; dry/wet label.
 
-**Contact form gets a new topic**: "Developer API access" — so someone
-clicking through from /developers lands on a pre-filled form instead of
-having to guess which existing topic (Support? Partnership?) fits.
-/contact now also accepts ?topic=X to pre-select any dropdown option, not
-just this one.
+## Deploy
 
-**Discoverability wiring**: added to the footer (present on every page)
-rather than the primary nav — nav is already fairly packed with links a
-typical consumer visitor needs, and developers are a narrower audience
-better served by a footer link plus a direct cross-link from Pricing
-("Building your own app? See the developer API"), which is exactly where
-someone evaluating paid plans would naturally look for this. Added to
-sitemap.xml as well.
+```bash
+cp audio_tools.py /path/to/repo/
+cp app.py /path/to/repo/          # or merge carefully
+cp static/js/tools.js /path/to/repo/static/js/
+cp templates/partials/tool_widgets/*.html /path/to/repo/templates/partials/tool_widgets/
+```
 
-## Testing performed
-- Python AST syntax check against the exact final merged app.py.
-- Jinja2 parse check on all 4 touched/new templates.
-- Full Flask render test: confirmed developers.html renders with the
-  correct character limit pulled from the real API_MAX_CHARS_PER_REQUEST
-  constant (not a hardcoded duplicate number that could drift out of
-  sync), confirmed the FAQ JSON-LD is valid with all 5 Q&As, confirmed
-  the footer link resolves correctly, confirmed pricing.html's cross-link
-  renders, and confirmed contact.html correctly pre-selects the "API
-  Access" topic when passed via the URL.
+Restart the app.
+
+## Still recommended later (not in this pack)
+1. Whisper transcription on GPU worker
+2. Waveform UI on cutter
+3. Before/after player on denoise
+4. Tool chaining buttons (“Send to Denoise / Trim”)
+5. New tools: vocal separator, loudness to -14 LUFS, etc.

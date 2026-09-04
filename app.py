@@ -2679,10 +2679,13 @@ def api_convert():
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
     quality = int(request.form.get("quality", 192))
+    preset = (request.form.get("preset") or "").strip() or None
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.convert(file.read(), file.filename, output_format, quality)
+        out_bytes = audio_tools.convert(file.read(), file.filename, output_format, quality, preset=preset)
+        if preset and preset in audio_tools.CONVERT_PRESETS:
+            output_format = audio_tools.CONVERT_PRESETS[preset][0]
         _bump_counter("usage_convert")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Converted-{int(time.time())}.{output_format}",
@@ -2698,12 +2701,13 @@ def api_merge():
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     files = request.files.getlist("files")
     gap_ms = int(request.form.get("gap_ms", 500))
+    crossfade_ms = int(request.form.get("crossfade_ms", 0))
     output_format = request.form.get("output_format", "mp3")
     if len(files) < 2:
         return jsonify({"error": "Add at least 2 files to merge."}), 400
     try:
         pairs = [(f.read(), f.filename) for f in files]
-        out_bytes = audio_tools.merge(pairs, gap_ms, output_format)
+        out_bytes = audio_tools.merge(pairs, gap_ms, output_format, crossfade_ms=crossfade_ms)
         _bump_counter("usage_merge")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Merged-{int(time.time())}.{output_format}",
@@ -2772,10 +2776,11 @@ def api_denoise():
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     strength = float(request.form.get("strength", 0.5))
+    stationary = request.form.get("stationary", "1") not in ("0", "false", "False")
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.denoise(file.read(), file.filename, strength)
+        out_bytes = audio_tools.denoise(file.read(), file.filename, strength, stationary=stationary)
         _bump_counter("usage_denoise")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Denoised-{int(time.time())}.mp3"})
@@ -2790,10 +2795,11 @@ def api_voicechange():
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     effect = request.form.get("effect", "pitch_shift")
+    dry_wet = float(request.form.get("dry_wet", 1.0))
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        params = {}
+        params = {"dry_wet": dry_wet}
         if effect == "pitch_shift":
             params["semitones"] = int(request.form.get("semitones", 0))
         elif effect == "robot":
@@ -2817,14 +2823,56 @@ def api_videoxtract():
     file = request.files.get("file")
     output_format = request.form.get("output_format", "mp3")
     quality = int(request.form.get("quality", 192))
+    start_sec = request.form.get("start_sec")
+    end_sec = request.form.get("end_sec")
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.video_to_audio(file.read(), file.filename, output_format, quality)
+        ss = float(start_sec) if start_sec not in (None, "") else None
+        es = float(end_sec) if end_sec not in (None, "") else None
+        out_bytes = audio_tools.video_to_audio(
+            file.read(), file.filename, output_format, quality,
+            start_sec=ss, end_sec=es,
+        )
         _bump_counter("usage_videoxtract")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Extracted-{int(time.time())}.{output_format}",
                          "format": output_format, "size_kb": round(len(out_bytes) / 1024, 1)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/cutter/auto-trim", methods=["POST"])
+def api_cutter_auto_trim():
+    lim = get_limits()
+    if not _under_limit("usage_cutter", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.auto_trim_silence(file.read(), file.filename)
+        _bump_counter("usage_cutter")
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"VoxCraft-AutoTrim-{int(time.time())}.mp3"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/tools/normalize", methods=["POST"])
+def api_normalize():
+    lim = get_limits()
+    if not _under_limit("usage_convert", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    target = float(request.form.get("target_dbfs", -3.0))
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        out_bytes = audio_tools.normalize(file.read(), file.filename, target_dbfs=target)
+        _bump_counter("usage_convert")
+        return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+                         "filename": f"VoxCraft-Normalized-{int(time.time())}.mp3"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
