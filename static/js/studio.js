@@ -109,20 +109,77 @@
       ta.dispatchEvent(new Event('input'));
     });
   });
-  // Section labels (optional helpers)
-  function prependSection(label) {
-    const ta = document.getElementById('single-text');
-    if (!ta) return;
-    const t = ta.value.trim();
-    ta.value = (t ? `[${label}]\n` + t : `[${label}]\n`);
-    ta.dispatchEvent(new Event('input'));
+  // Section label — only tags the download filename, never inserted into script
+  let activeSection = 'none';
+  function setSection(name) {
+    activeSection = name || 'none';
+    document.querySelectorAll('[data-section]').forEach((btn) => {
+      const on = btn.getAttribute('data-section') === activeSection;
+      btn.className = on ? 'btn btn--sm btn--brass is-active' : 'btn btn--ghost btn--sm';
+    });
+    const lab = document.getElementById('section-active-label');
+    if (lab) lab.textContent = activeSection === 'none' ? 'Full script' : activeSection + ' (filename only)';
   }
-  const si = document.getElementById('section-intro-btn');
-  const sb = document.getElementById('section-body-btn');
-  const so = document.getElementById('section-outro-btn');
-  if (si) si.addEventListener('click', () => prependSection('Intro'));
-  if (sb) sb.addEventListener('click', () => prependSection('Body'));
-  if (so) so.addEventListener('click', () => prependSection('Outro'));
+  document.querySelectorAll('[data-section]').forEach((btn) => {
+    btn.addEventListener('click', () => setSection(btn.getAttribute('data-section')));
+  });
+  setSection('none');
+
+  // Local pronunciation dictionary (this browser only)
+  function loadPron() {
+    try { return JSON.parse(localStorage.getItem('vox_pron') || '[]'); } catch (e) { return []; }
+  }
+  function savePron(items) {
+    localStorage.setItem('vox_pron', JSON.stringify(items.slice(0, 40)));
+  }
+  function renderPron() {
+    const list = document.getElementById('pron-list');
+    if (!list) return;
+    const items = loadPron();
+    if (!items.length) { list.innerHTML = '<span style="color:var(--text-dim)">No custom pronunciations yet.</span>'; return; }
+    list.innerHTML = items.map((it, i) =>
+      `<div style="display:flex;justify-content:space-between;gap:8px;margin:4px 0;">
+        <span><strong>${it.find}</strong> → ${it.say}</span>
+        <button type="button" class="btn btn--ghost btn--sm" data-pron-del="${i}">Remove</button>
+      </div>`
+    ).join('');
+    list.querySelectorAll('[data-pron-del]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const items = loadPron();
+        items.splice(parseInt(b.getAttribute('data-pron-del'), 10), 1);
+        savePron(items);
+        renderPron();
+      });
+    });
+  }
+  const pronAdd = document.getElementById('pron-add-btn');
+  if (pronAdd) {
+    pronAdd.addEventListener('click', () => {
+      const f = (document.getElementById('pron-find') || {}).value || '';
+      const s = (document.getElementById('pron-say') || {}).value || '';
+      if (!f.trim() || !s.trim()) return;
+      const items = loadPron();
+      items.unshift({ find: f.trim(), say: s.trim() });
+      savePron(items);
+      document.getElementById('pron-find').value = '';
+      document.getElementById('pron-say').value = '';
+      renderPron();
+    });
+  }
+  renderPron();
+
+  function applyLocalPron(text) {
+    let t = text;
+    loadPron().forEach((it) => {
+      if (!it.find) return;
+      try {
+        const escaped = it.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp('\\b' + escaped + '\\b', 'gi');
+        t = t.replace(re, it.say);
+      } catch (e) {}
+    });
+    return t;
+  }
 
   // ---- Preview ----
   const previewBtn = document.getElementById('preview-btn');
@@ -282,12 +339,13 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: singleText.value.trim(),
+          text: applyLocalPron(singleText.value.trim()),
           voice_id: voiceSelect.value,
           speed_pct: parseInt(speedSlider.value, 10),
           ssml_mode: ssmlToggle.checked,
           normalize: !!(document.getElementById('normalize-toggle') || {}).checked,
           export_format: (document.getElementById('export-format') || {}).value || 'mp3',
+          auto_pause: !!(document.getElementById('auto-pause-toggle') || {}).checked,
         }),
       });
       const data = await res.json();
@@ -305,7 +363,8 @@
       const secs = ((Date.now() - started) / 1000).toFixed(1);
       singleStatus.textContent = `Ready · ${data.size_kb} KB · ${secs}s`;
       const ext = (document.getElementById('export-format') || {}).value === 'wav' ? 'wav' : 'mp3';
-      const fname = (data.filename || 'VoxCraft-Narration.mp3').replace(/\.mp3$/i, '.' + ext);
+      const secTag = (activeSection && activeSection !== 'none') ? ('-' + activeSection) : '';
+      const fname = (data.filename || ('VoxCraft-Narration' + secTag + '.mp3')).replace(/\.mp3$/i, secTag + '.' + ext).replace(/--+/g, '-');
       singleResult.innerHTML = `
         <div class="result-panel">
           <div class="result-panel__label">Your narration</div>
@@ -402,8 +461,10 @@
               </div>
             `).join('')}
           </div>
-          ${data.zip_b64 ? `<a class="btn btn--brass btn--sm" style="margin-top:14px;display:inline-flex;"
-             download="${data.zip_filename || 'voxcraft-batch.zip'}" href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+            ${data.zip_b64 ? `<a class="btn btn--brass btn--sm" download="${data.zip_filename || 'voxcraft-batch.zip'}" href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>` : ''}
+            ${data.merged_b64 ? `<a class="btn btn--ghost btn--sm" download="${data.merged_filename || 'voxcraft-batch-merged.mp3'}" href="data:audio/mpeg;base64,${data.merged_b64}">Download merged MP3</a>` : ''}
+          </div>
         </div>
       `;
     } catch (e) {
