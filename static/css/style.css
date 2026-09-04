@@ -1724,3 +1724,14 @@ select.script-input:focus{
   0%,100%{opacity:0.35;transform:scale(0.85);}
   50%{opacity:1;transform:scale(1);}
 }
+
+.footer__made-in{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);
+  letter-spacing:0.02em;
+}
+.footer__pk-flag{font-size:1rem;line-height:1;}
+@media (max-width:640px){
+  .footer__bottom{flex-wrap:wrap;}
+  .footer__made-in{order:3;width:100%;}
+}
