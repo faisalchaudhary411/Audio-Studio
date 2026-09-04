@@ -57,8 +57,13 @@
       if (!tabPanels[key] || !tabButtons[key]) return;
       const active = key === name;
       tabPanels[key].style.display = active ? '' : 'none';
-      tabButtons[key].className = active ? 'btn btn--sm btn--brass is-active' : 'btn btn--sm';
-      tabButtons[key].setAttribute('aria-selected', active ? 'true' : 'false');
+      const btn = tabButtons[key];
+      if (btn.classList.contains('mode-tab')) {
+        btn.classList.toggle('is-active', active);
+      } else {
+        btn.className = active ? 'btn btn--sm btn--brass is-active' : 'btn btn--sm';
+      }
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
   }
   Object.keys(tabButtons).forEach((key) => {
