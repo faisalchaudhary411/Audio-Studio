@@ -202,16 +202,38 @@ def _gtts_fallback(text: str, voice: str, speed_pct: int = 100) -> bytes:
     return buf.getvalue()
 
 
-def tts_dispatch(text: str, voice_id: str, rate: str = "+0%", ssml_mode: bool = False, speed_pct: int = 100) -> bytes:
+def _inject_sentence_pauses(text: str, pause_ms: int = 280) -> str:
+    """Insert lightweight [pause] tags between sentences for more natural pacing.
+
+    Only used when markup mode is off and auto_pause is enabled.
+    """
+    import re
+    if not text or "[pause:" in text:
+        return text
+    parts = re.split(r"(?<=[.!?。؟۔।॥])\s+", text.strip())
+    parts = [p.strip() for p in parts if p.strip()]
+    if len(parts) <= 1:
+        return text
+    tag = f"[pause:{pause_ms}ms]"
+    return f" {tag} ".join(parts)
+
+
+def tts_dispatch(text: str, voice_id: str, rate: str = "+0%", ssml_mode: bool = False,
+                 speed_pct: int = 100, auto_pause: bool = False) -> bytes:
     """Central TTS routing function.
 
     - voice_id starting with 'GT::' -> not handled here yet, route to gTTS directly (see app.py)
     - ssml_mode True                -> markup-aware generator
+    - auto_pause True (and not ssml) -> inject short pauses between sentences via markup path
     - otherwise                     -> plain edge-tts, with gTTS as fallback if edge-tts fails
     """
     try:
         if ssml_mode:
             return asyncio.run(generate_audio_markup(text, voice_id, rate=rate))
+        if auto_pause:
+            paused = _inject_sentence_pauses(text)
+            if paused != text:
+                return asyncio.run(generate_audio_markup(paused, voice_id, rate=rate))
         return asyncio.run(generate_audio(text, voice_id, rate=rate))
     except Exception as e:
         try:

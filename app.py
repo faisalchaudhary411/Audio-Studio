@@ -2932,7 +2932,8 @@ def api_generate():
     text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
     do_normalize = bool(data.get("normalize", False))
     try:
-        audio = tts_dispatch(text, voice_id, rate=rate_str, ssml_mode=ssml_mode, speed_pct=speed_pct)
+        auto_pause = bool(data.get("auto_pause", False)) and not ssml_mode
+        audio = tts_dispatch(text, voice_id, rate=rate_str, ssml_mode=ssml_mode, speed_pct=speed_pct, auto_pause=auto_pause)
         if do_normalize and audio:
             try:
                 audio = audio_tools.normalize(audio, "gen.mp3", target_dbfs=-3.0)
@@ -3004,6 +3005,34 @@ def api_batch():
             zf.writestr(item["filename"], item["audio"])
     zip_buf.seek(0)
 
+    # Optional one-file merge of all batch clips (short crossfade)
+    merged_b64 = None
+    merged_filename = None
+    try:
+        if len(results) >= 2:
+            from pydub import AudioSegment
+            combined = None
+            for item in results:
+                seg = AudioSegment.from_file(io.BytesIO(item["audio"]), format="mp3")
+                if combined is None:
+                    combined = seg
+                else:
+                    cf = min(40, len(combined) // 4, len(seg) // 4)
+                    if cf > 5:
+                        combined = combined.append(seg, crossfade=cf)
+                    else:
+                        combined += AudioSegment.silent(duration=120)
+                        combined += seg
+            mbuf = io.BytesIO()
+            combined.export(mbuf, format="mp3", bitrate="192k")
+            merged_b64 = base64.b64encode(mbuf.getvalue()).decode("ascii")
+            merged_filename = f"VoxCraft-TTS-Batch-Merged-{timestamp_base}.mp3"
+        elif len(results) == 1:
+            merged_b64 = base64.b64encode(results[0]["audio"]).decode("ascii")
+            merged_filename = results[0]["filename"]
+    except Exception:
+        merged_b64 = None
+
     return jsonify({
         "clips": [
             {"idx": r["idx"], "text": r["text"], "filename": r["filename"],
@@ -3012,6 +3041,8 @@ def api_batch():
         ],
         "zip_b64": base64.b64encode(zip_buf.getvalue()).decode("ascii"),
         "zip_filename": f"VoxCraft-TTS-Batch-{timestamp_base}.zip",
+        "merged_b64": merged_b64,
+        "merged_filename": merged_filename,
         "errors": errors,
     })
 
