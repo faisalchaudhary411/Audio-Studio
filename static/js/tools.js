@@ -755,6 +755,8 @@
       form.append('file', file);
       form.append('speed', rate ? rate.value : '1');
       form.append('output_format', (document.getElementById('speed-format') || {}).value || 'mp3');
+      const pp = document.getElementById('speed-preserve-pitch');
+      form.append('preserve_pitch', pp && pp.checked ? '1' : '0');
       try {
         const res = await fetch('/api/tools/speed', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
@@ -834,7 +836,12 @@
         const clips = data.clips || [];
         if (status) status.textContent = `${clips.length} clip${clips.length === 1 ? '' : 's'} ready`;
         if (result) {
-          result.innerHTML = clips.map((c) => `
+          const zipBtn = data.zip_b64
+            ? `<a class="btn btn--brass btn--sm" style="margin-bottom:12px;display:inline-flex;"
+                 download="${data.zip_filename || 'voxcraft-split.zip'}"
+                 href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>`
+            : '';
+          result.innerHTML = zipBtn + clips.map((c) => `
             <div class="batch-clip" style="margin-bottom:12px;">
               <div class="batch-clip__idx">Part ${c.idx} · ${c.duration_sec}s · ${c.size_kb} KB</div>
               <audio controls src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
@@ -848,6 +855,77 @@
       } finally { setLoading(btn, false); showProgress(progress, false); }
     }));
   })();
+
+
+  function wireSimpleTool(opts) {
+    const btn = document.getElementById(opts.btnId);
+    if (!btn) return;
+    const status = document.querySelector(opts.statusSel);
+    const result = document.getElementById(opts.resultId);
+    const progress = ensureProgress(result);
+    if (opts.onInit) opts.onInit();
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const fileEl = document.getElementById(opts.fileId);
+      const file = fileEl && fileEl.files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = opts.busyText || 'Working…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      if (opts.append) opts.append(form);
+      try {
+        const res = await fetch(opts.url, { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  }
+
+  wireSimpleTool({
+    btnId: 'reverse-btn', fileId: 'reverse-file', statusSel: '[data-reverse-status]',
+    resultId: 'reverse-result', url: '/api/tools/reverse', busyText: 'Reversing…',
+    append: (f) => f.append('output_format', (document.getElementById('reverse-format') || {}).value || 'mp3'),
+  });
+  wireSimpleTool({
+    btnId: 'mono-btn', fileId: 'mono-file', statusSel: '[data-mono-status]',
+    resultId: 'mono-result', url: '/api/tools/mono', busyText: 'Converting to mono…',
+    append: (f) => f.append('output_format', (document.getElementById('mono-format') || {}).value || 'mp3'),
+  });
+  wireSimpleTool({
+    btnId: 'loop-btn', fileId: 'loop-file', statusSel: '[data-loop-status]',
+    resultId: 'loop-result', url: '/api/tools/loop', busyText: 'Looping…',
+    onInit: () => {
+      const c = document.getElementById('loop-count');
+      const l = document.getElementById('loop-count-label');
+      if (c && l) c.addEventListener('input', () => { l.textContent = c.value; });
+    },
+    append: (f) => {
+      f.append('loops', (document.getElementById('loop-count') || {}).value || '2');
+      f.append('output_format', (document.getElementById('loop-format') || {}).value || 'mp3');
+    },
+  });
+  wireSimpleTool({
+    btnId: 'eq-btn', fileId: 'eq-file', statusSel: '[data-eq-status]',
+    resultId: 'eq-result', url: '/api/tools/eq', busyText: 'Applying EQ…',
+    onInit: () => {
+      const b = document.getElementById('eq-bass');
+      const t = document.getElementById('eq-treble');
+      const bl = document.getElementById('eq-bass-label');
+      const tl = document.getElementById('eq-treble-label');
+      if (b && bl) b.addEventListener('input', () => { bl.textContent = b.value; });
+      if (t && tl) t.addEventListener('input', () => { tl.textContent = t.value; });
+    },
+    append: (f) => {
+      f.append('bass_db', (document.getElementById('eq-bass') || {}).value || '0');
+      f.append('treble_db', (document.getElementById('eq-treble') || {}).value || '0');
+      f.append('output_format', (document.getElementById('eq-format') || {}).value || 'mp3');
+    },
+  });
 
   // Soft-fail if ads helper is missing so tools still work on pages without ads.js
   if (!window.VoxCraftAds) {
