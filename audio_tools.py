@@ -389,6 +389,120 @@ def normalize(file_bytes: bytes, filename: str, target_dbfs: float = -3.0,
     normalized = audio.apply_gain(change)
     return _export_bytes(normalized, output_format)
 
+# ---------------------------------------------------------------------------
+# Volume / levels
+# ---------------------------------------------------------------------------
+def change_volume(file_bytes: bytes, filename: str, gain_db: float = 0.0,
+                  output_format: str = "mp3") -> bytes:
+    """Apply a fixed gain in dB. Clamps extreme boosts."""
+    check_file_size(file_bytes)
+    gain_db = max(-24.0, min(24.0, float(gain_db)))
+    audio = _load_segment(file_bytes, filename)
+    if abs(gain_db) < 0.05:
+        return _export_bytes(audio, output_format)
+    out = audio.apply_gain(gain_db)
+    # Soft limit to reduce hard clipping after big boosts
+    if out.max_dBFS > -0.5:
+        out = out.apply_gain(-0.5 - out.max_dBFS)
+    return _export_bytes(out, output_format)
+
+
+# ---------------------------------------------------------------------------
+# Speed change (also shifts pitch — practical for Shorts pacing)
+# ---------------------------------------------------------------------------
+def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
+                 output_format: str = "mp3") -> bytes:
+    """Change playback speed. speed=1.25 is 25% faster; also shifts pitch.
+
+    Range limited to 0.5x–2.0x for usable quality without a time-stretch library.
+    """
+    check_file_size(file_bytes)
+    speed = max(0.5, min(2.0, float(speed)))
+    audio = _load_segment(file_bytes, filename)
+    if abs(speed - 1.0) < 0.01:
+        return _export_bytes(audio, output_format)
+    # pydub: change frame rate then reset → speed+pitch change
+    new_rate = int(audio.frame_rate * speed)
+    sped = audio._spawn(audio.raw_data, overrides={"frame_rate": new_rate})
+    sped = sped.set_frame_rate(audio.frame_rate)
+    return _export_bytes(sped, output_format)
+
+
+# ---------------------------------------------------------------------------
+# Fade in / fade out
+# ---------------------------------------------------------------------------
+def fade_audio(file_bytes: bytes, filename: str, fade_in_ms: int = 0,
+               fade_out_ms: int = 0, output_format: str = "mp3") -> bytes:
+    """Apply fade-in and/or fade-out. Durations capped to half the clip."""
+    check_file_size(file_bytes)
+    fade_in_ms = max(0, int(fade_in_ms or 0))
+    fade_out_ms = max(0, int(fade_out_ms or 0))
+    audio = _load_segment(file_bytes, filename)
+    half = max(1, len(audio) // 2)
+    fade_in_ms = min(fade_in_ms, half)
+    fade_out_ms = min(fade_out_ms, half)
+    if fade_in_ms:
+        audio = audio.fade_in(fade_in_ms)
+    if fade_out_ms:
+        audio = audio.fade_out(fade_out_ms)
+    return _export_bytes(audio, output_format)
+
+
+# ---------------------------------------------------------------------------
+# Split by silence → multiple clips
+# ---------------------------------------------------------------------------
+def split_by_silence(file_bytes: bytes, filename: str, min_silence_ms: int = 500,
+                     silence_thresh_db: int = -40, keep_silence_ms: int = 200,
+                     output_format: str = "mp3") -> list:
+    """Split audio into chunks separated by silence.
+
+    Returns list of dicts: {bytes, filename, duration_sec, idx}
+    """
+    from pydub.silence import split_on_silence
+    check_file_size(file_bytes)
+    audio = _load_segment(file_bytes, filename)
+    min_silence_ms = max(100, min(5000, int(min_silence_ms or 500)))
+    silence_thresh_db = max(-60, min(-20, int(silence_thresh_db or -40)))
+    keep_silence_ms = max(0, min(2000, int(keep_silence_ms or 200)))
+
+    # silence_thresh is absolute dBFS in pydub (e.g. -40)
+    chunks = split_on_silence(
+        audio,
+        min_silence_len=min_silence_ms,
+        silence_thresh=silence_thresh_db,
+        keep_silence=keep_silence_ms,
+    )
+    if not chunks:
+        # Fallback: return whole file as one clip
+        chunks = [audio]
+
+    # Cap number of parts to avoid huge responses
+    max_parts = 20
+    chunks = chunks[:max_parts]
+    results = []
+    for i, ch in enumerate(chunks, start=1):
+        if len(ch) < 80:  # skip tiny blips
+            continue
+        out = _export_bytes(ch, output_format)
+        results.append({
+            "bytes": out,
+            "filename": f"VoxCraft-Split-{i}.{output_format}",
+            "duration_sec": round(len(ch) / 1000.0, 2),
+            "idx": i,
+        })
+    if not results:
+        out = _export_bytes(audio, output_format)
+        results.append({
+            "bytes": out,
+            "filename": f"VoxCraft-Split-1.{output_format}",
+            "duration_sec": round(len(audio) / 1000.0, 2),
+            "idx": 1,
+        })
+    return results
+
+
+
+
 
 # ---------------------------------------------------------------------------
 # Voice change (with dry/wet)

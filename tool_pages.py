@@ -309,9 +309,173 @@ TOOL_PAGES = {
         "related_tools": ["voice-changer", "merge-audio-files", "convert-audio-format"],
         "blog_keywords": ["music", "ace-step", "generate"],
     },
+
+    "normalize-audio-volume": {
+        "widget": "normalize",
+        "usage_key": "normalize",
+        "title": "Normalize Audio Volume Online — Free",
+        "meta_description": "Normalize quiet or loud recordings to a consistent peak level online. Free, no install — ideal before merging clips or uploading to YouTube.",
+        "eyebrow": "Normalize",
+        "h1": "Normalize audio volume online",
+        "sub": "Bring quiet clips up and tame loud peaks so every file sits at a consistent level.",
+        "intro": [
+            "Normalization adjusts gain so the loudest part of a clip reaches a target peak level. It's the fastest way to make several recordings feel the same loudness before you merge them or drop them into a video.",
+            "Unlike a simple volume slider, normalize looks at the peak of each file and applies the right gain automatically.",
+        ],
+        "how_it_works": [
+            "Upload an audio file (up to 10MB).",
+            "Choose a target peak level (default −3 dBFS is safe for most platforms).",
+            "Tap Normalize and download the result.",
+        ],
+        "use_cases": [
+            ("Podcast edits", "Match level across takes recorded on different days or mics."),
+            ("YouTube voiceover", "Avoid a quiet narration track against music beds."),
+            ("Before merge", "Normalize each clip first so joins don't jump in loudness."),
+        ],
+        "tips": [
+            "−3 dBFS is a safe default for web and social uploads.",
+            "If a file is already very loud, normalize will reduce it rather than boost into clipping.",
+            "For a fixed boost or cut in dB, use the Adjust Volume tool instead.",
+        ],
+        "faq": [
+            ("Is this the same as loudness (LUFS) normalization?", "No — this is peak normalization. True LUFS matching needs a different algorithm; peak normalize is still enough for most creator workflows."),
+            ("Will it clip?", "It targets below 0 dBFS and soft-limits extreme boosts on near-silent files."),
+        ],
+        "related_tools": ["adjust-audio-volume", "merge-audio-files", "convert-audio-format"],
+        "blog_keywords": ["normalize", "volume", "loudness"],
+    },
+    "adjust-audio-volume": {
+        "widget": "volume",
+        "usage_key": "volume",
+        "title": "Adjust Audio Volume Online — Free Gain Control",
+        "meta_description": "Boost or lower audio volume by a fixed dB amount online. Free, no install — simple gain control for voiceovers and music beds.",
+        "eyebrow": "Volume",
+        "h1": "Adjust audio volume online",
+        "sub": "Raise or lower an entire clip by a fixed amount in decibels.",
+        "intro": [
+            "Use this when you already know you want “about +3 dB more” or “turn this bed down a bit.” For automatic leveling across files, prefer Normalize.",
+        ],
+        "how_it_works": [
+            "Upload your file.",
+            "Set gain from −12 dB to +12 dB.",
+            "Apply and download.",
+        ],
+        "use_cases": [
+            ("Music under voice", "Drop a bed a few dB so narration stays clear."),
+            ("Quiet phone memo", "Add a small boost before editing."),
+        ],
+        "tips": [
+            "Large boosts can clip — if the result distorts, try a smaller gain or Normalize instead.",
+            "After adjusting, you can still run Normalize for a consistent peak.",
+        ],
+        "faq": [
+            ("What's the difference vs Normalize?", "Volume applies a fixed dB change. Normalize measures the peak and chooses the gain for you."),
+        ],
+        "related_tools": ["normalize-audio-volume", "fade-audio", "merge-audio-files"],
+        "blog_keywords": ["volume", "gain", "boost"],
+    },
+    "change-audio-speed": {
+        "widget": "speed",
+        "usage_key": "speed",
+        "title": "Change Audio Speed Online — Free Speed Up / Slow Down",
+        "meta_description": "Speed up or slow down MP3 and WAV online (0.5×–2×). Free tool for Shorts pacing, voice memos, and practice tracks.",
+        "eyebrow": "Speed",
+        "h1": "Change audio speed online",
+        "sub": "Make a clip faster or slower in your browser — 0.5× to 2×.",
+        "intro": [
+            "Speeding up shortens duration; slowing down stretches it. Pitch shifts with speed (no separate time-stretch engine), which is still practical for Shorts, memos, and rough edits.",
+        ],
+        "how_it_works": [
+            "Upload an audio file up to 10MB.",
+            "Pick a speed (or use presets like 1.25×).",
+            "Download the result.",
+        ],
+        "use_cases": [
+            ("YouTube Shorts", "Tighten a voiceover that runs a few seconds too long."),
+            ("Practice", "Slow a phrase to learn pronunciation."),
+            ("Podcasts", "Slightly speed long reads without a full re-record."),
+        ],
+        "tips": [
+            "1.25× is a common sweet spot for spoken content.",
+            "Extreme speeds (near 0.5× or 2×) sound more artificial — preview before publishing.",
+            "If you need pitch locked while changing speed, that requires a dedicated time-stretch tool (not included here).",
+        ],
+        "faq": [
+            ("Does pitch stay the same?", "No — pitch moves with speed. That keeps the tool simple and fast."),
+            ("Max speed?", "2× faster or 0.5× slower."),
+        ],
+        "related_tools": ["trim-cut-audio", "convert-audio-format", "voice-changer"],
+        "blog_keywords": ["speed", "tempo", "speed up"],
+    },
+    "fade-audio": {
+        "widget": "fade",
+        "usage_key": "fade",
+        "title": "Fade In Fade Out Audio Online — Free",
+        "meta_description": "Add smooth fade-in and fade-out to MP3 or WAV online. Remove clicks at starts and ends before merging or publishing.",
+        "eyebrow": "Fade",
+        "h1": "Fade audio in and out online",
+        "sub": "Smooth the start and end of a clip so it doesn't click in a video or merge.",
+        "intro": [
+            "Hard starts and stops are noticeable in videos and podcasts. A short fade-in and fade-out is one of the easiest polish steps before publish.",
+        ],
+        "how_it_works": [
+            "Upload your clip.",
+            "Set fade-in and fade-out in milliseconds.",
+            "Apply and download.",
+        ],
+        "use_cases": [
+            ("Video voiceover", "Soft start so the first word isn't abrupt."),
+            ("Music beds", "Fade out under the last line of narration."),
+            ("Before merge", "Fade edges so joins feel cleaner."),
+        ],
+        "tips": [
+            "300–800 ms is enough for most voice clips.",
+            "Very long fades on short clips will swallow content — keep fades shorter than half the duration.",
+        ],
+        "faq": [
+            ("Can I fade only one side?", "Yes — set the other side to 0 ms."),
+        ],
+        "related_tools": ["merge-audio-files", "trim-cut-audio", "normalize-audio-volume"],
+        "blog_keywords": ["fade", "fade in", "fade out"],
+    },
+    "split-audio-by-silence": {
+        "widget": "split",
+        "usage_key": "split",
+        "title": "Split Audio by Silence Online — Free",
+        "meta_description": "Split a long recording into separate clips at silent pauses. Free online tool for interviews, multi-take voiceovers, and podcasts.",
+        "eyebrow": "Split",
+        "h1": "Split audio by silence online",
+        "sub": "Cut a long file into separate parts wherever there's a pause.",
+        "intro": [
+            "When you've recorded several takes in one file, or an interview with natural gaps, splitting on silence saves manual scrubbing in a full editor.",
+        ],
+        "how_it_works": [
+            "Upload a recording up to 10MB.",
+            "Set how long a pause must be to count as a split, and how quiet “silence” is.",
+            "Tap Split — download each part individually (up to 20 parts).",
+        ],
+        "use_cases": [
+            ("Multi-take VO", "Record five takes, split, keep the best."),
+            ("Interviews", "Break a long conversation into topic chunks."),
+            ("Podcasts", "Separate segments before editing."),
+        ],
+        "tips": [
+            "If you get too many tiny clips, raise Min silence (e.g. 800–1200 ms).",
+            "If it won't split, lower the silence threshold (more negative = treats more of the file as sound).",
+            "Room noise can prevent clean splits — denoise first if needed.",
+        ],
+        "faq": [
+            ("What's the part limit?", "20 parts per run so the page stays responsive."),
+            ("Can I merge them again?", "Yes — use Merge after you delete the takes you don't want."),
+        ],
+        "related_tools": ["trim-cut-audio", "merge-audio-files", "remove-background-noise"],
+        "blog_keywords": ["split", "silence", "chapters"],
+    },
+
 }
 
 TOOL_ORDER = [
     "transcribe-audio-to-text", "convert-audio-format", "merge-audio-files", "trim-cut-audio",
-    "remove-background-noise", "voice-changer", "extract-audio-from-video", "ai-music-generator",
+    "remove-background-noise", "normalize-audio-volume", "adjust-audio-volume", "change-audio-speed",
+    "fade-audio", "split-audio-by-silence", "voice-changer", "extract-audio-from-video", "ai-music-generator",
 ]
