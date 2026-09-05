@@ -1923,6 +1923,10 @@ input.studio-input:focus{
   box-shadow:0 0 0 3px var(--brass-glow);
 }
 
+.contact-field-error{
+  color:var(--brass-hi);font-size:0.78rem;margin:0 0 10px;
+}
+
 /* Selects that incorrectly used script-input still look like studio-select */
 select.script-input{
   width:100%;
