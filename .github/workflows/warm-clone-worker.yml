@@ -1,0 +1,57 @@
+# Keeps the Chatterbox voice-clone Modal container warm during active
+# hours, WITHOUT paying for Modal's min_containers keep-warm feature.
+#
+# How it works: modal_workers/chatterbox/app.py has scaledown_window=300,
+# meaning Modal kills the container after 5 minutes with no requests. This
+# workflow just sends a request every 4 minutes (< 5) so the container
+# never sees that idle gap and never has to cold-start the model again.
+# The ping payload is deliberately empty (chunk_text="") so the worker's
+# own "Missing parameters" check returns instantly — you're paying for a
+# few milliseconds of container time per ping, not a real generation.
+#
+# This only warms Chatterbox, not F5-TTS — F5 is lower-traffic
+# (Hindi/Urdu-only) and isn't worth double-warming on a zero-budget setup.
+# If your traffic pattern changes, duplicate this workflow for F5TTS using
+# MODAL_F5TTS_ENDPOINT_URL and the f5tts payload shape instead.
+#
+# One-time setup:
+#   1. In this GitHub repo: Settings -> Secrets and variables -> Actions ->
+#      New repository secret.
+#   2. Add: MODAL_CLONE_ENDPOINT_URL = <same URL you set on your VPS as
+#      MODAL_CLONE_ENDPOINT_URL, e.g. the modal.run URL from the deploy
+#      workflow's log>
+#
+# Tune the `cron` schedule below to your actual active hours (see the
+# comment above it) — don't run this 24/7, that defeats the point of not
+# paying for 24/7 keep-warm.
+
+name: Warm clone worker
+
+on:
+  schedule:
+    # Every 4 minutes, but ONLY during active hours, so idle overnight
+    # hours still scale to zero and cost nothing.
+    #
+    # Below covers 10:00-24:00 PKT (UTC+5), i.e. 05:00-19:00 UTC.
+    # Cron is in UTC. Adjust the hour range to match when your users are
+    # actually active — check your traffic/analytics rather than guessing.
+    - cron: "*/4 5-18 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Chatterbox worker to keep it warm
+        env:
+          MODAL_CLONE_ENDPOINT_URL: ${{ secrets.MODAL_CLONE_ENDPOINT_URL }}
+        run: |
+          if [ -z "$MODAL_CLONE_ENDPOINT_URL" ]; then
+            echo "MODAL_CLONE_ENDPOINT_URL secret not set — skipping ping."
+            exit 0
+          fi
+          curl -sS -m 30 -o /dev/null -w "ping status: %{http_code}\n" \
+            -X POST "$MODAL_CLONE_ENDPOINT_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"chunk_text":"","reference_audio_b64":"","language_id":"en"}' \
+            || echo "Ping request failed (network/timeout) — container may still cold-start next real request."
