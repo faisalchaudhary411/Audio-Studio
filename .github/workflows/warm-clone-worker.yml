@@ -29,13 +29,16 @@ name: Warm clone worker
 
 on:
   schedule:
-    # Every 4 minutes, but ONLY during active hours, so idle overnight
-    # hours still scale to zero and cost nothing.
+    # Every 5 minutes during active hours. GitHub's documented minimum
+    # reliable interval for `schedule` triggers is 5 minutes -- a faster
+    # interval like */4 doesn't error, it just silently never fires
+    # (confirmed: workflow only ever showed a workflow_dispatch trigger,
+    # zero schedule runs, despite the file being valid and on main).
     #
     # Below covers 10:00-24:00 PKT (UTC+5), i.e. 05:00-19:00 UTC.
     # Cron is in UTC. Adjust the hour range to match when your users are
     # actually active — check your traffic/analytics rather than guessing.
-    - cron: "*/4 5-18 * * *"
+    - cron: "*/5 5-18 * * *"
   workflow_dispatch: {}
 
 jobs:
