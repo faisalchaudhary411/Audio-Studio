@@ -85,7 +85,7 @@ def preprocess_reference_audio(input_path: str, output_path: str, sample_rate: i
                 pass
         return False
 
-@app.cls(gpu="A10G", timeout=600, scaledown_window=300)
+@app.cls(gpu="A10G", timeout=600, scaledown_window=480)
 class ChatterboxWorker:
     @modal.enter()
     def load_model(self):
