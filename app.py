@@ -1348,29 +1348,45 @@ def contact():
         return render_template("contact.html", topic=topic if topic else None,
                                contact_token=contact_token)
 
+    # True when the fetch()-based form submit in contact.html sent this —
+    # everything below still runs exactly the same checks either way, this
+    # only changes whether the RESULT comes back as a full page (no-JS
+    # fallback, unchanged from before) or JSON for the page to render
+    # inline without a reload. Every hardening check (honeypot, rate limit,
+    # timing token, disposable-email) applies identically to both paths.
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
     ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
 
     # Honeypot: hidden fields real visitors never fill. Bots that blindly
     # fill every input trip this and get a silent success (no email sent).
     if (request.form.get("website") or "").strip() or (request.form.get("company_url") or "").strip():
         app.logger.info("CONTACT honeypot tripped ip=%s", ip_hash)
+        if is_ajax:
+            return jsonify({"submitted": True})
         return render_template("contact.html", submitted=True)
 
     # Rate limit by IP — stops bulk spam even when the bot rotates emails.
     if _contact_rate_limited(ip_hash):
         app.logger.warning("CONTACT rate-limited ip=%s", ip_hash)
+        msg = "Too many messages from your network. Please try again in an hour."
+        if is_ajax:
+            return jsonify({"errors": {"form": msg}, "contact_token": contact_token}), 429
         return render_template(
             "contact.html",
-            errors={"form": "Too many messages from your network. Please try again in an hour."},
+            errors={"form": msg},
             contact_token=contact_token,
         )
 
     # Timing / signed token — form must have been loaded a few seconds ago.
     if not _contact_token_ok(request.form.get("contact_token", "")):
         app.logger.info("CONTACT bad/missing token ip=%s", ip_hash)
+        msg = "Please reload the page and try again."
+        if is_ajax:
+            return jsonify({"errors": {"form": msg}, "contact_token": contact_token}), 400
         return render_template(
             "contact.html",
-            errors={"form": "Please reload the page and try again."},
+            errors={"form": msg},
             contact_token=contact_token,
         )
 
@@ -1390,19 +1406,27 @@ def contact():
         errors["message"] = "Message is too short — give us a bit more detail."
 
     if errors:
+        if is_ajax:
+            return jsonify({"errors": errors, "contact_token": contact_token}), 400
         return render_template("contact.html", errors=errors, name=name, email=email,
                                 topic=topic, message=message, contact_token=contact_token)
 
     # Route common support topics to self-serve pages — no admin email.
     topic_l = topic.lower()
+    self_serve_redirect = None
     if any(k in topic_l for k in ("missing key", "resend key", "lost key", "where is my key")):
-        return redirect(url_for("resend_key"))
-    if any(k in topic_l for k in ("device", "unlock", "another device", "new phone", "new device")):
-        return redirect(url_for("unlock_device"))
-    if any(k in topic_l for k in ("payment status", "request status", "pending payment", "not approved")):
-        return redirect(url_for("request_status"))
-    if any(k in topic_l for k in ("promo", "redeem code", "free trial")):
-        return redirect(url_for("redeem_promo"))
+        self_serve_redirect = url_for("resend_key")
+    elif any(k in topic_l for k in ("device", "unlock", "another device", "new phone", "new device")):
+        self_serve_redirect = url_for("unlock_device")
+    elif any(k in topic_l for k in ("payment status", "request status", "pending payment", "not approved")):
+        self_serve_redirect = url_for("request_status")
+    elif any(k in topic_l for k in ("promo", "redeem code", "free trial")):
+        self_serve_redirect = url_for("redeem_promo")
+
+    if self_serve_redirect:
+        if is_ajax:
+            return jsonify({"redirect": self_serve_redirect})
+        return redirect(self_serve_redirect)
 
     _contact_rate_record(ip_hash)
 
@@ -1416,6 +1440,8 @@ def contact():
     if not sent:
         app.logger.warning(f"Contact form message not delivered (req {req_id}) — check RESEND_API_KEY/ADMIN_EMAIL.")
 
+    if is_ajax:
+        return jsonify({"submitted": True, "req_id": req_id})
     return render_template("contact.html", submitted=True, req_id=req_id)
 
 
