@@ -923,6 +923,60 @@ def load_voices_for_license(license_key: str) -> list:
         conn.close()
 
 
+def load_public_voices() -> list:
+    """
+    All voices across every account with access="public" -- the shared
+    library any signed-in user can browse and generate with. Deliberately
+    strips license_key from what it returns (callers must not leak whose
+    account a public voice belongs to).
+    """
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT id, data FROM saved_voices").fetchall()
+        items = []
+        for voice_id, data in rows:
+            rec = json.loads(data)
+            if rec.get("access") == "public":
+                rec["id"] = voice_id
+                items.append(rec)
+        items.sort(key=lambda x: x.get("made_public_at", x.get("created_at", "")), reverse=True)
+        return items
+    finally:
+        conn.close()
+
+
+def set_voice_access(voice_id: str, license_key: str, access: str, made_public_at: str = None) -> bool:
+    """
+    Flips a voice's access between "private" and "public". Owner-checked --
+    only succeeds if license_key matches the voice's actual owner. Read-
+    modify-write since access lives inside the JSON blob column, not its
+    own indexed column (this table only has id/license_key/data).
+    """
+    with _write_lock:
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT data FROM saved_voices WHERE id = ? AND license_key = ?",
+                (voice_id, license_key),
+            ).fetchone()
+            if not row:
+                return False
+            rec = json.loads(row[0])
+            rec["access"] = access
+            if access == "public" and made_public_at:
+                rec["made_public_at"] = made_public_at
+            elif access == "private":
+                rec.pop("made_public_at", None)
+            conn.execute(
+                "UPDATE saved_voices SET data = ? WHERE id = ? AND license_key = ?",
+                (json.dumps(rec, ensure_ascii=False), voice_id, license_key),
+            )
+            conn.commit()
+            return True
+        finally:
+            conn.close()
+
+
 def count_voices_for_license(license_key: str) -> int:
     conn = _connect()
     try:

@@ -73,6 +73,20 @@ VOICE_CONSENT_TEXT = (
     "sample to generate speech on my request."
 )
 
+# Separate, stronger consent for making a saved voice public — the initial
+# save-time consent above only covers "on my request" (the uploader's own
+# generations). Flipping a voice to public is a materially different grant
+# (any signed-in user can generate speech with it), so it gets its own
+# explicit consent screen and its own append-only record, rather than
+# treating the original consent as if it already covered this.
+VOICE_PUBLIC_CONSENT_VERSION = "public-v1"
+VOICE_PUBLIC_CONSENT_TEXT = (
+    "I understand that making this voice public means ANY VoxCraft user will "
+    "be able to generate speech with it, not just me. I confirm I still have "
+    "the right to allow this broader use, and I accept responsibility for "
+    "having granted it."
+)
+
 # Reference clips uploaded to CLONE_UPLOAD_DIR (via /api/clone/upload) had no
 # expiry at all — every clip ever uploaded sat on disk permanently, only
 # cleared by a full service restart (PrivateTmp=true in voxcraft.service
@@ -3414,6 +3428,20 @@ def api_clone_upload():
     return jsonify({"reference_id": ref_id, "quality": quality})
 
 
+def _voice_usable_by(voice: dict, license_key: str) -> bool:
+    """
+    A voice is usable by a given license if they own it, OR if it's been
+    explicitly made public (access="public"). Missing/legacy voices with
+    no "access" key at all default to private -- same as before this
+    feature existed, nothing becomes public just by omission.
+    """
+    if not voice:
+        return False
+    if voice.get("license_key") == license_key:
+        return True
+    return voice.get("access") == "public"
+
+
 @app.route("/api/clone/voices/save", methods=["POST"])
 def api_clone_voice_save():
     """Pro+-only: permanently save a just-uploaded reference clip as a
@@ -3461,6 +3489,7 @@ def api_clone_voice_save():
         "filename": dest_filename,
         "created_at": now_iso,
         "ref_text": ref_text,
+        "access": "private",
     })
 
     # Permanent, never-pruned evidence trail — kept even if the voice is
@@ -3495,10 +3524,90 @@ def api_clone_voices_list():
                 "name": v.get("name", "Untitled voice"),
                 "created_at": v.get("created_at", ""),
                 "ref_text": v.get("ref_text", ""),
+                "access": v.get("access", "private"),
             }
             for v in voices
         ]
     })
+
+
+@app.route("/api/clone/voices/public", methods=["GET"])
+def api_clone_voices_public():
+    """
+    Pro+-only: the shared community library -- voices any user has
+    explicitly opted into making public (see /api/clone/voices/<id>/access).
+    Deliberately omits filename/license_key so a caller can't reach the
+    raw audio file path or learn whose account a voice belongs to; usage
+    still goes through /api/clone/generate like any saved voice, which
+    resolves the id server-side.
+    """
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+    if not session.get("license_key"):
+        return jsonify({"error": "Session expired — please re-activate your license."}), 401
+
+    voices = persistence.load_public_voices()
+    return jsonify({
+        "voices": [
+            {
+                "id": v["id"],
+                "name": v.get("name", "Untitled voice"),
+                "ref_text": v.get("ref_text", ""),
+            }
+            for v in voices
+        ]
+    })
+
+
+@app.route("/api/clone/voices/<voice_id>/access", methods=["POST"])
+def api_clone_voice_set_access(voice_id):
+    """
+    Owner-only: flip a saved voice between private and public. Going
+    public requires a fresh, explicit consent check on THIS request (see
+    VOICE_PUBLIC_CONSENT_TEXT) -- the original save-time consent doesn't
+    cover this, it only ever granted generation "on my request". Going
+    back to private needs no consent, only ownership.
+    """
+    if not has_clone_and_music():
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+    license_key = session.get("license_key")
+    if not license_key:
+        return jsonify({"error": "Session expired — please re-activate your license."}), 401
+
+    data = request.get_json(force=True) or {}
+    access = (data.get("access") or "").strip().lower()
+    if access not in ("public", "private"):
+        return jsonify({"error": "access must be \"public\" or \"private\"."}), 400
+
+    voice = persistence.get_voice(voice_id)
+    if not voice or voice.get("license_key") != license_key:
+        return jsonify({"error": "Saved voice not found."}), 404
+
+    now_iso = dt.datetime.utcnow().isoformat() + "Z"
+
+    if access == "public":
+        if data.get("consent") is not True:
+            return jsonify({"error": "You must confirm the public-sharing consent statement first.",
+                             "consent_text": VOICE_PUBLIC_CONSENT_TEXT}), 400
+        ok = persistence.set_voice_access(voice_id, license_key, "public", made_public_at=now_iso)
+        if ok:
+            ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
+            persistence.record_voice_consent({
+                "voice_id": voice_id,
+                "license_key": license_key,
+                "ip_hash": ip_hash,
+                "consented_at": now_iso,
+                "consent_version": VOICE_PUBLIC_CONSENT_VERSION,
+                "consent_text": VOICE_PUBLIC_CONSENT_TEXT,
+                "action": "made_public",
+            })
+    else:
+        ok = persistence.set_voice_access(voice_id, license_key, "private")
+
+    if not ok:
+        return jsonify({"error": "Could not update this voice."}), 400
+
+    return jsonify({"id": voice_id, "access": access})
 
 
 @app.route("/api/clone/voices/<voice_id>", methods=["DELETE"])
@@ -3553,7 +3662,7 @@ def api_clone_reference_transcribe():
     if saved_voice_id:
         license_key = session.get("license_key")
         voice = persistence.get_voice(saved_voice_id)
-        if not voice or voice.get("license_key") != license_key:
+        if not _voice_usable_by(voice, license_key):
             return jsonify({"error": "Saved voice not found."}), 404
         path = os.path.join(VOICE_REFS_DIR, voice["filename"])
         filename = voice["filename"]
@@ -3598,7 +3707,7 @@ def api_clone_generate():
     if saved_voice_id:
         voice = persistence.get_voice(saved_voice_id)
         license_key = session.get("license_key")
-        if not voice or voice.get("license_key") != license_key:
+        if not _voice_usable_by(voice, license_key):
             return jsonify({"error": "Saved voice not found."}), 404
         path = os.path.join(VOICE_REFS_DIR, voice["filename"])
         if not os.path.exists(path):
