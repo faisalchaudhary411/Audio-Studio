@@ -1,15 +1,22 @@
 // ===== VoxCraft main.js =====
 
-// ---- Hero waveform (CSS-animated div bars) ----
+// ---- Hero waveform (JS-driven, looks like a live audio waveform) ----
+// The old version relied purely on a CSS @keyframes loop. That loop gets
+// killed outright by `prefers-reduced-motion: reduce`, which a lot of
+// phones ship with turned on by default (battery savers, some Android
+// skins) — so the bars just sat there static with zero fallback. This
+// drives the bars from rAF instead: layered sine waves per bar (different
+// speed + phase so bars don't move in lockstep) plus a little random
+// jitter and occasional "transient" spikes, which reads much more like a
+// real audio meter than a uniform pulse. It also pauses when the tab is
+// hidden to avoid burning battery in the background.
 function initWave(){
   const wave = document.querySelector('.wave');
   if(!wave) return;
-  // The waveform is now pure CSS-driven with 80 div bars.
-  // No JS animation loop needed — CSS handles the breathing animation.
-  // We just ensure the container exists and is ready.
   const container = wave.querySelector('.wave-container');
-  if(!container) return;
-  // Optional: add a subtle entrance animation on load
+  const bars = container ? Array.from(container.querySelectorAll('.wave-bar')) : [];
+
+  // Entrance animation for the whole waveform block.
   wave.style.opacity = '0';
   wave.style.transform = 'translateY(12px)';
   wave.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
@@ -18,6 +25,90 @@ function initWave(){
       wave.style.opacity = '1';
       wave.style.transform = 'translateY(0)';
     });
+  });
+
+  if(!bars.length) return;
+
+  const reduceMotion = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Kill the CSS keyframe loop per-bar so our inline transform actually
+  // takes effect (a running CSS animation otherwise wins over inline
+  // styles for the same property).
+  bars.forEach(bar => { bar.style.animation = 'none'; });
+
+  // Per-bar randomized "voice", so the wave never looks like it's just
+  // repeating the same loop.
+  const bar_state = bars.map((bar, i) => ({
+    bar,
+    freq1: 0.6 + Math.random() * 0.9,
+    freq2: 1.3 + Math.random() * 1.6,
+    phase1: Math.random() * Math.PI * 2,
+    phase2: Math.random() * Math.PI * 2,
+    // spread base phase across the row so it reads left-to-right like a
+    // traveling wave instead of every bar breathing in sync
+    travel: i * 0.18,
+    nextSpike: Math.random() * 3,
+    spikeUntil: 0
+  }));
+
+  let playing = wave.classList.contains('is-playing');
+  const mo = new MutationObserver(() => {
+    playing = wave.classList.contains('is-playing');
+  });
+  mo.observe(wave, { attributes: true, attributeFilter: ['class'] });
+
+  const amplitude = reduceMotion ? 0.08 : 0.5;   // how far bars swing
+  const floor = reduceMotion ? 0.92 : 0.35;      // minimum scale
+  const speedMul = () => (playing ? 2.4 : 1);
+
+  let rafId = null;
+  let running = true;
+  let lastFrame = 0;
+  const frameInterval = 1000 / 30; // cap at ~30fps, plenty smooth, easy on battery
+
+  function tick(now){
+    if(!running) return;
+    rafId = requestAnimationFrame(tick);
+    if(now - lastFrame < frameInterval) return;
+    lastFrame = now;
+    const t = now / 1000;
+
+    bar_state.forEach(s => {
+      const speed = speedMul();
+      let v = Math.sin((t - s.travel) * s.freq1 * speed + s.phase1) * 0.6
+            + Math.sin((t - s.travel) * s.freq2 * speed + s.phase2) * 0.4;
+      v = (v + 1) / 2; // normalize 0..1
+
+      // Occasional transient "hit" so it doesn't look perfectly periodic —
+      // real audio has irregular peaks, not a clean sine wave.
+      if(!reduceMotion){
+        if(t > s.spikeUntil && t > s.nextSpike){
+          s.spikeUntil = t + 0.12 + Math.random() * 0.1;
+          s.nextSpike = t + 1.5 + Math.random() * 3;
+          s.spikeBoost = 0.3 + Math.random() * 0.3;
+        }
+        if(t < s.spikeUntil){
+          v = Math.min(1, v + (s.spikeBoost || 0));
+        }
+      }
+
+      const scale = floor + v * amplitude;
+      s.bar.style.transform = `scaleY(${scale.toFixed(3)})`;
+    });
+  }
+
+  rafId = requestAnimationFrame(tick);
+
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){
+      running = false;
+      if(rafId) cancelAnimationFrame(rafId);
+    } else if(!running){
+      running = true;
+      lastFrame = 0;
+      rafId = requestAnimationFrame(tick);
+    }
   });
 }
 
