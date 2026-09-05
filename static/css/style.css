@@ -1154,6 +1154,79 @@ select.studio-select{
   box-shadow:0 0 0 3px var(--brass-glow);
 }
 
+/* ===== Custom select (replaces the native open-dropdown UI) =====
+   .studio-select's closed state is already themed via appearance:none
+   above, but the OPEN list is rendered entirely by the OS on mobile
+   (Android's full-screen native picker) and can't be styled by CSS at
+   all. This wraps any .studio-select with an in-page panel that mimics
+   it instead, matching the rest of the site instead of dropping into a
+   raw system dialog. The original <select> stays in the DOM as the
+   actual data model (value/change events all still work unchanged) —
+   it's just visually hidden and replaced by the button+panel below.
+*/
+.custom-select{position:relative;}
+.custom-select__native{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;pointer-events:none;
+}
+.custom-select__trigger{
+  width:100%;text-align:left;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--ink);
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  color:var(--text-hi);
+  font-family:var(--body);
+  font-size:0.95rem;
+  padding:12px 14px;
+  cursor:pointer;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+.custom-select__trigger:focus-visible,
+.custom-select__trigger.is-open{
+  border-color:var(--brass);
+  outline:none;
+  box-shadow:0 0 0 3px var(--brass-glow);
+}
+.custom-select__trigger[disabled]{opacity:0.5;cursor:not-allowed;}
+.custom-select__chevron{
+  width:10px;height:7px;flex:0 0 auto;color:var(--text-mid);
+  transition:transform .15s ease;
+}
+.custom-select__trigger.is-open .custom-select__chevron{transform:rotate(180deg);}
+
+.custom-select__panel{
+  display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:60;
+  max-height:min(320px, 60vh);overflow-y:auto;
+  background:var(--ink-panel);
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-lift);
+  padding:6px;
+}
+.custom-select__panel.is-open{display:block;}
+.custom-select__group-label{
+  font-family:var(--mono);font-size:0.68rem;color:var(--text-dim);
+  text-transform:uppercase;letter-spacing:0.05em;
+  padding:10px 10px 4px;
+}
+.custom-select__option{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 10px;border-radius:8px;
+  color:var(--text-hi);font-size:0.92rem;cursor:pointer;
+}
+.custom-select__option:hover,
+.custom-select__option.is-focused{background:var(--ink-panel-2);}
+.custom-select__option.is-selected{color:var(--brass-hi);}
+.custom-select__dot{
+  width:15px;height:15px;flex:0 0 auto;border-radius:50%;
+  border:1.5px solid var(--text-dim);position:relative;
+}
+.custom-select__option.is-selected .custom-select__dot{border-color:var(--brass);}
+.custom-select__option.is-selected .custom-select__dot::after{
+  content:"";position:absolute;inset:3px;border-radius:50%;background:var(--brass);
+}
+
 .studio-range{
   width:100%;
   height:6px;
