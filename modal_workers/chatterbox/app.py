@@ -29,6 +29,11 @@ class SingleChunkRequest(BaseModel):
     chunk_text: str
     reference_audio_b64: str
     language_id: str = "en"
+    # When True, the caller (clone_engine.py) already ran this exact
+    # reference clip through preprocess_reference_audio() once for the
+    # whole job and is sending the cleaned/resampled bytes — skip redoing
+    # the ffmpeg denoise/silence-trim/loudnorm pass on every segment call.
+    already_processed: bool = False
 
 class CloneResponse(BaseModel):
     success: bool
@@ -138,6 +143,7 @@ class ChatterboxWorker:
         text = (req.chunk_text or "").strip()
         ref_b64 = req.reference_audio_b64
         language_id = req.language_id if req.language_id in ("en", "hi") else "en"
+        already_processed = bool(req.already_processed)
 
         if not text or not ref_b64:
             return CloneResponse(success=False, error="Missing parameters.").model_dump()
@@ -153,11 +159,12 @@ class ChatterboxWorker:
                 f.write(ref_bytes)
                 tmp_path = f.name
 
-            clean_tmp_path = tmp_path + "_clean.wav"
-            if preprocess_reference_audio(tmp_path, clean_tmp_path, sample_rate=self.model.sr):
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                tmp_path = clean_tmp_path
+            if not already_processed:
+                clean_tmp_path = tmp_path + "_clean.wav"
+                if preprocess_reference_audio(tmp_path, clean_tmp_path, sample_rate=self.model.sr):
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                    tmp_path = clean_tmp_path
 
             waveform, sr = ta.load(tmp_path)
             if sr != self.model.sr:
