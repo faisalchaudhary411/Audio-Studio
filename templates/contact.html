@@ -17,10 +17,16 @@
     {% else %}
       <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="contact_token" value="{{ contact_token }}">
         <!-- Honeypot: hidden from real visitors via CSS, bots fill it blindly. -->
-        <div style="position:absolute;left:-9999px;" aria-hidden="true">
-          <input type="text" name="website" tabindex="-1" autocomplete="off">
+        <div style="position:absolute;left:-9999px;opacity:0;pointer-events:none;" aria-hidden="true">
+          <label for="website">Website</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+          <label for="company_url">Company URL</label>
+          <input type="text" id="company_url" name="company_url" tabindex="-1" autocomplete="off">
         </div>
+
+        {% if errors and errors.form %}<p style="color:#e88;font-size:0.9rem;margin-bottom:12px;">{{ errors.form }}</p>{% endif %}
 
         <input type="text" name="name" placeholder="Your name" value="{{ name or '' }}"
                class="script-input" style="min-height:auto;padding:12px;margin-bottom:10px;" required>
