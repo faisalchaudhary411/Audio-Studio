@@ -41,13 +41,13 @@ function initWave(){
   // repeating the same loop.
   const bar_state = bars.map((bar, i) => ({
     bar,
-    freq1: 0.6 + Math.random() * 0.9,
-    freq2: 1.3 + Math.random() * 1.6,
+    freq1: 1.8 + Math.random() * 1.4,
+    freq2: 3.2 + Math.random() * 2.4,
     phase1: Math.random() * Math.PI * 2,
     phase2: Math.random() * Math.PI * 2,
     // spread base phase across the row so it reads left-to-right like a
     // traveling wave instead of every bar breathing in sync
-    travel: i * 0.18,
+    travel: i * 0.08,
     nextSpike: Math.random() * 3,
     spikeUntil: 0
   }));
@@ -58,9 +58,9 @@ function initWave(){
   });
   mo.observe(wave, { attributes: true, attributeFilter: ['class'] });
 
-  const amplitude = reduceMotion ? 0.08 : 0.5;   // how far bars swing
-  const floor = reduceMotion ? 0.92 : 0.35;      // minimum scale
-  const speedMul = () => (playing ? 2.4 : 1);
+  const amplitude = reduceMotion ? 0.08 : 0.55;   // how far bars swing
+  const floor = reduceMotion ? 0.92 : 0.3;      // minimum scale
+  const speedMul = () => (playing ? 1.4 : 1);   // small extra boost if .is-playing is ever toggled
 
   let rafId = null;
   let running = true;
