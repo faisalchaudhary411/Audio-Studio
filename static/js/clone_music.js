@@ -63,6 +63,13 @@
   const cloneLangDetect = document.getElementById('clone-lang-detect');
   const cloneVoiceSelect = document.getElementById('clone-voice-select');
   const cloneDeleteBtn = document.getElementById('clone-delete-voice-btn');
+  const cloneTogglePublicBtn = document.getElementById('clone-toggle-public-btn');
+  const cloneVoiceAccessHint = document.getElementById('clone-voice-access-hint');
+  const clonePublicConsentModal = document.getElementById('clone-public-consent-modal');
+  const clonePublicConsentCheckbox = document.getElementById('clone-public-consent-checkbox');
+  const clonePublicConsentConfirm = document.getElementById('clone-public-consent-confirm');
+  const clonePublicConsentCancel = document.getElementById('clone-public-consent-cancel');
+  const clonePublicConsentError = document.getElementById('clone-public-consent-error');
   const cloneUploadRow = document.getElementById('clone-upload-row');
   const cloneEngineSelect = document.getElementById('clone-engine-select');
   const cloneEngineHint = document.getElementById('clone-engine-hint');
@@ -128,26 +135,55 @@
   // the file currently sitting in cloneRefInput, so "Save this voice" and
   // "Clone & generate" don't each upload the same clip separately.
   let pendingReferenceId = null;
-  // voice_id -> ref_text, populated from /api/clone/voices so picking a
-  // saved voice can auto-fill the box instead of making the user retype
-  // the same Devanagari line every single generation.
-  const savedVoiceRefText = {};
+  // voice_id -> {ref_text, owned, access}, populated from /api/clone/voices
+  // (your own) and /api/clone/voices/public (the community library) so
+  // picking a saved voice can auto-fill ref_text and the UI knows whether
+  // to show Delete/Make-public controls for it.
+  const savedVoiceMeta = {};
 
   async function refreshSavedVoices(selectId) {
     if (!cloneVoiceSelect) return;
     try {
-      const res = await fetch('/api/clone/voices');
-      if (!res.ok) return;
-      const data = await res.json();
-      const voices = data.voices || [];
+      const [ownRes, publicRes] = await Promise.all([
+        fetch('/api/clone/voices'),
+        fetch('/api/clone/voices/public'),
+      ]);
+      const ownVoices = ownRes.ok ? ((await ownRes.json()).voices || []) : [];
+      const publicVoices = publicRes.ok ? ((await publicRes.json()).voices || []) : [];
+      const ownIds = new Set(ownVoices.map(v => v.id));
+
       cloneVoiceSelect.innerHTML = '<option value="">Upload a new reference clip…</option>';
-      voices.forEach((v) => {
-        const opt = document.createElement('option');
-        opt.value = v.id;
-        opt.textContent = v.name;
-        cloneVoiceSelect.appendChild(opt);
-        savedVoiceRefText[v.id] = v.ref_text || '';
-      });
+
+      if (ownVoices.length) {
+        const grp = document.createElement('optgroup');
+        grp.label = 'Your voices';
+        ownVoices.forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          opt.textContent = v.access === 'public' ? `${v.name} (public)` : v.name;
+          grp.appendChild(opt);
+          savedVoiceMeta[v.id] = { ref_text: v.ref_text || '', owned: true, access: v.access || 'private' };
+        });
+        cloneVoiceSelect.appendChild(grp);
+      }
+
+      // Community voices belonging to OTHER accounts — your own public
+      // voices already show up above via "Your voices" with a (public) tag,
+      // no need to list them twice.
+      const othersPublic = publicVoices.filter(v => !ownIds.has(v.id));
+      if (othersPublic.length) {
+        const grp = document.createElement('optgroup');
+        grp.label = 'Community voices';
+        othersPublic.forEach((v) => {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          opt.textContent = v.name;
+          grp.appendChild(opt);
+          savedVoiceMeta[v.id] = { ref_text: v.ref_text || '', owned: false, access: 'public' };
+        });
+        cloneVoiceSelect.appendChild(grp);
+      }
+
       if (selectId) cloneVoiceSelect.value = selectId;
     } catch (e) {
       // Saved-voice list is a convenience, not required for cloning to
@@ -160,15 +196,33 @@
     return cloneVoiceSelect && cloneVoiceSelect.value !== '';
   }
 
+  function updateVoiceControlsForSelection() {
+    const meta = usingSavedVoice() ? savedVoiceMeta[cloneVoiceSelect.value] : null;
+    if (cloneDeleteBtn) cloneDeleteBtn.style.display = (meta && meta.owned) ? '' : 'none';
+    if (cloneTogglePublicBtn) {
+      cloneTogglePublicBtn.style.display = (meta && meta.owned) ? '' : 'none';
+      cloneTogglePublicBtn.textContent = (meta && meta.access === 'public') ? 'Make private' : 'Make public';
+    }
+    if (cloneVoiceAccessHint) {
+      if (meta && !meta.owned) {
+        cloneVoiceAccessHint.textContent = 'Community voice — shared by another VoxCraft user.';
+      } else if (meta && meta.access === 'public') {
+        cloneVoiceAccessHint.textContent = 'Public — any VoxCraft user can generate with this voice.';
+      } else {
+        cloneVoiceAccessHint.textContent = '';
+      }
+    }
+  }
+
   if (cloneVoiceSelect && cloneUploadRow) {
     cloneVoiceSelect.addEventListener('change', () => {
       cloneUploadRow.style.display = usingSavedVoice() ? 'none' : '';
-      if (cloneDeleteBtn) cloneDeleteBtn.style.display = usingSavedVoice() ? '' : 'none';
+      updateVoiceControlsForSelection();
       cloneStatus.textContent = '';
       // Auto-fill the cached ref_text for this saved voice, if it has one —
       // still editable in case the saved transcript needs a correction.
       if (cloneRefText && usingSavedVoice()) {
-        const cached = savedVoiceRefText[cloneVoiceSelect.value] || '';
+        const cached = (savedVoiceMeta[cloneVoiceSelect.value] || {}).ref_text || '';
         cloneRefText.value = cached;
         // Older saved voices predate ref_text caching and have nothing
         // stored — transcribe on the fly instead of leaving it blank.
@@ -201,6 +255,90 @@
         cloneStatus.textContent = 'Network error — check your connection.';
       } finally {
         cloneDeleteBtn.disabled = false;
+      }
+    });
+  }
+
+  // ---- Make public / make private ----
+  // Going private->public needs the separate, stronger consent modal below
+  // (server refuses without consent:true — this UI gate just matches it).
+  // Going public->private needs no extra consent, only ownership.
+  async function setVoiceAccess(voiceId, access, consent) {
+    const body = { access };
+    if (consent) body.consent = true;
+    const res = await fetch(`/api/clone/voices/${voiceId}/access`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not update this voice.');
+    return data;
+  }
+
+  function closePublicConsentModal() {
+    if (!clonePublicConsentModal) return;
+    clonePublicConsentModal.style.display = 'none';
+    if (clonePublicConsentCheckbox) clonePublicConsentCheckbox.checked = false;
+    if (clonePublicConsentConfirm) clonePublicConsentConfirm.disabled = true;
+    if (clonePublicConsentError) clonePublicConsentError.textContent = '';
+  }
+
+  if (clonePublicConsentCheckbox && clonePublicConsentConfirm) {
+    clonePublicConsentCheckbox.addEventListener('change', () => {
+      clonePublicConsentConfirm.disabled = !clonePublicConsentCheckbox.checked;
+    });
+  }
+  if (clonePublicConsentCancel) {
+    clonePublicConsentCancel.addEventListener('click', closePublicConsentModal);
+  }
+
+  if (cloneTogglePublicBtn) {
+    cloneTogglePublicBtn.addEventListener('click', async () => {
+      const voiceId = cloneVoiceSelect.value;
+      const meta = savedVoiceMeta[voiceId];
+      if (!voiceId || !meta || !meta.owned) return;
+
+      if (meta.access === 'public') {
+        // Revoking is low-stakes — a plain confirm is enough, no modal.
+        const voiceName = cloneVoiceSelect.options[cloneVoiceSelect.selectedIndex].textContent;
+        if (!window.confirm(`Make "${voiceName}" private again? Other users will no longer be able to generate with it.`)) return;
+        cloneTogglePublicBtn.disabled = true;
+        try {
+          await setVoiceAccess(voiceId, 'private');
+          cloneStatus.textContent = `"${voiceName}" is private again.`;
+          await refreshSavedVoices(voiceId);
+          updateVoiceControlsForSelection();
+        } catch (e) {
+          cloneStatus.textContent = e.message || 'Could not update this voice.';
+        } finally {
+          cloneTogglePublicBtn.disabled = false;
+        }
+        return;
+      }
+
+      // Going public requires the explicit consent modal.
+      if (clonePublicConsentModal) {
+        clonePublicConsentModal.style.display = 'flex';
+        clonePublicConsentModal.dataset.voiceId = voiceId;
+      }
+    });
+  }
+
+  if (clonePublicConsentConfirm) {
+    clonePublicConsentConfirm.addEventListener('click', async () => {
+      const voiceId = clonePublicConsentModal ? clonePublicConsentModal.dataset.voiceId : null;
+      if (!voiceId || !clonePublicConsentCheckbox.checked) return;
+      clonePublicConsentConfirm.disabled = true;
+      try {
+        await setVoiceAccess(voiceId, 'public', true);
+        closePublicConsentModal();
+        cloneStatus.textContent = 'This voice is now public.';
+        await refreshSavedVoices(voiceId);
+        updateVoiceControlsForSelection();
+      } catch (e) {
+        if (clonePublicConsentError) clonePublicConsentError.textContent = e.message || 'Could not update this voice.';
+        clonePublicConsentConfirm.disabled = false;
       }
     });
   }

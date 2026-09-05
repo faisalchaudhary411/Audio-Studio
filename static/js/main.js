@@ -358,7 +358,135 @@ function initPermissionsSheet(){
   });
 }
 
+// ---- Custom select (replaces native open-dropdown UI on .studio-select) ----
+// See the .custom-select CSS block for why this exists: a native <select>'s
+// closed state can be themed, but the open list is OS-rendered (Android's
+// full-screen picker, etc.) and CSS can't touch it at all. This wraps every
+// .studio-select found on the page in a small in-page panel instead. The
+// original <select> stays in the DOM as the real data model — its value and
+// change events work completely unchanged, so no other script needs to
+// know this happened.
+function enhanceSelect(select) {
+  if (!select || select.dataset.customSelectEnhanced) return;
+  select.dataset.customSelectEnhanced = '1';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'custom-select';
+  select.parentNode.insertBefore(wrap, select);
+  wrap.appendChild(select);
+  select.classList.add('custom-select__native');
+  select.setAttribute('tabindex', '-1');
+  select.setAttribute('aria-hidden', 'true');
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'custom-select__trigger studio-select';
+  trigger.setAttribute('aria-haspopup', 'listbox');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.innerHTML = '<span class="custom-select__label"></span>' +
+    '<svg class="custom-select__chevron" viewBox="0 0 12 8" fill="none"><path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  wrap.appendChild(trigger);
+  const label = trigger.querySelector('.custom-select__label');
+
+  const panel = document.createElement('div');
+  panel.className = 'custom-select__panel';
+  panel.setAttribute('role', 'listbox');
+  wrap.appendChild(panel);
+
+  function syncTrigger() {
+    const opt = select.options[select.selectedIndex];
+    label.textContent = opt ? opt.textContent : (select.getAttribute('aria-label') || 'Select…');
+    trigger.disabled = !!select.disabled;
+  }
+
+  function buildOptionRow(opt) {
+    const row = document.createElement('div');
+    row.className = 'custom-select__option' + (opt.selected ? ' is-selected' : '');
+    row.setAttribute('role', 'option');
+    row.dataset.value = opt.value;
+    const dot = document.createElement('span');
+    dot.className = 'custom-select__dot';
+    const text = document.createElement('span');
+    text.textContent = opt.textContent;
+    row.appendChild(dot);
+    row.appendChild(text);
+    row.addEventListener('click', () => {
+      if (select.value !== opt.value) {
+        select.value = opt.value;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      syncTrigger();
+      closePanel();
+    });
+    return row;
+  }
+
+  function buildPanel() {
+    panel.innerHTML = '';
+    Array.from(select.children).forEach((child) => {
+      if (child.tagName === 'OPTGROUP') {
+        const groupLabel = document.createElement('div');
+        groupLabel.className = 'custom-select__group-label';
+        groupLabel.textContent = child.label;
+        panel.appendChild(groupLabel);
+        Array.from(child.children).forEach((opt) => panel.appendChild(buildOptionRow(opt)));
+      } else if (child.tagName === 'OPTION') {
+        panel.appendChild(buildOptionRow(child));
+      }
+    });
+  }
+
+  function onDocClick(e) {
+    if (!wrap.contains(e.target)) closePanel();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') { closePanel(); trigger.focus(); }
+  }
+
+  function openPanel() {
+    if (select.disabled) return;
+    buildPanel();
+    panel.classList.add('is-open');
+    trigger.classList.add('is-open');
+    trigger.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onDocClick, true);
+    document.addEventListener('keydown', onKeydown);
+  }
+  function closePanel() {
+    panel.classList.remove('is-open');
+    trigger.classList.remove('is-open');
+    trigger.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('keydown', onKeydown);
+  }
+
+  trigger.addEventListener('click', () => {
+    if (panel.classList.contains('is-open')) closePanel(); else openPanel();
+  });
+
+  // Keeps the trigger's label correct whenever anything else changes the
+  // select programmatically — studio.js populating voices after a fetch,
+  // clone_music.js rebuilding options on refreshSavedVoices(), setting
+  // .value directly, etc. — none of that code needs to know this wrapper
+  // exists.
+  select.addEventListener('change', syncTrigger);
+  new MutationObserver(syncTrigger).observe(select, { childList: true, subtree: true, attributes: true });
+
+  syncTrigger();
+}
+
+function enhanceAllSelects() {
+  document.querySelectorAll('.studio-select').forEach((el) => {
+    // Native <select> only — skip if somehow already a non-select node,
+    // and never touch anything under /admin (admin keeps native selects).
+    if (el.tagName === 'SELECT') enhanceSelect(el);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  // Admin pages don't currently use .studio-select at all, but this guard
+  // keeps it that way explicitly — user-facing redesign only, per request.
+  if (!location.pathname.startsWith('/admin')) enhanceAllSelects();
   initWave();
   initStudio();
   initNavToggle();
