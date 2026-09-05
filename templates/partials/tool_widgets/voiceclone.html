@@ -27,7 +27,9 @@
           <option value="">Upload a new reference clip…</option>
         </select>
         <button class="btn btn--ghost btn--sm" id="clone-delete-voice-btn" type="button" style="display:none;white-space:nowrap;" title="Delete this saved voice">Delete</button>
+        <button class="btn btn--ghost btn--sm" id="clone-toggle-public-btn" type="button" style="display:none;white-space:nowrap;">Make public</button>
       </div>
+      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-voice-access-hint"></span>
     </div>
 
     <div id="clone-upload-row">
@@ -91,6 +93,26 @@
           <button class="btn btn--brass btn--sm" id="clone-consent-confirm" type="button" disabled>Save voice</button>
         </div>
         <span style="display:block;margin-top:8px;color:var(--brass-hi);font-size:0.75rem;" id="clone-consent-error"></span>
+      </div>
+    </div>
+
+    <!-- Public-sharing consent modal — a SEPARATE, stronger consent from the
+         save-time one above. Making a voice public is refused server-side
+         without consent:true on this specific request; see
+         /api/clone/voices/<id>/access in app.py. -->
+    <div id="clone-public-consent-modal" class="modal-backdrop" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="clone-public-consent-title">
+      <div class="panel modal-panel">
+        <span class="panel__label" id="clone-public-consent-title">Make this voice public</span>
+        <p style="color:var(--text-mid);font-size:0.82rem;line-height:1.5;margin:10px 0;">Any VoxCraft user will be able to select this voice and generate their own speech with it — not just you.</p>
+        <label style="display:flex;gap:8px;align-items:flex-start;color:var(--text-mid);font-size:0.82rem;line-height:1.4;margin-bottom:14px;cursor:pointer;">
+          <input type="checkbox" id="clone-public-consent-checkbox" style="margin-top:3px;">
+          <span>I understand that making this voice public means ANY VoxCraft user will be able to generate speech with it, not just me. I confirm I still have the right to allow this broader use, and I accept responsibility for having granted it.</span>
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn--ghost btn--sm" id="clone-public-consent-cancel" type="button">Cancel</button>
+          <button class="btn btn--brass btn--sm" id="clone-public-consent-confirm" type="button" disabled>Make public</button>
+        </div>
+        <span style="display:block;margin-top:8px;color:var(--brass-hi);font-size:0.75rem;" id="clone-public-consent-error"></span>
       </div>
     </div>
     {% else %}
