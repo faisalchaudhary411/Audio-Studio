@@ -1,0 +1,46 @@
+# Deploys the faster-whisper STT worker to Modal — runs entirely on
+# GitHub's servers. Edit modal_workers/whisper/app.py via the GitHub web
+# editor, push, and this deploys automatically. No local `modal` CLI needed.
+#
+# One-time setup (same tokens as the clone / music workers):
+#   1. modal.com dashboard → Settings → API Tokens → create a token
+#   2. GitHub repo → Settings → Secrets and variables → Actions:
+#        MODAL_TOKEN_ID     = <token id>
+#        MODAL_TOKEN_SECRET = <token secret>
+#   3. Push a change under modal_workers/whisper/** (or run this workflow
+#      manually from the Actions tab).
+#
+# After the first successful deploy, grab the endpoint URL from the log:
+#   https://<workspace>--voxcraft-whisper-worker-whisperworker-transcribe.modal.run
+# Set that as MODAL_WHISPER_ENDPOINT_URL on your VPS.
+
+name: Deploy Modal Whisper worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modal_workers/whisper/**"
+      - ".github/workflows/deploy-modal-whisper-worker.yml"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Modal
+        run: pip install modal pydantic
+
+      - name: Deploy to Modal
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal deploy modal_workers/whisper/app.py
