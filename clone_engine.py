@@ -234,18 +234,97 @@ def _is_valid_wav(data: bytes) -> bool:
     return data[:4] == b'RIFF' and data[8:12] == b'WAVE'
 
 
+def _is_silent_audio(wav_bytes: bytes, silence_thresh_dbfs: float = -45.0) -> bool:
+    """
+    Catches a segment that comes back as a technically-valid WAV
+    (_is_valid_wav passes: correct header, plenty of bytes) but is
+    actually silent or near-silent -- seen in practice when a mid-sentence
+    text fragment gives the model no natural closure to synthesize, and
+    it can theoretically still happen occasionally even on a clean full
+    sentence. _is_valid_wav alone can't catch this since it only checks
+    the header, never the actual waveform content.
+    """
+    try:
+        from pydub import AudioSegment
+        import io
+        seg = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
+        return seg.dBFS == float("-inf") or seg.dBFS < silence_thresh_dbfs
+    except Exception:
+        return False  # can't analyze it -- don't block the job on this check
+
+
+def _generate_chatterbox_segment(seg_text: str, ref_b64: str, language_id: str,
+                                  already_processed: bool, max_silence_retries: int = 1) -> dict:
+    """
+    Wraps modal_client.generate() with a silence check on top of its
+    existing network-failure retries. A segment that HTTP-succeeds but
+    comes back silent doesn't raise an exception or a non-success result,
+    so modal_clone.py's retry logic never sees it -- this catches that
+    case specifically and retries in-place before giving up.
+    """
+    result = None
+    for attempt in range(max_silence_retries + 1):
+        result = modal_client.generate(seg_text, ref_b64, language_id=language_id,
+                                        engine="chatterbox", already_processed=already_processed)
+        if not result.get("success"):
+            return result
+        audio = base64.b64decode(result["audio_b64"])
+        if not _is_silent_audio(audio):
+            return result
+        if attempt < max_silence_retries:
+            print(f"[CLONE] Segment came back silent, retrying (attempt {attempt + 1}): {seg_text[:60]}...")
+    # Exhausted retries and it's still silent -- surface this as a clear
+    # failure naming the offending text, rather than silently shipping
+    # dead air in the middle of the final audio.
+    return {"success": False, "error": f"Segment produced silent audio after retries: \"{seg_text[:80]}...\""}
+
+
 def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
     """
     Split long Devanagari/English text into natural segments for stable TTS.
+
+    Always prefers splitting at a sentence boundary over a blind word-count
+    cutoff. A chunk boundary landing mid-sentence gives the TTS model no
+    punctuation cue to close out cleanly, and is a common cause of dropped
+    or silent audio right around the cut point -- confirmed against a real
+    generation where a script with multiple blank-line-separated paragraphs
+    got word-count-chunked straight through the middle of a sentence.
+
+    Degrades in three stages: paragraph -> sentence -> word, only falling
+    to word-level splitting for a single sentence that alone exceeds
+    max_chars (should be rare).
     """
     import re
+
+    def _sentence_split(s):
+        # ۔ and ؟ are Urdu-script terminators (kept for any text that
+        # reaches this function before transliteration); ।/॥ are the
+        # Devanagari terminators urdu_transliteration.py converts them to.
+        return [x.strip() for x in re.split(r"(?<=[.!?۔؟।॥])\s+", s) if x.strip()]
+
+    def _word_split(s, limit):
+        words = s.split()
+        out = []
+        piece = ""
+        for w in words:
+            cand = (piece + " " + w).strip() if piece else w
+            if len(cand) <= limit:
+                piece = cand
+            else:
+                if piece:
+                    out.append(piece)
+                piece = w
+        if piece:
+            out.append(piece)
+        return out
+
     text = text.strip()
     if len(text) <= max_chars:
         return [text]
 
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     if len(paragraphs) == 1:
-        paragraphs = [s.strip() for s in re.split(r"(?<=[.!?।॥])\s+", text) if s.strip()]
+        paragraphs = _sentence_split(text)
 
     segments = []
     current = ""
@@ -259,16 +338,31 @@ def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
             if len(part) <= max_chars:
                 current = part
             else:
-                words = part.split()
+                # `part` is still too long on its own (a whole multi-sentence
+                # paragraph) -- split IT by sentence boundary before ever
+                # falling back to blind word-count cutting.
+                sub_sentences = _sentence_split(part)
+                if len(sub_sentences) == 1:
+                    sub_sentences = [part]  # no punctuation to split on
                 piece = ""
-                for w in words:
-                    cand = (piece + " " + w).strip() if piece else w
+                for sent in sub_sentences:
+                    cand = (piece + " " + sent).strip() if piece else sent
                     if len(cand) <= max_chars:
                         piece = cand
                     else:
                         if piece:
                             segments.append(piece)
-                        piece = w
+                        if len(sent) <= max_chars:
+                            piece = sent
+                        else:
+                            # a single sentence longer than max_chars by
+                            # itself -- only now fall back to word-level
+                            word_pieces = _word_split(sent, max_chars)
+                            if word_pieces:
+                                segments.extend(word_pieces[:-1])
+                                piece = word_pieces[-1]
+                            else:
+                                piece = ""
                 current = piece
     if current:
         segments.append(current)
@@ -363,13 +457,11 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
         clean_ref_b64, already_processed = _preprocess_reference_once(reference_audio_path)
 
         if len(segments) == 1:
-            results = [modal_client.generate(segments[0], clean_ref_b64, language_id=language_id,
-                                               engine=engine, already_processed=already_processed)]
+            results = [_generate_chatterbox_segment(segments[0], clean_ref_b64, language_id, already_processed)]
         else:
             with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_SEGMENT_WORKERS, len(segments))) as executor:
                 results = list(executor.map(
-                    lambda seg: modal_client.generate(seg, clean_ref_b64, language_id=language_id,
-                                                       engine=engine, already_processed=already_processed),
+                    lambda seg: _generate_chatterbox_segment(seg, clean_ref_b64, language_id, already_processed),
                     segments,
                 ))
 
