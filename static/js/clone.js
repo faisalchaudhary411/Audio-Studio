@@ -36,9 +36,34 @@
       cloneStatus.textContent = 'Done.';
       const ts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
       const fname = `VoxCraft-Clone-${ts}.wav`;
-      cloneResult.innerHTML = `<audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
-        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-           download="${fname}" href="data:audio/wav;base64,${data.audio_b64}">Download WAV</a>`;
+      // Persist for cross-tool "Send to …" handoff (tools.js reads this key)
+      try {
+        sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
+          b64: data.audio_b64,
+          filename: fname,
+          mime: 'audio/wav',
+          ts: Date.now(),
+        }));
+      } catch (e) {}
+      cloneResult.innerHTML = `
+        <div class="result-panel">
+          <audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
+          <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/wav;base64,${data.audio_b64}">Download WAV</a>
+          </div>
+          <div class="result-panel__next" style="margin-top:10px;">
+            <span class="result-panel__next-label">Send to another tool</span>
+            <div class="result-panel__next-links" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+              <a class="btn btn--ghost btn--sm" data-send-tool="trim-cut-audio" href="/tools/trim-cut-audio">Trim</a>
+              <a class="btn btn--ghost btn--sm" data-send-tool="remove-background-noise" href="/tools/remove-background-noise">Denoise</a>
+              <a class="btn btn--ghost btn--sm" data-send-tool="normalize-audio-volume" href="/tools/normalize-audio-volume">Normalize</a>
+              <a class="btn btn--ghost btn--sm" data-send-tool="merge-audio-files" href="/tools/merge-audio-files">Merge</a>
+              <a class="btn btn--ghost btn--sm" data-send-tool="convert-audio-format" href="/tools/convert-audio-format">Convert</a>
+              <a class="btn btn--ghost btn--sm" data-send-tool="change-audio-speed" href="/tools/change-audio-speed">Speed</a>
+              <a class="btn btn--ghost btn--sm" data-send-tool="fade-audio" href="/tools/fade-audio">Fade</a>
+            </div>
+          </div>
+        </div>`;
       generateBtn.disabled = false;
       return;
     }

@@ -96,10 +96,37 @@
       dt.items.add(file);
       input.files = dt.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
+      // Keep dropzone filename label in sync when we inject the file
+      const zone = input.closest('.dropzone');
+      if (zone) {
+        const nameEl = zone.querySelector('.dropzone__name');
+        if (nameEl) nameEl.textContent = file.name;
+      }
       return true;
     } catch (e) {
       return false;
     }
+  }
+
+  function findPrimaryFileInput() {
+    // Prefer a visible single-file input inside the active tool panel.
+    // After enhanceFileInputs() the input lives inside .dropzone but is still
+    // queryable. Skip hidden multi-add inputs used by Merge.
+    const candidates = Array.from(
+      document.querySelectorAll('input.file-input[type="file"]')
+    );
+    for (const input of candidates) {
+      const style = (input.getAttribute('style') || '').replace(/\s/g, '');
+      if (style.includes('display:none') || input.style.display === 'none') continue;
+      if (input.disabled) continue;
+      // Prefer non-multiple (primary upload); fall back to first usable
+      if (!input.multiple) return input;
+    }
+    // Merge tool: use the primary multi input if that's all we have
+    return candidates.find((i) => {
+      const style = (i.getAttribute('style') || '').replace(/\s/g, '');
+      return !style.includes('display:none') && i.style.display !== 'none';
+    }) || null;
   }
 
   function audioPlayerHtml(b64, filename, mime) {
@@ -124,37 +151,74 @@
     `;
   }
 
-  // When landing on a tool with a saved transfer, offer to load it
+  // When landing on a tool with a saved transfer, auto-load it into the file input.
+  // BUG FIX: this function existed but was never called on page load, so
+  // "Send to Denoise / Trim / …" always arrived with an empty file picker.
   function offerIncomingTransfer() {
     const data = loadTransfer();
     if (!data) return;
-    const input = document.querySelector('input.file-input[type="file"]:not([style*="display:none"])');
+    const input = findPrimaryFileInput();
     if (!input) return;
-    const panel = input.closest('.panel') || document.body;
+    const panel = input.closest('.panel') || input.closest('form') || document.body;
     if (panel.querySelector('[data-transfer-banner]')) return;
+
     const ban = document.createElement('div');
     ban.setAttribute('data-transfer-banner', '1');
     ban.style.cssText = 'margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(79,166,156,0.35);background:rgba(79,166,156,0.08);font-size:0.85rem;color:var(--text-mid);display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
-    ban.innerHTML = `<span>Audio from previous tool ready: <strong style="color:var(--text-hi)">${(data.filename || 'file').replace(/[<>]/g,'')}</strong></span>`;
-    const useBtn = document.createElement('button');
-    useBtn.type = 'button';
-    useBtn.className = 'btn btn--brass btn--sm';
-    useBtn.textContent = 'Use this file';
-    useBtn.addEventListener('click', () => {
-      if (applyTransferToInput(input, data)) {
-        ban.innerHTML = '<span style="color:var(--jade-hi)">File loaded — adjust settings and run the tool.</span>';
-      } else {
-        ban.innerHTML = '<span style="color:var(--brass-hi)">Could not load automatically — please choose the file again.</span>';
-      }
-    });
-    const dismiss = document.createElement('button');
-    dismiss.type = 'button';
-    dismiss.className = 'btn btn--ghost btn--sm';
-    dismiss.textContent = 'Dismiss';
-    dismiss.addEventListener('click', () => { clearTransfer(); ban.remove(); });
-    ban.appendChild(useBtn);
-    ban.appendChild(dismiss);
-    panel.insertBefore(ban, panel.firstChild);
+
+    const safeName = (data.filename || 'audio').replace(/[<>]/g, '');
+
+    // Auto-apply immediately so the user can hit Run without an extra click
+    const loaded = applyTransferToInput(input, data);
+    if (loaded) {
+      ban.innerHTML = `<span style="color:var(--jade-hi)">Loaded from previous tool: <strong style="color:var(--text-hi)">${safeName}</strong> — adjust settings and run.</span>`;
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'btn btn--ghost btn--sm';
+      clearBtn.textContent = 'Clear';
+      clearBtn.addEventListener('click', () => {
+        clearTransfer();
+        try {
+          const empty = new DataTransfer();
+          input.files = empty.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          const zone = input.closest('.dropzone');
+          if (zone) {
+            const nameEl = zone.querySelector('.dropzone__name');
+            if (nameEl) nameEl.textContent = '';
+          }
+        } catch (e) {}
+        ban.remove();
+      });
+      ban.appendChild(clearBtn);
+    } else {
+      ban.innerHTML = `<span>Audio from previous tool ready: <strong style="color:var(--text-hi)">${safeName}</strong></span>`;
+      const useBtn = document.createElement('button');
+      useBtn.type = 'button';
+      useBtn.className = 'btn btn--brass btn--sm';
+      useBtn.textContent = 'Use this file';
+      useBtn.addEventListener('click', () => {
+        if (applyTransferToInput(input, data)) {
+          ban.innerHTML = '<span style="color:var(--jade-hi)">File loaded — adjust settings and run the tool.</span>';
+        } else {
+          ban.innerHTML = '<span style="color:var(--brass-hi)">Could not load automatically — please choose the file again.</span>';
+        }
+      });
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'btn btn--ghost btn--sm';
+      dismiss.textContent = 'Dismiss';
+      dismiss.addEventListener('click', () => { clearTransfer(); ban.remove(); });
+      ban.appendChild(useBtn);
+      ban.appendChild(dismiss);
+    }
+
+    const anchor = panel.querySelector('.dropzone') || panel.querySelector('input.file-input') || panel.firstChild;
+    if (anchor && anchor.parentNode === panel) {
+      panel.insertBefore(ban, anchor);
+    } else {
+      panel.insertBefore(ban, panel.firstChild);
+    }
   }
 
   document.addEventListener('click', (e) => {
@@ -213,11 +277,18 @@
       });
     });
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', enhanceFileInputs);
-  } else {
+  function bootToolsUi() {
     enhanceFileInputs();
+    // Must run after dropzones exist so the file input is findable and
+    // the dropzone name label can be updated.
+    offerIncomingTransfer();
   }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootToolsUi);
+  } else {
+    bootToolsUi();
+  }
+
 
   // Shared helpers matching studio.js generate-button behaviour
   function setLoading(btn, on) {
