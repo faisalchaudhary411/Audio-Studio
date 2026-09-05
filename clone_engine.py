@@ -14,6 +14,8 @@ FIXES APPLIED:
 import base64
 import os
 import sqlite3
+import subprocess
+import tempfile
 import threading
 import time
 import traceback
@@ -22,6 +24,55 @@ from concurrent.futures import ThreadPoolExecutor
 
 import modal_client
 import urdu_transliteration
+
+# Same filter chain + target sample rate as
+# modal_workers/chatterbox/app.py's preprocess_reference_audio(), kept in
+# sync manually since one runs on the VPS and the other inside the Modal
+# container image. Running this ONCE per job here (instead of once per
+# segment inside the worker) is what already_processed=True below skips
+# on the worker side — see modal_clone.py's docstring for why this matters.
+_CHATTERBOX_REF_SAMPLE_RATE = 24000
+_CHATTERBOX_REF_FILTER_CHAIN = (
+    "highpass=f=80,afftdn=nr=10:nf=-30,"
+    "silenceremove=start_periods=1:start_duration=0.1:start_threshold=-45dB,"
+    "areverse,silenceremove=start_periods=1:start_duration=0.1:start_threshold=-45dB,areverse,"
+    "loudnorm=I=-16:TP=-1.5:LRA=11"
+)
+
+
+def _preprocess_reference_once(reference_audio_path: str) -> tuple:
+    """
+    Cleans/resamples the reference clip ONE time per job using the exact
+    same ffmpeg filter chain the Chatterbox worker used to run on every
+    single segment call. Returns (b64_bytes, already_processed_flag).
+
+    Degrades gracefully: if ffmpeg isn't available or the pass fails for
+    any reason, falls back to sending the raw uploaded clip with
+    already_processed=False — the worker will just preprocess it itself
+    like before, so this can never make a job fail outright.
+    """
+    cleaned_path = reference_audio_path + "_jobclean.wav"
+    cmd = [
+        "ffmpeg", "-y", "-i", reference_audio_path,
+        "-af", _CHATTERBOX_REF_FILTER_CHAIN,
+        "-ar", str(_CHATTERBOX_REF_SAMPLE_RATE), "-ac", "1", cleaned_path,
+    ]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        with open(cleaned_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode("ascii"), True
+    except Exception as e:
+        print(f"[CLONE] Reference pre-clean skipped (falling back to per-segment cleaning): {e}")
+        with open(reference_audio_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode("ascii"), False
+    finally:
+        if os.path.exists(cleaned_path):
+            try:
+                os.remove(cleaned_path)
+            except Exception:
+                pass
 
 JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
 JOB_MAX_AGE_SECONDS = 1200
@@ -306,12 +357,19 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
         # Chatterbox path
         segments = _split_for_stable_generation(processed_text, max_chars=280)
 
+        # Clean the reference clip ONCE for the whole job instead of
+        # letting the worker redo ffmpeg denoise/silence-trim/loudnorm on
+        # every single segment call with byte-identical input.
+        clean_ref_b64, already_processed = _preprocess_reference_once(reference_audio_path)
+
         if len(segments) == 1:
-            results = [modal_client.generate(segments[0], ref_b64, language_id=language_id, engine=engine)]
+            results = [modal_client.generate(segments[0], clean_ref_b64, language_id=language_id,
+                                               engine=engine, already_processed=already_processed)]
         else:
             with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_SEGMENT_WORKERS, len(segments))) as executor:
                 results = list(executor.map(
-                    lambda seg: modal_client.generate(seg, ref_b64, language_id=language_id, engine=engine),
+                    lambda seg: modal_client.generate(seg, clean_ref_b64, language_id=language_id,
+                                                       engine=engine, already_processed=already_processed),
                     segments,
                 ))
 

@@ -38,13 +38,18 @@ def engine_is_configured(engine: str) -> bool:
     return False
 
 
-def generate(text: str, reference_audio_b64: str, language_id: str = "en", engine: str = "chatterbox", ref_text: str = "") -> dict:
+def generate(text: str, reference_audio_b64: str, language_id: str = "en", engine: str = "chatterbox",
+             ref_text: str = "", already_processed: bool = False) -> dict:
     """
     Main entry point expected by clone_engine.py. `engine` must be an
     explicit choice ("chatterbox" or "f5tts") — there is no automatic
     routing or fallback between them. `ref_text` is only used by the
     f5tts engine (Chatterbox doesn't need a reference transcript) — see
     modal_f5tts.py for why supplying it avoids redundant re-transcription.
+    `already_processed` is only used by the chatterbox engine — tells the
+    worker the reference clip was already cleaned/resampled client-side
+    (once per job in clone_engine.py) so it can skip repeating that ffmpeg
+    work on every single segment call.
     """
     if engine not in VALID_ENGINES:
         return {"success": False, "error": f"Unknown engine '{engine}'. Choose one of: {', '.join(VALID_ENGINES)}."}
@@ -58,7 +63,8 @@ def generate(text: str, reference_audio_b64: str, language_id: str = "en", engin
     if engine == "chatterbox":
         if not modal_clone.is_configured():
             return {"success": False, "error": "Chatterbox engine is not configured on this deployment (MODAL_CLONE_ENDPOINT_URL missing)."}
-        return modal_clone.generate_audio(text, reference_audio_b64, language_id=language_id)
+        return modal_clone.generate_audio(text, reference_audio_b64, language_id=language_id,
+                                           already_processed=already_processed)
 
     # engine == "f5tts"
     if not modal_f5tts.is_configured():
