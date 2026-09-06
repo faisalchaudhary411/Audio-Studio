@@ -24,7 +24,11 @@ from typing import Optional
 
 import requests
 
-WHISPER_ENDPOINT_URL = os.environ.get("MODAL_WHISPER_ENDPOINT_URL", "").strip()
+# Read env on every check (not only at import) so a service restart that
+# loads .env is enough — no need to re-import the module.
+def _endpoint_url() -> str:
+    return (os.environ.get("MODAL_WHISPER_ENDPOINT_URL") or "").strip()
+
 
 # Worker timeout is 600s; allow headroom for cold start + long files.
 _TIMEOUT_SEC = 650
@@ -37,7 +41,7 @@ _session.headers.update({"Content-Type": "application/json"})
 
 
 def is_configured() -> bool:
-    return bool(WHISPER_ENDPOINT_URL)
+    return bool(_endpoint_url())
 
 
 def _transcribe_once(
@@ -48,7 +52,9 @@ def _transcribe_once(
     word_timestamps: bool = False,
     vad_filter: bool = True,
     initial_prompt: Optional[str] = None,
+    endpoint_url: Optional[str] = None,
 ) -> dict:
+    url = (endpoint_url or _endpoint_url()).strip()
     payload = {
         "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
         "language": language,
@@ -60,7 +66,7 @@ def _transcribe_once(
     }
 
     try:
-        r = _session.post(WHISPER_ENDPOINT_URL, json=payload, timeout=_TIMEOUT_SEC)
+        r = _session.post(url, json=payload, timeout=_TIMEOUT_SEC)
         if r.status_code == 200:
             res = r.json()
             if res.get("success") and (res.get("text") is not None):
@@ -113,7 +119,8 @@ def transcribe_audio(
       success, text, method, language, duration_sec, srt, segments, ...
     or {success: False, error: "..."}.
     """
-    if not WHISPER_ENDPOINT_URL:
+    endpoint = _endpoint_url()
+    if not endpoint:
         return {
             "success": False,
             "error": "Whisper Endpoint URL is not configured (MODAL_WHISPER_ENDPOINT_URL).",
@@ -139,6 +146,7 @@ def transcribe_audio(
             word_timestamps=word_timestamps,
             vad_filter=vad_filter,
             initial_prompt=initial_prompt,
+            endpoint_url=endpoint,
         )
         if last_result.get("success"):
             return last_result
@@ -152,4 +160,5 @@ def transcribe_audio(
             )
             time.sleep(wait)
 
+    logger.error("Whisper worker failed after retries: %s", (last_result or {}).get("error"))
     return last_result or {"success": False, "error": "Whisper worker failed."}

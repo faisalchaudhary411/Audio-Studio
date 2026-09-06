@@ -122,25 +122,35 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     # Try the Modal Whisper GPU worker first when it's configured — better
     # accuracy, handles the whole file in one call instead of chunking.
     if modal_whisper.is_configured():
+        import logging
+        _log = logging.getLogger("audio_tools")
         wav_buf = io.BytesIO()
         audio.export(wav_buf, format="wav")
         whisper_result = modal_whisper.transcribe_audio(wav_buf.getvalue(), language=lang_code)
         if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
             text = whisper_result["text"].strip()
+            method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
             return {
                 "text": text,
-                "method": f"Whisper ({whisper_result.get('language') or lang_code})",
-                "language": lang_code,
+                "method": method,
+                "language": whisper_result.get("language") or lang_code,
                 "word_count": len(text.split()),
                 "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
                 "segments_ok": 1,
                 "segments_total": 1,
                 "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
+                "segments": whisper_result.get("segments") or [],
             }
-        # Falls through to Google below on any failure (not configured,
-        # network error, cold-start timeout, empty result, etc.) — logged
-        # server-side by modal_whisper's own retry logging, silent to the
-        # user since Google still gets them a result.
+        # Falls through to Google on failure — log so journalctl shows why.
+        _log.warning(
+            "Whisper unavailable/failed (%s) — falling back to Google Speech",
+            whisper_result.get("error") or "empty text",
+        )
+    else:
+        import logging
+        logging.getLogger("audio_tools").info(
+            "MODAL_WHISPER_ENDPOINT_URL not set — using Google Speech only"
+        )
 
     import speech_recognition as sr
     r = sr.Recognizer()
