@@ -224,20 +224,60 @@ class WhisperWorker:
 
             self._ensure_model(req.model_size)
 
+            # Quality-tuned defaults for production (esp. Urdu/Hindi):
+            # - temperature=0 avoids creative hallucinations
+            # - condition_on_previous_text=False reduces repetition loops
+            # - higher beam + patience for Indic scripts
+            # - VAD with sensible thresholds so quiet speech isn't dropped
+            # - initial_prompt biases script/domain when language is known
+            prompt = req.initial_prompt
+            if not prompt and language in ("ur", "hi"):
+                # Nudge the model toward the correct script & style
+                prompt = (
+                    "اردو بول چال۔" if language == "ur"
+                    else "हिंदी बातचीत।"
+                )
+
             segments_iter, info = self.model.transcribe(
                 tmp_path,
                 language=language,
                 task=task,
                 beam_size=5,
+                best_of=5,
+                patience=1.0,
+                temperature=0.0,
+                compression_ratio_threshold=2.4,
+                log_prob_threshold=-1.0,
+                no_speech_threshold=0.6,
+                condition_on_previous_text=False,
                 vad_filter=bool(req.vad_filter),
+                vad_parameters=dict(
+                    min_silence_duration_ms=400,
+                    speech_pad_ms=200,
+                ) if req.vad_filter else None,
                 word_timestamps=bool(req.word_timestamps),
-                initial_prompt=req.initial_prompt or None,
+                initial_prompt=prompt or None,
             )
 
             segments = list(segments_iter)
             text = " ".join((s.text or "").strip() for s in segments).strip()
             # Collapse repeated whitespace from segment joins
             text = " ".join(text.split())
+            # Drop pure-hallucination runs (same short token repeated many times)
+            if text:
+                words = text.split()
+                if len(words) >= 8:
+                    from collections import Counter
+                    top, cnt = Counter(words).most_common(1)[0]
+                    if cnt >= max(6, len(words) * 0.45) and len(top) <= 12:
+                        # Likely stuck loop — keep unique-ish subset
+                        deduped = []
+                        prev = None
+                        for w in words:
+                            if w != prev:
+                                deduped.append(w)
+                            prev = w
+                        text = " ".join(deduped)
 
             seg_out = [
                 {
