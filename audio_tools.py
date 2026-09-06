@@ -123,6 +123,7 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     # Any miss is recorded in whisper_note and shown in the UI method line
     # so fallback is never silent.
     whisper_note = None
+    whisper_result = None
     if modal_whisper.is_configured():
         print("[transcribe] MODAL_WHISPER_ENDPOINT_URL is set — calling Whisper worker", flush=True)
         wav_buf = io.BytesIO()
@@ -139,21 +140,42 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         )
         if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
             text = whisper_result["text"].strip()
-            method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
-            print(f"[transcribe] Whisper OK — method={method} chars={len(text)}", flush=True)
-            return {
-                "text": text,
-                "method": method,
-                "language": whisper_result.get("language") or lang_code,
-                "word_count": len(text.split()),
-                "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
-                "segments_ok": 1,
-                "segments_total": 1,
-                "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
-                "segments": whisper_result.get("segments") or [],
-                "engine": "whisper",
-            }
-        whisper_note = (whisper_result.get("error") or "empty text").strip()[:180]
+            # Quality gate: reject obvious Whisper hallucinations so we fall
+            # back to Google (often better on short noisy Urdu/Hindi clips).
+            lang_prob = float(whisper_result.get("language_probability") or 0.0)
+            words = text.split()
+            unique_ratio = (len(set(words)) / len(words)) if words else 0.0
+            # Same short token repeated → classic loop hallucination
+            from collections import Counter
+            top_count = Counter(words).most_common(1)[0][1] if words else 0
+            looks_bad = (
+                (lang_prob and lang_prob < 0.35 and len(words) < 8)
+                or (len(words) >= 6 and unique_ratio < 0.25)
+                or (len(words) >= 8 and top_count >= max(6, int(len(words) * 0.5)))
+            )
+            if looks_bad:
+                whisper_note = (
+                    f"low quality (prob={lang_prob:.2f}, unique={unique_ratio:.2f}) — retrying Google"
+                )
+                print(f"[transcribe] Whisper REJECTED — {whisper_note}", flush=True)
+            else:
+                method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
+                print(f"[transcribe] Whisper OK — method={method} chars={len(text)}", flush=True)
+                return {
+                    "text": text,
+                    "method": method,
+                    "language": whisper_result.get("language") or lang_code,
+                    "word_count": len(words),
+                    "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
+                    "segments_ok": 1,
+                    "segments_total": 1,
+                    "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
+                    "segments": whisper_result.get("segments") or [],
+                    "engine": "whisper",
+                    "language_probability": lang_prob,
+                }
+        if not whisper_note:
+            whisper_note = (whisper_result.get("error") or "empty text").strip()[:180]
         print(f"[transcribe] Whisper FAILED — {whisper_note} — falling back to Google", flush=True)
     else:
         whisper_note = "MODAL_WHISPER_ENDPOINT_URL not set in process env"
@@ -164,6 +186,17 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     r.energy_threshold = 300
     r.dynamic_energy_threshold = True
     r.operation_timeout = 25
+
+    # Google needs a BCP-47 code — "auto" is Whisper-only
+    google_lang = lang_code if lang_code and str(lang_code).lower() not in ("auto", "none", "detect", "") else "ur-PK"
+    detected = None
+    try:
+        detected = (whisper_result or {}).get("language")
+    except NameError:
+        detected = None
+    if detected:
+        _map = {"ur": "ur-PK", "hi": "hi-IN", "en": "en-US", "ar": "ar-SA"}
+        google_lang = _map.get(str(detected).lower()[:2], google_lang)
 
     CHUNK_MS = 50 * 1000
     total_chunks = max(1, math.ceil(len(audio) / CHUNK_MS))
@@ -181,7 +214,7 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
             with sr.AudioFile(chunk_path) as source:
                 r.adjust_for_ambient_noise(source, duration=min(0.5, len(chunk) / 1000))
                 audio_data = r.record(source)
-            chunk_texts.append(r.recognize_google(audio_data, language=lang_code))
+            chunk_texts.append(r.recognize_google(audio_data, language=google_lang))
         except sr.UnknownValueError:
             pass
         except Exception:

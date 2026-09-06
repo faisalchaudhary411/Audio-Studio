@@ -2869,7 +2869,10 @@ def api_transcribe():
     try:
         result = audio_tools.transcribe(file.read(), file.filename, lang_code)
         _bump_counter("usage_transcribe")
-        return jsonify(result)
+        resp = jsonify(result)
+        # Explicit charset so clients never treat Urdu/Hindi JSON as Latin-1
+        resp.headers["Content-Type"] = "application/json; charset=utf-8"
+        return resp
     except Exception as e:
         return api_error(e, "transcribe this file")
 
