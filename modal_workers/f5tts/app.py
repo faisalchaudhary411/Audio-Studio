@@ -189,7 +189,7 @@ class F5TTSWorker:
         except Exception as exc:
             import traceback
             print(f"[GENERATE ERROR] {str(exc)}\n{traceback.format_exc()}")
-            return LongCloneResponse(success=False, error=str(exc)).model_dump()
+            return LongCloneResponse(success=False, error="F5-TTS generation failed on the GPU worker.").model_dump()
         finally:
             if tmp_ref_path and os.path.exists(tmp_ref_path):
                 try:
