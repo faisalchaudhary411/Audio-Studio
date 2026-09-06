@@ -641,67 +641,11 @@
     });
   }
 
-  // ---- Music generation ----
-  const musicPrompt = document.getElementById('music-prompt');
-  const musicDurationSlider = document.getElementById('music-duration-slider');
-  const musicDurationLabel = document.getElementById('music-duration-label');
-  const musicBtn = document.getElementById('generate-music-btn');
-  const musicStatus = document.querySelector('[data-music-status]');
-  const musicResult = document.getElementById('music-result');
-
-  if (musicDurationSlider) {
-    musicDurationSlider.addEventListener('input', () => {
-      musicDurationLabel.textContent = musicDurationSlider.value + 's';
-    });
-  }
-
-  if (musicBtn) {
-    musicBtn.addEventListener('click', async () => {
-      if (!musicPrompt.value.trim()) {
-        musicStatus.textContent = 'Describe the music you want first.';
-        return;
-      }
-      musicBtn.disabled = true;
-      musicResult.innerHTML = '';
-      musicStatus.textContent = 'Starting generation…';
-      try {
-        const genRes = await fetch('/api/music/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tags: musicPrompt.value.trim(),
-            duration: parseInt(musicDurationSlider.value, 10),
-            instrumental: true,
-          }),
-        });
-        const genData = await genRes.json();
-        if (!genRes.ok) {
-          musicStatus.textContent = genData.error || 'Could not start generation.';
-          return;
-        }
-
-        const result = await pollJob(`/api/music/status/${genData.job_id}`, (status) => {
-          musicStatus.textContent = status === 'generating'
-            ? 'Generating music… this can take up to a couple of minutes. Keep this tab open.'
-            : 'Still working… please wait.';
-        });
-        if (result.status === 'done') {
-          musicStatus.textContent = 'Done.';
-          const mts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
-          const musicName = `VoxCraft-Music-${mts}.wav`;
-          musicResult.innerHTML = `
-            <audio controls style="width:100%;" src="data:audio/wav;base64,${result.audio_b64}"></audio>
-            <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-               download="${musicName}" href="data:audio/wav;base64,${result.audio_b64}">Download</a>
-          `;
-        } else {
-          musicStatus.textContent = result.error || 'Generation failed.';
-        }
-      } catch (e) {
-        musicStatus.textContent = 'Network error — check your connection.';
-      } finally {
-        musicBtn.disabled = false;
-      }
-    });
-  }
+  // Note: this file only handles Clone — the standalone Music tool
+  // (a separate page, templates/partials/tool_widgets/music.html) is
+  // driven entirely by static/js/music.js instead. A "Music generation"
+  // block used to live here too, wired to a #generate-music-btn/
+  // [data-music-status] that don't exist anywhere in voiceclone.html (the
+  // only template that loads this file) — dead code from before Clone and
+  // Music were split into separate pages, removed since it never ran.
 })();
