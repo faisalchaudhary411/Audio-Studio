@@ -271,7 +271,7 @@ class WhisperWorker:
         except Exception as exc:
             print(f"[WHISPER ERROR] {exc}\n{traceback.format_exc()}")
             return TranscribeResponse(
-                success=False, error=str(exc)[:500]
+                success=False, error="Transcription failed on the GPU worker."
             ).model_dump()
         finally:
             if tmp_path and os.path.exists(tmp_path):
