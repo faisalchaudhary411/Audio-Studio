@@ -133,9 +133,9 @@
 
   // When landing on a tool with a saved transfer, offer to load it
   function offerIncomingTransfer() {
-    // Prefer the shared implementation from main.js (handles dropzones + quota)
+    // Prefer the shared implementation from main.js (IndexedDB + auto-apply)
     if (typeof voxOfferIncomingTransfer === 'function') {
-      voxOfferIncomingTransfer();
+      Promise.resolve(voxOfferIncomingTransfer({ autoApply: true })).catch(() => {});
       return;
     }
     const data = loadTransfer();
@@ -233,7 +233,11 @@
   // dead handoff: it navigated to the next tool but never offered the file.
   function initPage() {
     enhanceFileInputs();
+    // After dropzones exist, load any staged audio from clone/music/studio
     offerIncomingTransfer();
+    // Second pass: IDB is async; catch late readiness
+    setTimeout(offerIncomingTransfer, 200);
+    setTimeout(offerIncomingTransfer, 600);
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initPage);
@@ -342,16 +346,76 @@
       if (transcribeStatus) transcribeStatus.textContent = `Done (${data.method || 'ok'})`;
       if (transcribeResult) {
         const meta = data.word_count ? ` · ${data.word_count} words` : '';
-        transcribeResult.innerHTML = `
-          <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;">${data.method || ''}${meta}</p>
-          <textarea class="script-input" style="min-height:140px;" readonly>${data.text || ''}</textarea>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-            <a class="btn btn--ghost btn--sm" download="transcription.txt"
-               href="data:text/plain;charset=utf-8,${encodeURIComponent(data.text || '')}">Download TXT</a>
-            ${data.srt ? `<a class="btn btn--ghost btn--sm" download="captions.srt"
-               href="data:text/plain;charset=utf-8,${encodeURIComponent(data.srt)}">Download SRT</a>` : ''}
-          </div>
-        `;
+        const engine = data.engine ? ` · engine: ${data.engine}` : '';
+        // Build DOM nodes so Urdu/Hindi is never HTML-escaped wrong and downloads
+        // use a real UTF-8 Blob (data: URIs often save without charset on Android).
+        transcribeResult.innerHTML = '';
+        const metaP = document.createElement('p');
+        metaP.style.cssText = 'font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;';
+        metaP.textContent = (data.method || '') + meta + engine;
+        const ta = document.createElement('textarea');
+        ta.className = 'script-input';
+        ta.style.minHeight = '140px';
+        ta.readOnly = true;
+        ta.dir = 'auto'; // RTL for Urdu/Arabic, LTR for English
+        ta.value = data.text || '';
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;';
+        const txtBtn = document.createElement('button');
+        txtBtn.type = 'button';
+        txtBtn.className = 'btn btn--ghost btn--sm';
+        txtBtn.textContent = 'Download TXT';
+        txtBtn.addEventListener('click', () => {
+          if (typeof voxDownloadUtf8Text === 'function') {
+            voxDownloadUtf8Text('transcription.txt', data.text || '', 'text/plain');
+          } else {
+            // Fallback: BOM + base64 data URI
+            const bom = '﻿' + (data.text || '');
+            const b64 = btoa(unescape(encodeURIComponent(bom)));
+            const a = document.createElement('a');
+            a.href = 'data:text/plain;charset=utf-8;base64,' + b64;
+            a.download = 'transcription.txt';
+            a.click();
+          }
+        });
+        actions.appendChild(txtBtn);
+        if (data.srt) {
+          const srtBtn = document.createElement('button');
+          srtBtn.type = 'button';
+          srtBtn.className = 'btn btn--ghost btn--sm';
+          srtBtn.textContent = 'Download SRT';
+          srtBtn.addEventListener('click', () => {
+            if (typeof voxDownloadUtf8Text === 'function') {
+              voxDownloadUtf8Text('captions.srt', data.srt, 'application/x-subrip');
+            } else {
+              const bom = '﻿' + data.srt;
+              const b64 = btoa(unescape(encodeURIComponent(bom)));
+              const a = document.createElement('a');
+              a.href = 'data:application/x-subrip;charset=utf-8;base64,' + b64;
+              a.download = 'captions.srt';
+              a.click();
+            }
+          });
+          actions.appendChild(srtBtn);
+        }
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'btn btn--ghost btn--sm';
+        copyBtn.textContent = 'Copy text';
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(data.text || '');
+            copyBtn.textContent = 'Copied';
+            setTimeout(() => { copyBtn.textContent = 'Copy text'; }, 1500);
+          } catch (e) {
+            ta.select();
+            document.execCommand('copy');
+          }
+        });
+        actions.appendChild(copyBtn);
+        transcribeResult.appendChild(metaP);
+        transcribeResult.appendChild(ta);
+        transcribeResult.appendChild(actions);
       }
     } catch (e) {
       if (transcribeStatus) transcribeStatus.textContent = 'Network error — check your connection and try again.';

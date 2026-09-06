@@ -512,12 +512,58 @@ function voxShowProgress(bar, on) {
 
 
 
-// ---- Cross-tool audio handoff (sessionStorage) ----
-// Clone (Chatterbox/F5-TTS), Music (Ace-Step), Studio TTS, and every
-// /tools/* processor write here after a successful generate so the next
-// tool can offer "Use this file". Quota-safe: skip if payload is too large.
+// ---- UTF-8 text downloads (Android/Windows need BOM or Blob) ----
+// data:text/plain;charset=utf-8,... is often saved without encoding metadata
+// on mobile, so Urdu/Hindi opens as mojibake. Blob + UTF-8 BOM fixes that.
+function voxDownloadUtf8Text(filename, text, mime) {
+  mime = mime || 'text/plain';
+  const body = (text == null) ? '' : String(text);
+  // UTF-8 BOM so Notepad / Android "Open as text" detect Unicode
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + body], { type: mime + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'download.txt';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function voxBindUtf8DownloadButtons(root) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-utf8-download]').forEach((btn) => {
+    if (btn.dataset.utf8Bound === '1') return;
+    btn.dataset.utf8Bound = '1';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const name = btn.getAttribute('data-filename') || 'download.txt';
+      const mime = btn.getAttribute('data-mime') || 'text/plain';
+      let text = btn.getAttribute('data-text');
+      if (text == null || text === '') {
+        const src = btn.getAttribute('data-text-from');
+        if (src) {
+          const el = document.querySelector(src);
+          text = el ? (el.value != null ? el.value : el.textContent) : '';
+        }
+      }
+      // Prefer text stored on the button via property (avoids HTML-attr length limits)
+      if (btn._voxText != null) text = btn._voxText;
+      voxDownloadUtf8Text(name, text || '', mime);
+    });
+  });
+}
+
+// ---- Cross-tool audio handoff ----
+// sessionStorage is capped ~5MB and clone/music WAV base64 often exceeds it,
+// so saves failed silently and "Send to …" arrived empty. We store the
+// payload in IndexedDB (much larger) and only keep a tiny pointer in
+// sessionStorage so destination pages know a transfer is waiting.
 const VOX_TRANSFER_KEY = 'voxcraft_transfer_v1';
-const VOX_TRANSFER_MAX_CHARS = 4 * 1024 * 1024; // ~4MB string headroom
+const VOX_TRANSFER_DB = 'voxcraft_transfer_db';
+const VOX_TRANSFER_STORE = 'transfers';
 const VOX_NEXT_TOOLS = [
   { slug: 'trim-cut-audio', label: 'Trim' },
   { slug: 'remove-background-noise', label: 'Denoise' },
@@ -528,24 +574,108 @@ const VOX_NEXT_TOOLS = [
   { slug: 'fade-audio', label: 'Fade' },
 ];
 
-function voxSaveTransfer(b64, filename, mime) {
-  if (!b64) return false;
-  try {
-    const payload = JSON.stringify({
-      b64: b64,
-      filename: filename || 'audio.wav',
-      mime: mime || 'audio/wav',
-      ts: Date.now(),
-    });
-    if (payload.length > VOX_TRANSFER_MAX_CHARS) return false;
-    sessionStorage.setItem(VOX_TRANSFER_KEY, payload);
-    return true;
-  } catch (e) {
-    return false;
-  }
+function voxOpenTransferDB() {
+  return new Promise((resolve, reject) => {
+    try {
+      const req = indexedDB.open(VOX_TRANSFER_DB, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(VOX_TRANSFER_STORE)) {
+          db.createObjectStore(VOX_TRANSFER_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('idb open failed'));
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
-function voxLoadTransfer() {
+async function voxIdbPut(record) {
+  const db = await voxOpenTransferDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(VOX_TRANSFER_STORE, 'readwrite');
+    tx.objectStore(VOX_TRANSFER_STORE).put(record, 'current');
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error || new Error('idb put failed'));
+  });
+}
+
+async function voxIdbGet() {
+  const db = await voxOpenTransferDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(VOX_TRANSFER_STORE, 'readonly');
+    const req = tx.objectStore(VOX_TRANSFER_STORE).get('current');
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error('idb get failed'));
+  });
+}
+
+async function voxIdbClear() {
+  try {
+    const db = await voxOpenTransferDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(VOX_TRANSFER_STORE, 'readwrite');
+      tx.objectStore(VOX_TRANSFER_STORE).delete('current');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {}
+}
+
+// Last in-flight save so "Send to …" can await it before navigating
+let _voxTransferSavePromise = null;
+
+/** Save generated audio for cross-tool handoff. Returns true on success. */
+function voxSaveTransfer(b64, filename, mime) {
+  if (!b64) return false;
+  const record = {
+    b64: b64,
+    filename: filename || 'audio.wav',
+    mime: mime || 'audio/wav',
+    ts: Date.now(),
+  };
+  // Pointer in sessionStorage (tiny) so other tabs/pages know to look in IDB
+  try {
+    sessionStorage.setItem(VOX_TRANSFER_KEY, JSON.stringify({
+      has: true,
+      filename: record.filename,
+      mime: record.mime,
+      ts: record.ts,
+      bytes: Math.floor((b64.length * 3) / 4),
+    }));
+  } catch (e) {
+    // even pointer failed — still try IDB
+  }
+  // Tiny files: also keep full payload in sessionStorage as sync fallback
+  try {
+    const full = JSON.stringify(record);
+    if (full.length < 2 * 1024 * 1024) {
+      sessionStorage.setItem(VOX_TRANSFER_KEY, full);
+    }
+  } catch (e) {}
+  // Always write IndexedDB (handles large clone/music WAVs)
+  _voxTransferSavePromise = voxIdbPut(record).catch((err) => {
+    console.warn('[voxcraft] transfer IDB save failed', err);
+    return false;
+  });
+  return true;
+}
+
+function voxWaitForTransferSave() {
+  return _voxTransferSavePromise || Promise.resolve(true);
+}
+
+async function voxLoadTransferAsync() {
+  // Prefer IndexedDB (handles large clone/music WAVs)
+  try {
+    const fromIdb = await voxIdbGet();
+    if (fromIdb && fromIdb.b64 && (Date.now() - (fromIdb.ts || 0)) <= 30 * 60 * 1000) {
+      return fromIdb;
+    }
+  } catch (e) {}
+  // Fallback: full record still in sessionStorage (small files)
   try {
     const raw = sessionStorage.getItem(VOX_TRANSFER_KEY);
     if (!raw) return null;
@@ -560,8 +690,22 @@ function voxLoadTransfer() {
   }
 }
 
+function voxLoadTransfer() {
+  // Sync path for legacy callers — only works if full payload is in sessionStorage
+  try {
+    const raw = sessionStorage.getItem(VOX_TRANSFER_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > 30 * 60 * 1000) return null;
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
 function voxClearTransfer() {
   try { sessionStorage.removeItem(VOX_TRANSFER_KEY); } catch (e) {}
+  voxIdbClear();
 }
 
 function voxFileFromTransfer(data) {
@@ -572,15 +716,30 @@ function voxFileFromTransfer(data) {
 }
 
 function voxApplyTransferToInput(input, data) {
-  if (!input || !data) return false;
+  if (!input || !data || !data.b64) return false;
   try {
     const file = voxFileFromTransfer(data);
     const dt = new DataTransfer();
+    // Merge tool: keep any already-selected files and append
+    if (input.multiple && input.files && input.files.length) {
+      Array.from(input.files).forEach((f) => dt.items.add(f));
+    }
     dt.items.add(file);
     input.files = dt.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
+    // Update dropzone filename label if present
+    const zone = input.closest('.dropzone');
+    if (zone) {
+      const nameEl = zone.querySelector('.dropzone__name');
+      if (nameEl) {
+        nameEl.textContent = input.files.length > 1
+          ? (input.files.length + ' files selected')
+          : (file.name || 'audio.wav');
+      }
+    }
     return true;
   } catch (e) {
+    console.warn('[voxcraft] apply transfer failed', e);
     return false;
   }
 }
@@ -589,10 +748,13 @@ function voxApplyTransferToInput(input, data) {
 function voxAudioPlayerHtml(b64, filename, mime) {
   mime = mime || 'audio/wav';
   filename = filename || 'audio.wav';
-  voxSaveTransfer(b64, filename, mime);
+  const ok = voxSaveTransfer(b64, filename, mime);
   const links = VOX_NEXT_TOOLS.map((t) =>
     `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
   ).join('');
+  const handoffNote = ok
+    ? ''
+    : `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
   return `
     <div class="result-panel">
       <audio controls src="data:${mime};base64,${b64}"></audio>
@@ -603,51 +765,110 @@ function voxAudioPlayerHtml(b64, filename, mime) {
       <div class="result-panel__next">
         <span class="result-panel__next-label">Send to another tool</span>
         <div class="result-panel__next-links">${links}</div>
+        ${handoffNote}
       </div>
     </div>
   `;
 }
 
-function voxOfferIncomingTransfer() {
-  const data = voxLoadTransfer();
-  if (!data) return;
-  const inputs = Array.from(document.querySelectorAll('input.file-input[type="file"]'));
-  const input = inputs.find((el) => {
-    try {
-      const style = (el.getAttribute('style') || '');
-      if (style.includes('display:none') || style.includes('display: none')) return false;
-      if (window.getComputedStyle && getComputedStyle(el).display === 'none') return false;
-      return el.offsetParent !== null || el.closest('.dropzone');
-    } catch (e) { return true; }
-  }) || inputs[0];
-  if (!input) return;
-  const panel = input.closest('.panel') || document.body;
-  if (panel.querySelector('[data-transfer-banner]')) return;
+function voxFindTransferInput() {
+  const inputs = Array.from(document.querySelectorAll('input.file-input[type="file"], input[type="file"].file-input, input[type="file"]'));
+  // Prefer a primary visible/dropzone input; allow opacity:0 dropzone overlays
+  const ranked = inputs.filter((el) => {
+    const style = (el.getAttribute('style') || '');
+    // Skip deliberately hidden multi-add helpers only when NOT the sole input
+    if (style.includes('display:none') || style.includes('display: none')) {
+      // keep if it's the merge multi input (only file input on that page)
+      return inputs.length === 1 || el.multiple;
+    }
+    return true;
+  });
+  // Prefer single-file non-hidden, then any
+  return (
+    ranked.find((el) => !el.multiple && el.closest('.dropzone')) ||
+    ranked.find((el) => !el.multiple) ||
+    ranked.find((el) => el.multiple) ||
+    ranked[0] ||
+    null
+  );
+}
+
+async function voxOfferIncomingTransfer(opts) {
+  opts = opts || {};
+  const autoApply = opts.autoApply !== false; // default: load file automatically
+  const data = await voxLoadTransferAsync();
+  if (!data || !data.b64) return false;
+  const input = voxFindTransferInput();
+  if (!input) return false;
+  const panel = input.closest('.panel') || input.closest('.dropzone')?.parentElement || document.body;
+  if (panel.querySelector('[data-transfer-banner]')) return true;
+
+  let applied = false;
+  if (autoApply) {
+    applied = voxApplyTransferToInput(input, data);
+  }
+
   const ban = document.createElement('div');
   ban.setAttribute('data-transfer-banner', '1');
   ban.style.cssText = 'margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(79,166,156,0.35);background:rgba(79,166,156,0.08);font-size:0.85rem;color:var(--text-mid);display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
   const safeName = String(data.filename || 'file').replace(/[<>&"']/g, '');
-  ban.innerHTML = `<span>Audio from previous tool ready: <strong style="color:var(--text-hi)">${safeName}</strong></span>`;
-  const useBtn = document.createElement('button');
-  useBtn.type = 'button';
-  useBtn.className = 'btn btn--brass btn--sm';
-  useBtn.textContent = 'Use this file';
-  useBtn.addEventListener('click', () => {
-    if (voxApplyTransferToInput(input, data)) {
-      ban.innerHTML = '<span style="color:var(--jade-hi)">File loaded — adjust settings and run the tool.</span>';
-    } else {
-      ban.innerHTML = '<span style="color:var(--brass-hi)">Could not load automatically — please choose the file again.</span>';
-    }
-  });
-  const dismiss = document.createElement('button');
-  dismiss.type = 'button';
-  dismiss.className = 'btn btn--ghost btn--sm';
-  dismiss.textContent = 'Dismiss';
-  dismiss.addEventListener('click', () => { voxClearTransfer(); ban.remove(); });
-  ban.appendChild(useBtn);
-  ban.appendChild(dismiss);
-  panel.insertBefore(ban, panel.firstChild);
+
+  if (applied) {
+    ban.innerHTML = `<span style="color:var(--jade-hi)">Loaded <strong style="color:var(--text-hi)">${safeName}</strong> from previous tool — adjust settings and run.</span>`;
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn btn--ghost btn--sm';
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => { voxClearTransfer(); ban.remove(); });
+    ban.appendChild(dismiss);
+  } else {
+    ban.innerHTML = `<span>Audio from previous tool ready: <strong style="color:var(--text-hi)">${safeName}</strong></span>`;
+    const useBtn = document.createElement('button');
+    useBtn.type = 'button';
+    useBtn.className = 'btn btn--brass btn--sm';
+    useBtn.textContent = 'Use this file';
+    useBtn.addEventListener('click', () => {
+      if (voxApplyTransferToInput(input, data)) {
+        ban.innerHTML = '<span style="color:var(--jade-hi)">File loaded — adjust settings and run the tool.</span>';
+      } else {
+        ban.innerHTML = '<span style="color:var(--brass-hi)">Could not load automatically — please choose the file again.</span>';
+      }
+    });
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'btn btn--ghost btn--sm';
+    dismiss.textContent = 'Dismiss';
+    dismiss.addEventListener('click', () => { voxClearTransfer(); ban.remove(); });
+    ban.appendChild(useBtn);
+    ban.appendChild(dismiss);
+  }
+
+  // Place banner above the dropzone or at top of panel
+  const drop = input.closest('.dropzone');
+  if (drop && drop.parentNode) {
+    drop.parentNode.insertBefore(ban, drop);
+  } else {
+    panel.insertBefore(ban, panel.firstChild);
+  }
+  return true;
 }
+
+// Ensure "Send to …" waits for IndexedDB write before navigating
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[data-send-tool]');
+  if (!a) return;
+  if (a.hasAttribute('data-send-navigating')) return;
+  const href = a.getAttribute('href');
+  if (!href) return;
+  e.preventDefault();
+  a.setAttribute('data-send-navigating', '1');
+  const go = () => { window.location.href = href; };
+  if (typeof voxWaitForTransferSave === 'function') {
+    voxWaitForTransferSave().then(go).catch(go);
+  } else {
+    go();
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   // Admin pages don't currently use .studio-select at all, but this guard
@@ -661,5 +882,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initStickyCta();
   initBillingToggle();
   initPermissionsSheet();
-  try { voxOfferIncomingTransfer(); } catch (e) {}
+  try {
+    // Run after a tick so tools.js can wrap inputs in dropzones first
+    setTimeout(() => { voxOfferIncomingTransfer({ autoApply: true }); }, 0);
+    setTimeout(() => { voxOfferIncomingTransfer({ autoApply: true }); }, 300);
+  } catch (e) {}
 });
