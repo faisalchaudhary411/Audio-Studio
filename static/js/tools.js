@@ -213,10 +213,20 @@
       });
     });
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', enhanceFileInputs);
-  } else {
+  // BUG FIX: offerIncomingTransfer() was defined above but never actually
+  // called anywhere in this file (or any template) — so a file saved via
+  // saveTransfer()/audioPlayerHtml() on one tool's result panel was written
+  // to sessionStorage correctly, but the destination tool page never read
+  // it back. Every "Send to another tool" link across the whole site was a
+  // dead handoff: it navigated to the next tool but never offered the file.
+  function initPage() {
     enhanceFileInputs();
+    offerIncomingTransfer();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPage);
+  } else {
+    initPage();
   }
 
   // Shared helpers matching studio.js generate-button behaviour — both

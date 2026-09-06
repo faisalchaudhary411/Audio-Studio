@@ -27,10 +27,37 @@
     const data = await res.json();
     if (data.status === 'done') {
       status.textContent = 'Done.';
+      const fname = `VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav`;
+      // BUG FIX: music generation never saved its result to the sitewide
+      // cross-tool transfer key, and had no "Send to another tool" links at
+      // all — unlike every other generator on the site (Studio, standalone
+      // Clone). A generated track could only be downloaded, never piped
+      // straight into Trim/Denoise/Normalize/etc.
+      try {
+        sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
+          b64: data.audio_b64,
+          filename: fname,
+          mime: 'audio/wav',
+          ts: Date.now(),
+        }));
+      } catch (e) {}
       result.innerHTML = `
-        <audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
-        <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-           download="VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav" href="data:audio/wav;base64,${data.audio_b64}">Download</a>
+        <div class="result-panel">
+          <audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
+          <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+            <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/wav;base64,${data.audio_b64}">Download</a>
+          </div>
+          <div class="result-panel__next" style="margin-top:10px;">
+            <span class="result-panel__next-label">Send to another tool</span>
+            <div class="result-panel__next-links" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+              <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Trim</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Denoise</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/normalize-audio-volume">Normalize</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Merge</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/convert-audio-format">Convert</a>
+            </div>
+          </div>
+        </div>
       `;
       voxSetBusy(generateBtn, false);
       voxShowProgress(musicProgressBar, false);

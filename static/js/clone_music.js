@@ -620,6 +620,19 @@
           if (pl) pl.textContent = 'Complete';
           const ts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
           const cloneName = `VoxCraft-Clone-${ts}.wav`;
+          // BUG FIX: these "Send to X" links were plain hrefs with nothing
+          // behind them — unlike the standalone /tools/voice-cloning page's
+          // clone.js, this Studio panel never wrote the generated audio to
+          // sessionStorage first, so the destination tool had nothing to
+          // pick up even once offerIncomingTransfer() actually runs there.
+          try {
+            sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
+              b64: result.audio_b64,
+              filename: cloneName,
+              mime: 'audio/wav',
+              ts: Date.now(),
+            }));
+          } catch (e) {}
           cloneResult.innerHTML = `
             <audio controls style="width:100%;" src="data:audio/wav;base64,${result.audio_b64}"></audio>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
