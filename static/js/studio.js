@@ -371,34 +371,42 @@
       const ext = (document.getElementById('export-format') || {}).value === 'wav' ? 'wav' : 'mp3';
       const secTag = (activeSection && activeSection !== 'none') ? ('-' + activeSection) : '';
       const fname = (data.filename || ('VoxCraft-Narration' + secTag + '.mp3')).replace(/\.mp3$/i, secTag + '.' + ext).replace(/--+/g, '-');
-      try {
-        sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
-          b64: data.audio_b64,
-          filename: fname,
-          mime: 'audio/mpeg',
-          ts: Date.now(),
-        }));
-      } catch (e) {}
-      singleResult.innerHTML = `
-        <div class="result-panel">
-          <div class="result-panel__label">Your narration</div>
-          <audio controls src="data:audio/mpeg;base64,${data.audio_b64}"></audio>
-          <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
-            <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/mpeg;base64,${data.audio_b64}">Download</a>
-            <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
-          </div>
-          <div class="result-panel__next">
-            <span class="result-panel__next-label">Send to another tool</span>
-            <div class="result-panel__next-links">
-              <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Trim</a>
-              <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Denoise</a>
-              <a class="btn btn--ghost btn--sm" href="/tools/normalize-audio-volume">Normalize</a>
-              <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Merge</a>
-              <a class="btn btn--ghost btn--sm" href="/tools/convert-audio-format">Convert</a>
+      const mime = ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
+      if (typeof voxAudioPlayerHtml === 'function') {
+        singleResult.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, mime).replace(
+          '<div class="result-panel">',
+          '<div class="result-panel"><div class="result-panel__label">Your narration</div>'
+        );
+      } else {
+        try {
+          sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
+            b64: data.audio_b64,
+            filename: fname,
+            mime: mime,
+            ts: Date.now(),
+          }));
+        } catch (e) {}
+        singleResult.innerHTML = `
+          <div class="result-panel">
+            <div class="result-panel__label">Your narration</div>
+            <audio controls src="data:${mime};base64,${data.audio_b64}"></audio>
+            <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
+              <a class="btn btn--brass btn--sm" download="${fname}" href="data:${mime};base64,${data.audio_b64}">Download</a>
+              <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
+            </div>
+            <div class="result-panel__next">
+              <span class="result-panel__next-label">Send to another tool</span>
+              <div class="result-panel__next-links">
+                <a class="btn btn--ghost btn--sm" data-send-tool="trim-cut-audio" href="/tools/trim-cut-audio">Trim</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="remove-background-noise" href="/tools/remove-background-noise">Denoise</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="normalize-audio-volume" href="/tools/normalize-audio-volume">Normalize</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="merge-audio-files" href="/tools/merge-audio-files">Merge</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="convert-audio-format" href="/tools/convert-audio-format">Convert</a>
+              </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
+      }
       const items = loadHistory();
       items.unshift({
         text: singleText.value.trim().slice(0, 80),

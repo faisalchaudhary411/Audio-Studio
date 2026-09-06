@@ -510,6 +510,145 @@ function voxShowProgress(bar, on) {
   bar.setAttribute('aria-hidden', on ? 'false' : 'true');
 }
 
+
+
+// ---- Cross-tool audio handoff (sessionStorage) ----
+// Clone (Chatterbox/F5-TTS), Music (Ace-Step), Studio TTS, and every
+// /tools/* processor write here after a successful generate so the next
+// tool can offer "Use this file". Quota-safe: skip if payload is too large.
+const VOX_TRANSFER_KEY = 'voxcraft_transfer_v1';
+const VOX_TRANSFER_MAX_CHARS = 4 * 1024 * 1024; // ~4MB string headroom
+const VOX_NEXT_TOOLS = [
+  { slug: 'trim-cut-audio', label: 'Trim' },
+  { slug: 'remove-background-noise', label: 'Denoise' },
+  { slug: 'normalize-audio-volume', label: 'Normalize' },
+  { slug: 'merge-audio-files', label: 'Merge' },
+  { slug: 'convert-audio-format', label: 'Convert' },
+  { slug: 'change-audio-speed', label: 'Speed' },
+  { slug: 'fade-audio', label: 'Fade' },
+];
+
+function voxSaveTransfer(b64, filename, mime) {
+  if (!b64) return false;
+  try {
+    const payload = JSON.stringify({
+      b64: b64,
+      filename: filename || 'audio.wav',
+      mime: mime || 'audio/wav',
+      ts: Date.now(),
+    });
+    if (payload.length > VOX_TRANSFER_MAX_CHARS) return false;
+    sessionStorage.setItem(VOX_TRANSFER_KEY, payload);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function voxLoadTransfer() {
+  try {
+    const raw = sessionStorage.getItem(VOX_TRANSFER_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > 30 * 60 * 1000) {
+      sessionStorage.removeItem(VOX_TRANSFER_KEY);
+      return null;
+    }
+    return data;
+  } catch (e) {
+    return null;
+  }
+}
+
+function voxClearTransfer() {
+  try { sessionStorage.removeItem(VOX_TRANSFER_KEY); } catch (e) {}
+}
+
+function voxFileFromTransfer(data) {
+  const bin = atob(data.b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], data.filename || 'audio.wav', { type: data.mime || 'audio/wav' });
+}
+
+function voxApplyTransferToInput(input, data) {
+  if (!input || !data) return false;
+  try {
+    const file = voxFileFromTransfer(data);
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Shared result panel HTML used by clone, music, studio, and tools. */
+function voxAudioPlayerHtml(b64, filename, mime) {
+  mime = mime || 'audio/wav';
+  filename = filename || 'audio.wav';
+  voxSaveTransfer(b64, filename, mime);
+  const links = VOX_NEXT_TOOLS.map((t) =>
+    `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
+  ).join('');
+  return `
+    <div class="result-panel">
+      <audio controls src="data:${mime};base64,${b64}"></audio>
+      <div class="result-panel__actions">
+        <a class="btn btn--brass btn--sm" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
+        <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
+      </div>
+      <div class="result-panel__next">
+        <span class="result-panel__next-label">Send to another tool</span>
+        <div class="result-panel__next-links">${links}</div>
+      </div>
+    </div>
+  `;
+}
+
+function voxOfferIncomingTransfer() {
+  const data = voxLoadTransfer();
+  if (!data) return;
+  const inputs = Array.from(document.querySelectorAll('input.file-input[type="file"]'));
+  const input = inputs.find((el) => {
+    try {
+      const style = (el.getAttribute('style') || '');
+      if (style.includes('display:none') || style.includes('display: none')) return false;
+      if (window.getComputedStyle && getComputedStyle(el).display === 'none') return false;
+      return el.offsetParent !== null || el.closest('.dropzone');
+    } catch (e) { return true; }
+  }) || inputs[0];
+  if (!input) return;
+  const panel = input.closest('.panel') || document.body;
+  if (panel.querySelector('[data-transfer-banner]')) return;
+  const ban = document.createElement('div');
+  ban.setAttribute('data-transfer-banner', '1');
+  ban.style.cssText = 'margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(79,166,156,0.35);background:rgba(79,166,156,0.08);font-size:0.85rem;color:var(--text-mid);display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
+  const safeName = String(data.filename || 'file').replace(/[<>&"']/g, '');
+  ban.innerHTML = `<span>Audio from previous tool ready: <strong style="color:var(--text-hi)">${safeName}</strong></span>`;
+  const useBtn = document.createElement('button');
+  useBtn.type = 'button';
+  useBtn.className = 'btn btn--brass btn--sm';
+  useBtn.textContent = 'Use this file';
+  useBtn.addEventListener('click', () => {
+    if (voxApplyTransferToInput(input, data)) {
+      ban.innerHTML = '<span style="color:var(--jade-hi)">File loaded — adjust settings and run the tool.</span>';
+    } else {
+      ban.innerHTML = '<span style="color:var(--brass-hi)">Could not load automatically — please choose the file again.</span>';
+    }
+  });
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.className = 'btn btn--ghost btn--sm';
+  dismiss.textContent = 'Dismiss';
+  dismiss.addEventListener('click', () => { voxClearTransfer(); ban.remove(); });
+  ban.appendChild(useBtn);
+  ban.appendChild(dismiss);
+  panel.insertBefore(ban, panel.firstChild);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Admin pages don't currently use .studio-select at all, but this guard
   // keeps it that way explicitly — user-facing redesign only, per request.
@@ -522,4 +661,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initStickyCta();
   initBillingToggle();
   initPermissionsSheet();
+  try { voxOfferIncomingTransfer(); } catch (e) {}
 });

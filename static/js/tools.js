@@ -49,6 +49,10 @@
   ];
 
   function saveTransfer(b64, filename, mime) {
+    if (typeof voxSaveTransfer === 'function') {
+      voxSaveTransfer(b64, filename, mime || 'audio/mpeg');
+      return;
+    }
     try {
       sessionStorage.setItem(TRANSFER_KEY, JSON.stringify({
         b64: b64,
@@ -104,7 +108,10 @@
 
   function audioPlayerHtml(b64, filename, mime) {
     mime = mime || 'audio/mpeg';
-    // Persist for cross-tool send
+    // Prefer sitewide helper from main.js (quota-safe + same panel markup)
+    if (typeof voxAudioPlayerHtml === 'function') {
+      return voxAudioPlayerHtml(b64, filename, mime);
+    }
     saveTransfer(b64, filename, mime);
     const links = NEXT_TOOLS.map((t) =>
       `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
@@ -126,6 +133,11 @@
 
   // When landing on a tool with a saved transfer, offer to load it
   function offerIncomingTransfer() {
+    // Prefer the shared implementation from main.js (handles dropzones + quota)
+    if (typeof voxOfferIncomingTransfer === 'function') {
+      voxOfferIncomingTransfer();
+      return;
+    }
     const data = loadTransfer();
     if (!data) return;
     const input = document.querySelector('input.file-input[type="file"]:not([style*="display:none"])');
