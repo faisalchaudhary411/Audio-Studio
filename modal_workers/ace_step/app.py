@@ -219,4 +219,5 @@ class ACEStepWorker:
 
         except Exception as exc:
             tb = traceback.format_exc()
-            return MusicResponse(success=False, error=f"{exc}\n\n{tb}").model_dump()
+            print(f"[ACE-STEP ERROR] {exc}\n{tb}")
+            return MusicResponse(success=False, error="Music generation failed on the GPU worker.").model_dump()
