@@ -179,7 +179,11 @@ def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int, seed: i
         )
     except Exception as e:
         err_msg = str(e) + "\n" + traceback.format_exc()
-        _update_job(job_id, status="error", error=err_msg)
+        print(f"[MUSIC JOB ERROR] job_id={job_id}\n{err_msg}")
+        # Same fix as clone_engine.py's equivalent handler — full traceback
+        # logged server-side only, clean message on the job record that
+        # /api/music/status returns to the client.
+        _update_job(job_id, status="error", error="Music generation failed — please try again.")
 
 
 # ── Public API (unchanged interface — app.py calls these) ──────────────────

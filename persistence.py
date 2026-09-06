@@ -207,11 +207,28 @@ def init_db():
 init_db()
 
 
+# Allowlist for _replace_ordered_table/_load_ordered_table below — every
+# table name those two functions are ever called with, so an f-string
+# interpolation gone wrong (a future caller passing anything derived from
+# user input) fails loudly instead of becoming a SQL injection.
+_ORDERED_TABLES = {"blogs", "announcements", "pronunciation_dict", "api_keys", "requests"}
+
+
 def _replace_ordered_table(table: str, id_field: str, items: list) -> tuple:
     """Shared logic for blogs/requests: both are 'save the whole list, in
     the order given' semantics, same as the old gh_write(whole JSON list).
     Replaces all rows in one transaction so a reader never sees a
-    half-replaced table."""
+    half-replaced table.
+
+    HARDENING: `table` is interpolated directly into the SQL below since
+    sqlite3 can't parameterize identifiers (only values) — every current
+    caller passes a hardcoded literal, so this isn't exploitable today,
+    but an f-string building a query is a landmine if a future caller ever
+    passes anything derived from user input. This allowlist makes that a
+    loud error instead of a silent SQL injection.
+    """
+    if table not in _ORDERED_TABLES:
+        raise ValueError(f"_replace_ordered_table: unrecognized table {table!r}")
     try:
         with _write_lock:
             conn = _connect()
@@ -236,6 +253,8 @@ def _replace_ordered_table(table: str, id_field: str, items: list) -> tuple:
 
 
 def _load_ordered_table(table: str) -> list:
+    if table not in _ORDERED_TABLES:
+        raise ValueError(f"_load_ordered_table: unrecognized table {table!r}")
     conn = _connect()
     try:
         rows = conn.execute(f"SELECT data FROM {table} ORDER BY position ASC").fetchall()

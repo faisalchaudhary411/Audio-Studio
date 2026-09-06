@@ -501,10 +501,14 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
     except Exception as e:
         err_msg = str(e) + "\n" + traceback.format_exc()
         print(f"[CLONE JOB ERROR] job_id={job_id}\n{err_msg}")
+        # Only a clean, generic message is stored on the job record — that's
+        # what /api/clone/status returns straight to the client. The full
+        # exception + traceback (file paths, internal structure) stays in
+        # this server-side log only.
         _update_job(
             job_id,
             status="error",
-            error=err_msg,
+            error="Voice cloning failed — please try again, or try a different reference clip.",
         )
 
 

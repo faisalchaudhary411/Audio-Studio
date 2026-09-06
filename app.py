@@ -56,6 +56,15 @@ CLONE_UPLOAD_DIR = "/tmp/voxcraft_clone_refs"
 os.makedirs(CLONE_UPLOAD_DIR, exist_ok=True)
 CLONE_CHAR_LIMIT = 6000  # aligned with Modal worker MAX_TOTAL_CHARS for stable commercial quality
 
+# Per-license daily caps on GPU-cost generation (real billed Modal usage per
+# job). Being Pro+ isn't itself a rate limit — without this, one leaked or
+# shared license key could run unlimited paid GPU jobs with no circuit
+# breaker. Env-var tunable (same pattern as FREE_CHAR_LIMIT etc.) rather
+# than hardcoded, since the right number depends on real usage patterns
+# you don't have data on yet — start generous, tighten later if needed.
+CLONE_DAILY_LIMIT = int(os.environ.get("CLONE_DAILY_LIMIT", "30"))
+MUSIC_DAILY_LIMIT = int(os.environ.get("MUSIC_DAILY_LIMIT", "20"))
+
 # Persistent (survives redeploy/restart, unlike CLONE_UPLOAD_DIR's /tmp) home
 # for reference clips a customer has explicitly chosen to save for reuse.
 # Only ever populated via /api/clone/voices/save after the consent check —
@@ -299,6 +308,35 @@ def _csrf_protect():
     submitted = request.form.get("csrf_token", "")
     if not token or not submitted or not hmac.compare_digest(token, submitted):
         return jsonify({"error": "Your session expired or the page was open too long. Please refresh and try again."}), 403
+
+
+@app.after_request
+def _security_headers(response):
+    """Baseline security headers that were entirely absent before this.
+    Deliberately NOT including Content-Security-Policy here — the site
+    loads AdSense, Plausible, Google Fonts, Freemius checkout, and roughly
+    a dozen external "featured on" badge images (see base.html), and
+    AdSense in particular needs a wide, not-fully-documented set of Google
+    ad-serving origins to render correctly. A guessed CSP risks silently
+    breaking ad revenue or checkout on a live paying-customer site with no
+    way to test it here first — that needs to be built with CSP
+    Report-Only mode against real traffic first, not shipped blind. These
+    four don't have that risk profile:
+    """
+    # SAMEORIGIN, not DENY — the site iframes its own /ads/slot/<slot> route
+    # for ad units (see templates/partials/ads_global.html and
+    # ads_banner.html). DENY would refuse that self-framing too; SAMEORIGIN
+    # still blocks the actual clickjacking risk (a third-party site framing
+    # VoxCraft) while allowing voxcraft.site to frame its own pages.
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Safe to set unconditionally — SESSION_COOKIE_SECURE=True above already
+    # means the app assumes HTTPS-only; this just tells browsers to enforce
+    # that for a year and skip the first insecure-HTTP round-trip on repeat
+    # visits. Remove if you ever need to serve plain HTTP anywhere.
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 @app.before_request
@@ -3816,6 +3854,11 @@ def api_clone_generate():
     if not has_clone_and_music():
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
+    license_key = session.get("license_key", "")
+    if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") >= CLONE_DAILY_LIMIT:
+        return jsonify({"error": f"Daily voice-cloning limit reached ({CLONE_DAILY_LIMIT}/day). "
+                                  f"This resets at midnight — contact support if you need a higher limit."}), 429
+
     data = request.get_json(force=True) or {}
     text = (data.get("text") or "").strip()
     reference_id = data.get("reference_id")
@@ -3868,17 +3911,34 @@ def api_clone_generate():
             ref_text=ref_text,
         )
     except Exception as e:
+        # Full traceback goes server-side only — it was previously returned
+        # straight in the JSON response, which leaked file paths and
+        # internal structure to anyone who could trigger an error here
+        # (any Pro+ user, intentionally or not).
         import traceback
-        return jsonify({"error": f"Failed to start clone job: {str(e)}", "detail": traceback.format_exc()}), 500
+        app.logger.error(f"Failed to start clone job: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Failed to start the clone job — please try again."}), 500
 
     if not job_id:
         return jsonify({"error": "Failed to create clone job — no job ID returned."}), 500
+
+    if license_key:
+        usage_tracking.bump_license_daily_counter(license_key, "clone_gen")
 
     return jsonify({"job_id": job_id})
 
 
 @app.route("/api/clone/status/<job_id>")
 def api_clone_status(job_id):
+    # No ownership/session check by design: job_id is a uuid4() (122 bits
+    # of randomness — not guessable or brute-forceable) and jobs expire
+    # after JOB_MAX_AGE_SECONDS (20 min, see clone_engine.py's sweep
+    # thread). This is the same "capability URL" pattern as an unlisted
+    # video link or a password-reset link — possession of the ID is the
+    # authorization, deliberately, not an oversight. If that assumption
+    # ever changes (e.g. job_ids become shorter/sequential/predictable),
+    # this needs a real ownership check tied to the session that started
+    # the job.
     if not job_id or not isinstance(job_id, str):
         return jsonify({"error": "Invalid job ID."}), 400
 
@@ -3923,6 +3983,11 @@ def api_music_generate():
     if not has_clone_and_music():
         return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
+    license_key = session.get("license_key", "")
+    if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") >= MUSIC_DAILY_LIMIT:
+        return jsonify({"error": f"Daily music-generation limit reached ({MUSIC_DAILY_LIMIT}/day). "
+                                  f"This resets at midnight — contact support if you need a higher limit."}), 429
+
     data = request.get_json(force=True) or {}
     tags = (data.get("tags") or "").strip()
     lyrics = (data.get("lyrics") or "").strip()
@@ -3937,11 +4002,16 @@ def api_music_generate():
     result = music_engine.start_music_job(tags, "" if instrumental else lyrics, duration)
     if result.get("error"):
         return jsonify(result), 503
+    if license_key:
+        usage_tracking.bump_license_daily_counter(license_key, "music_gen")
     return jsonify(result)
 
 
 @app.route("/api/music/status/<job_id>")
 def api_music_status(job_id):
+    # Same capability-URL reasoning as api_clone_status above — uuid4()
+    # job_id, short auto-expiry (music_engine.JOB_MAX_AGE_SECONDS), no
+    # separate ownership check by design.
     job = music_engine.get_job(job_id)
     if not job:
         return jsonify({"error": "Unknown job."}), 404
