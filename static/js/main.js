@@ -483,6 +483,33 @@ function enhanceAllSelects() {
   });
 }
 
+// ---- Unified generate-button loading state (spinner + progress bar + status pulse) ----
+// Every tool used to roll its own combination of these: some added the
+// button spinner, some didn't; some had a progress bar, some didn't;
+// almost none pulsed the status text. The HTML/CSS for all three pieces
+// (.is-loading spinner, .gen-progress bar, .render-status pulse) already
+// existed and was consistent — the JS files just weren't all using them.
+// This is the one shared implementation; every tool script calls this
+// instead of toggling classes by hand, so the animation can't drift
+// between tools again.
+function voxSetBusy(btn, on) {
+  if (!btn) return;
+  btn.disabled = !!on;
+  btn.classList.toggle('is-loading', !!on);
+  const panel = btn.closest('.panel');
+  if (panel) {
+    panel.querySelectorAll('.render-status').forEach((s) => {
+      s.classList.toggle('is-busy', !!on);
+    });
+  }
+}
+
+function voxShowProgress(bar, on) {
+  if (!bar) return;
+  bar.classList.toggle('is-active', !!on);
+  bar.setAttribute('aria-hidden', on ? 'false' : 'true');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Admin pages don't currently use .studio-select at all, but this guard
   // keeps it that way explicitly — user-facing redesign only, per request.

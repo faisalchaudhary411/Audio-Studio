@@ -20,6 +20,8 @@
     durationLabel.textContent = durationSlider.value;
   });
 
+  const musicProgressBar = document.getElementById('music-progress');
+
   async function pollJob(jobId) {
     const res = await fetch(`/api/music/status/${jobId}`);
     const data = await res.json();
@@ -30,12 +32,14 @@
         <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
            download="VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav" href="data:audio/wav;base64,${data.audio_b64}">Download</a>
       `;
-      generateBtn.disabled = false;
+      voxSetBusy(generateBtn, false);
+      voxShowProgress(musicProgressBar, false);
       return;
     }
     if (data.status === 'error') {
       status.textContent = data.error || 'Generation failed.';
-      generateBtn.disabled = false;
+      voxSetBusy(generateBtn, false);
+      voxShowProgress(musicProgressBar, false);
       return;
     }
     const labels = { queued: 'Queued…', starting: 'Starting…', generating: 'Generating (usually 30-60s)…' };
@@ -48,7 +52,8 @@
       status.textContent = 'Describe the style first (e.g. "lofi, chill, piano").';
       return;
     }
-    generateBtn.disabled = true;
+    voxSetBusy(generateBtn, true);
+    voxShowProgress(musicProgressBar, true);
     result.innerHTML = '';
     status.textContent = 'Starting…';
     try {
@@ -65,13 +70,15 @@
       const data = await res.json();
       if (!res.ok) {
         status.textContent = data.error || 'Something went wrong.';
-        generateBtn.disabled = false;
+        voxSetBusy(generateBtn, false);
+        voxShowProgress(musicProgressBar, false);
         return;
       }
       pollJob(data.job_id);
     } catch (e) {
       status.textContent = 'Network error.';
-      generateBtn.disabled = false;
+      voxSetBusy(generateBtn, false);
+      voxShowProgress(musicProgressBar, false);
     }
   });
 })();

@@ -544,7 +544,9 @@
         cloneStatus.textContent = 'F5-TTS only supports Hindi/Urdu text — switch to Chatterbox for English.';
         return;
       }
-      cloneBtn.disabled = true;
+      voxSetBusy(cloneBtn, true);
+      const cloneProgressBar = document.getElementById('clone-progress');
+      voxShowProgress(cloneProgressBar, true);
       cloneResult.innerHTML = '';
       const progressLabel = document.getElementById('clone-progress-label');
       try {
@@ -633,7 +635,8 @@
       } catch (e) {
         cloneStatus.textContent = 'Network error — check your connection.';
       } finally {
-        cloneBtn.disabled = false;
+        voxSetBusy(cloneBtn, false);
+        voxShowProgress(cloneProgressBar, false);
       }
     });
   }

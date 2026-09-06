@@ -191,7 +191,7 @@
   const previewPlayer = document.getElementById('preview-player');
   const previewStatus = document.querySelector('[data-preview-status]');
   async function runPreview(customText) {
-    previewBtn.disabled = true;
+    voxSetBusy(previewBtn, true);
     const psBtn = document.getElementById('preview-script-btn');
     if (psBtn) psBtn.disabled = true;
     previewStatus.textContent = 'Loading preview…';
@@ -220,7 +220,7 @@
     } catch (e) {
       previewStatus.textContent = 'Network error.';
     } finally {
-      previewBtn.disabled = false;
+      voxSetBusy(previewBtn, false);
       if (psBtn) psBtn.disabled = false;
     }
   }
@@ -334,12 +334,11 @@
   });
 
   async function runSingleGeneration() {
-    generateSingleBtn.disabled = true;
-    generateSingleBtn.classList.add('is-loading');
+    voxSetBusy(generateSingleBtn, true);
     singleStatus.textContent = 'Rendering your voiceover…';
     singleResult.innerHTML = '';
     const progress = document.getElementById('single-progress');
-    if (progress) { progress.classList.add('is-active'); progress.setAttribute('aria-hidden', 'false'); }
+    voxShowProgress(progress, true);
     const started = Date.now();
     try {
       const res = await fetch('/api/tts/generate', {
@@ -370,39 +369,32 @@
       const secs = ((Date.now() - started) / 1000).toFixed(1);
       singleStatus.textContent = `Ready · ${data.size_kb} KB · ${secs}s`;
       const ext = (document.getElementById('export-format') || {}).value === 'wav' ? 'wav' : 'mp3';
-      const mime = ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
       const secTag = (activeSection && activeSection !== 'none') ? ('-' + activeSection) : '';
       const fname = (data.filename || ('VoxCraft-Narration' + secTag + '.mp3')).replace(/\.mp3$/i, secTag + '.' + ext).replace(/--+/g, '-');
-      // Persist for "Send to another tool" handoff (tools.js reads this key)
       try {
         sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
           b64: data.audio_b64,
           filename: fname,
-          mime: mime,
+          mime: 'audio/mpeg',
           ts: Date.now(),
         }));
-      } catch (e) {
-        // sessionStorage full (large WAV) — handoff still works if user
-        // re-downloads; banner on tool page will simply not appear
-      }
+      } catch (e) {}
       singleResult.innerHTML = `
         <div class="result-panel">
           <div class="result-panel__label">Your narration</div>
-          <audio controls src="data:${mime};base64,${data.audio_b64}"></audio>
+          <audio controls src="data:audio/mpeg;base64,${data.audio_b64}"></audio>
           <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
-            <a class="btn btn--brass btn--sm" download="${fname}" href="data:${mime};base64,${data.audio_b64}">Download</a>
+            <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/mpeg;base64,${data.audio_b64}">Download</a>
             <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
           </div>
           <div class="result-panel__next">
             <span class="result-panel__next-label">Send to another tool</span>
             <div class="result-panel__next-links">
-              <a class="btn btn--ghost btn--sm" data-send-tool="trim-cut-audio" href="/tools/trim-cut-audio">Trim</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="remove-background-noise" href="/tools/remove-background-noise">Denoise</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="normalize-audio-volume" href="/tools/normalize-audio-volume">Normalize</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="merge-audio-files" href="/tools/merge-audio-files">Merge</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="convert-audio-format" href="/tools/convert-audio-format">Convert</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="change-audio-speed" href="/tools/change-audio-speed">Speed</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="fade-audio" href="/tools/fade-audio">Fade</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/trim-cut-audio">Trim</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/remove-background-noise">Denoise</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/normalize-audio-volume">Normalize</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/merge-audio-files">Merge</a>
+              <a class="btn btn--ghost btn--sm" href="/tools/convert-audio-format">Convert</a>
             </div>
           </div>
         </div>
@@ -419,9 +411,8 @@
     } catch (e) {
       singleStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      generateSingleBtn.disabled = false;
-      generateSingleBtn.classList.remove('is-loading');
-      if (progress) { progress.classList.remove('is-active'); progress.setAttribute('aria-hidden', 'true'); }
+      voxSetBusy(generateSingleBtn, false);
+      voxShowProgress(progress, false);
     }
   }
 
@@ -448,8 +439,7 @@
       batchStatus.textContent = 'Add at least one line.';
       return;
     }
-    generateBatchBtn.disabled = true;
-    generateBatchBtn.classList.add('is-loading');
+    voxSetBusy(generateBatchBtn, true);
     batchStatus.textContent = `Rendering ${lines.length} clips…`;
     batchResult.innerHTML = '';
     const started = Date.now();
@@ -499,8 +489,7 @@
     } catch (e) {
       batchStatus.textContent = 'Network error — check your connection and try again.';
     } finally {
-      generateBatchBtn.disabled = false;
-      generateBatchBtn.classList.remove('is-loading');
+      voxSetBusy(generateBatchBtn, false);
     }
   });
 })();
