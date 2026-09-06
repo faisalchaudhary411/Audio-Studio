@@ -92,14 +92,16 @@ def _transcribe_once(
     except requests.exceptions.Timeout:
         return {"success": False, "error": "Timed out reaching the Modal Whisper worker."}
     except requests.exceptions.ConnectionError as e:
+        print(f"[modal_whisper] connection error: {e}")
         return {
             "success": False,
-            "error": f"Modal Whisper worker unreachable (network/DNS): {e}",
+            "error": "Modal Whisper worker unreachable (network/DNS issue).",
         }
     except Exception as e:
+        print(f"[modal_whisper] unexpected error: {e}")
         return {
             "success": False,
-            "error": f"Unexpected error calling Modal Whisper worker: {e}",
+            "error": "Unexpected error calling the Modal Whisper worker.",
         }
 
 

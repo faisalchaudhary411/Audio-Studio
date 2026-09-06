@@ -79,9 +79,11 @@ def _generate_audio_once(text: str, reference_audio_b64: str, language_id: str,
     except requests.exceptions.Timeout:
         return {"success": False, "error": "Timed out reaching the Modal clone worker."}
     except requests.exceptions.ConnectionError as e:
-        return {"success": False, "error": f"Modal clone worker unreachable (network/DNS issue): {e}"}
+        print(f"[modal_clone] connection error: {e}")
+        return {"success": False, "error": "Modal clone worker unreachable (network/DNS issue)."}
     except Exception as e:
-        return {"success": False, "error": f"Unexpected error calling Modal clone worker: {e}"}
+        print(f"[modal_clone] unexpected error: {e}")
+        return {"success": False, "error": "Unexpected error calling the Modal clone worker."}
 
 
 def generate_audio(text: str, reference_audio_b64: str, language_id: str = "en",

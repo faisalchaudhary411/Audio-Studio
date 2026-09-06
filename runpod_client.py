@@ -63,7 +63,8 @@ def submit_job(name: str, payload: dict) -> dict:
     except requests.exceptions.Timeout:
         return {"success": False, "error": "Timed out reaching RunPod."}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"[runpod_client] run() unexpected error: {e}")
+        return {"success": False, "error": "Unexpected error reaching RunPod."}
 
 
 def get_job_status(name: str, job_id: str) -> dict:
@@ -86,4 +87,5 @@ def get_job_status(name: str, job_id: str) -> dict:
     except requests.exceptions.Timeout:
         return {"status": "ERROR", "error": "Timed out reaching RunPod."}
     except Exception as e:
-        return {"status": "ERROR", "error": str(e)}
+        print(f"[runpod_client] get_job_status() unexpected error: {e}")
+        return {"status": "ERROR", "error": "Unexpected error reaching RunPod."}

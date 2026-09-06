@@ -212,10 +212,10 @@ def _process_f5tts_chunk(chunk_tuple):
         return (index, False, "Timed out reaching the Modal F5-TTS worker.", ref_text)
     except requests.exceptions.ConnectionError as e:
         logger.warning(f"Chunk {index}: Connection error: {e}")
-        return (index, False, f"Connection error: {e}", ref_text)
+        return (index, False, "Connection error reaching the Modal F5-TTS worker.", ref_text)
     except Exception as e:
         logger.exception(f"Chunk {index}: Unexpected error")
-        return (index, False, str(e), ref_text)
+        return (index, False, "Unexpected error generating this chunk.", ref_text)
 
 
 def _process_f5tts_chunk_with_retry(chunk_tuple):

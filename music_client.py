@@ -67,4 +67,5 @@ def generate(prompt: str, lyrics: str = "", duration: float = 60.0,
     except requests.exceptions.Timeout:
         return {"success": False, "error": f"Timed out after {_TIMEOUT_SEC}s waiting for the GPU worker."}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"[music_client] unexpected error: {e}")
+        return {"success": False, "error": "Unexpected error calling the music worker."}
