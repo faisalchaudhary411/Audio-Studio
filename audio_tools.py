@@ -119,17 +119,19 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     audio = _load_segment(file_bytes, filename).set_frame_rate(16000).set_channels(1)
     duration_sec = len(audio) / 1000.0
 
-    # Try the Modal Whisper GPU worker first when it's configured — better
-    # accuracy, handles the whole file in one call instead of chunking.
+    # Try the Modal Whisper GPU worker first when configured.
+    # Any miss is recorded in whisper_note and shown in the UI method line
+    # so fallback is never silent.
+    whisper_note = None
     if modal_whisper.is_configured():
-        import logging
-        _log = logging.getLogger("audio_tools")
+        print("[transcribe] MODAL_WHISPER_ENDPOINT_URL is set — calling Whisper worker", flush=True)
         wav_buf = io.BytesIO()
         audio.export(wav_buf, format="wav")
         whisper_result = modal_whisper.transcribe_audio(wav_buf.getvalue(), language=lang_code)
         if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
             text = whisper_result["text"].strip()
             method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
+            print(f"[transcribe] Whisper OK — method={method}", flush=True)
             return {
                 "text": text,
                 "method": method,
@@ -140,17 +142,13 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
                 "segments_total": 1,
                 "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
                 "segments": whisper_result.get("segments") or [],
+                "engine": "whisper",
             }
-        # Falls through to Google on failure — log so journalctl shows why.
-        _log.warning(
-            "Whisper unavailable/failed (%s) — falling back to Google Speech",
-            whisper_result.get("error") or "empty text",
-        )
+        whisper_note = (whisper_result.get("error") or "empty text").strip()[:180]
+        print(f"[transcribe] Whisper FAILED — {whisper_note} — falling back to Google", flush=True)
     else:
-        import logging
-        logging.getLogger("audio_tools").info(
-            "MODAL_WHISPER_ENDPOINT_URL not set — using Google Speech only"
-        )
+        whisper_note = "MODAL_WHISPER_ENDPOINT_URL not set in process env"
+        print(f"[transcribe] {whisper_note} — using Google Speech only", flush=True)
 
     import speech_recognition as sr
     r = sr.Recognizer()
@@ -189,7 +187,12 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         raise Exception("Could not understand the audio. Try a clearer recording with less background noise.")
 
     text = " ".join(chunk_texts).strip()
-    method = "Google Speech (standard)" if total_chunks == 1 else f"Google Speech ({len(chunk_texts)}/{total_chunks} segments)"
+    base_method = "Google Speech (standard)" if total_chunks == 1 else f"Google Speech ({len(chunk_texts)}/{total_chunks} segments)"
+    # Surface the Whisper miss in the method string the UI already displays.
+    if whisper_note:
+        method = f"{base_method} · Whisper skipped: {whisper_note}"
+    else:
+        method = base_method
     words = len(text.split()) if text else 0
 
     return {
@@ -200,8 +203,9 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         "duration_sec": round(duration_sec, 2),
         "segments_ok": len(chunk_texts),
         "segments_total": total_chunks,
-        # Plain SRT stub (equal time slices) — useful until word-level timestamps exist
         "srt": _text_to_simple_srt(text, duration_sec) if text else "",
+        "engine": "google",
+        "whisper_note": whisper_note or "",
     }
 
 
