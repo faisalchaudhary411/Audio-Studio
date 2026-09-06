@@ -21,12 +21,12 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label style="display:block;margin-bottom:12px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Email</span>
-      <input type="email" name="email" class="admin-input" required value="{{ email or '' }}"
+      <input type="email" name="email" class="studio-input" required value="{{ email or '' }}"
              style="width:100%;margin-top:4px;" placeholder="you@example.com">
     </label>
     <label style="display:block;margin-bottom:16px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Last 4+ chars of txn ID or license key</span>
-      <input type="text" name="hint" class="admin-input" required minlength="4"
+      <input type="text" name="hint" class="studio-input" required minlength="4"
              style="width:100%;margin-top:4px;" placeholder="e.g. 7X2K or VOXCRAFT-PRO-…">
     </label>
     <button type="submit" class="btn btn--brass" style="width:100%;">Resend key</button>

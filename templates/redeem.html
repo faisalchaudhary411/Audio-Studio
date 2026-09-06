@@ -42,19 +42,19 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label style="display:block;margin-bottom:12px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Promo code</span>
-      <input type="text" name="code" class="admin-input" required
+      <input type="text" name="code" class="studio-input" required
              value="{{ code or '' }}" placeholder="e.g. FREEPRO1"
              style="width:100%;text-transform:uppercase;margin-top:4px;">
     </label>
     <label style="display:block;margin-bottom:12px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Your name</span>
-      <input type="text" name="name" class="admin-input" required
+      <input type="text" name="name" class="studio-input" required
              value="{{ name or '' }}" placeholder="As it should appear on the license"
              style="width:100%;margin-top:4px;">
     </label>
     <label style="display:block;margin-bottom:16px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Email</span>
-      <input type="email" name="email" class="admin-input" required
+      <input type="email" name="email" class="studio-input" required
              value="{{ email or '' }}" placeholder="You will receive the key here"
              style="width:100%;margin-top:4px;">
     </label>

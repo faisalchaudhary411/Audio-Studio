@@ -21,7 +21,7 @@
       </p>
       {% endif %}
       <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="license_key" placeholder="VOXCRAFT-PRO-XXXXXXXXXXXXXX or your Freemius key" class="script-input" style="min-height:auto;padding:14px;" required value="{{ attempted_key or '' }}">
+        <input type="text" name="license_key" placeholder="VOXCRAFT-PRO-XXXXXXXXXXXXXX or your Freemius key" class="studio-input" style="padding:14px;" required value="{{ attempted_key or '' }}">
         <button type="submit" class="btn btn--brass btn--block" style="margin-top:14px;">Activate</button>
       </form>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-top:10px;">Works with both a VoxCraft key and a Freemius (card payment) license key.</p>

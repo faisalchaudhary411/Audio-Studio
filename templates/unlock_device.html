@@ -26,13 +26,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label style="display:block;margin-bottom:12px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">License key</span>
-      <input type="text" name="license_key" class="admin-input" required
+      <input type="text" name="license_key" class="studio-input" required
              value="{{ prefill_key or '' }}" placeholder="VOXCRAFT-PRO-…"
              style="width:100%;margin-top:4px;font-family:var(--mono);font-size:0.9rem;">
     </label>
     <label style="display:block;margin-bottom:16px;">
       <span style="font-size:0.82rem;color:var(--text-dim);">Email on the license</span>
-      <input type="email" name="email" class="admin-input" required
+      <input type="email" name="email" class="studio-input" required
              value="{{ email or '' }}" placeholder="you@example.com"
              style="width:100%;margin-top:4px;">
     </label>
