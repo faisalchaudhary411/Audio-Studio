@@ -127,11 +127,20 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         print("[transcribe] MODAL_WHISPER_ENDPOINT_URL is set — calling Whisper worker", flush=True)
         wav_buf = io.BytesIO()
         audio.export(wav_buf, format="wav")
-        whisper_result = modal_whisper.transcribe_audio(wav_buf.getvalue(), language=lang_code)
+        # Normalize language for Whisper (ISO-639-1). Empty/auto → let model detect.
+        whisper_lang = None
+        if lang_code and str(lang_code).strip().lower() not in ("", "auto", "none", "detect"):
+            whisper_lang = str(lang_code).strip().lower().split("-")[0]
+        whisper_result = modal_whisper.transcribe_audio(
+            wav_buf.getvalue(),
+            language=whisper_lang,
+            vad_filter=True,
+            word_timestamps=False,
+        )
         if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
             text = whisper_result["text"].strip()
             method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
-            print(f"[transcribe] Whisper OK — method={method}", flush=True)
+            print(f"[transcribe] Whisper OK — method={method} chars={len(text)}", flush=True)
             return {
                 "text": text,
                 "method": method,
