@@ -30,6 +30,7 @@ import zipfile
 import base64
 import secrets
 import datetime as dt
+import traceback
 import markdown as md_lib
 
 from voices import VOICES, FREE_VOICES, default_preview_text
@@ -138,6 +139,19 @@ def _start_clone_ref_sweep_thread():
 _start_clone_ref_sweep_thread()
 
 app = Flask(__name__)
+
+
+def api_error(e, action="process that request", status=500):
+    """Log the full exception + traceback server-side, return a clean,
+    generic message to the client. Raw exception text (str(e)) can contain
+    server file paths, ffmpeg/library internals, or other implementation
+    details that shouldn't reach an end user — this is the single place
+    every /api/* route should route through instead of jsonify({"error":
+    str(e)}). Mirrors the pattern already used in clone_engine.py and
+    music_engine.py for the async job pipelines."""
+    app.logger.error(f"[api] failed to {action}: {e}\n{traceback.format_exc()}")
+    return jsonify({"error": f"Something went wrong trying to {action}. Please try again."}), status
+
 
 # Single source of truth for the canonical domain — used by the canonical
 # <link> tag, sitemap.xml, and robots.txt so they always point at the real
@@ -2857,7 +2871,7 @@ def api_transcribe():
         _bump_counter("usage_transcribe")
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "transcribe this file")
 
 
 @app.route("/api/tools/convert", methods=["POST"])
@@ -2880,7 +2894,7 @@ def api_convert():
                          "filename": f"VoxCraft-Converted-{int(time.time())}.{output_format}",
                          "format": output_format})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "convert this file")
 
 
 @app.route("/api/tools/merge", methods=["POST"])
@@ -2902,7 +2916,7 @@ def api_merge():
                          "filename": f"VoxCraft-Merged-{int(time.time())}.{output_format}",
                          "format": output_format})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "merge these files")
 
 
 @app.route("/api/tools/cutter/duration", methods=["POST"])
@@ -2915,7 +2929,7 @@ def api_cutter_duration():
         duration = audio_tools.get_duration_sec(data, file.filename)
         return jsonify({"duration_sec": duration})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "read this file's duration")
 
 
 @app.route("/api/tools/cutter/trim", methods=["POST"])
@@ -2934,7 +2948,7 @@ def api_cutter_trim():
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Trimmed-{int(time.time())}.mp3"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "trim this file")
 
 
 @app.route("/api/tools/cutter/split", methods=["POST"])
@@ -2955,7 +2969,7 @@ def api_cutter_split():
             "filename_base": f"VoxCraft-Part-{int(time.time())}",
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "split this file")
 
 
 @app.route("/api/tools/denoise", methods=["POST"])
@@ -2974,7 +2988,7 @@ def api_denoise():
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Denoised-{int(time.time())}.mp3"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "denoise this file")
 
 
 @app.route("/api/tools/voicechange", methods=["POST"])
@@ -3001,7 +3015,7 @@ def api_voicechange():
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-VoiceChange-{effect}-{int(time.time())}.mp3"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "change this voice")
 
 
 @app.route("/api/tools/videoxtract", methods=["POST"])
@@ -3028,7 +3042,7 @@ def api_videoxtract():
                          "filename": f"VoxCraft-Extracted-{int(time.time())}.{output_format}",
                          "format": output_format, "size_kb": round(len(out_bytes) / 1024, 1)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "extract audio from this video")
 
 
 @app.route("/api/tools/cutter/auto-trim", methods=["POST"])
@@ -3045,7 +3059,7 @@ def api_cutter_auto_trim():
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-AutoTrim-{int(time.time())}.mp3"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "auto-trim this file")
 
 
 
@@ -3069,7 +3083,7 @@ def api_normalize():
             "size_kb": round(len(out_bytes) / 1024, 1),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "normalize this file")
 
 
 @app.route("/api/tools/volume", methods=["POST"])
@@ -3092,7 +3106,7 @@ def api_volume():
             "size_kb": round(len(out_bytes) / 1024, 1),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "adjust this file's volume")
 
 
 @app.route("/api/tools/speed", methods=["POST"])
@@ -3118,7 +3132,7 @@ def api_speed():
             "size_kb": round(len(out_bytes) / 1024, 1),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "change this file's speed")
 
 
 @app.route("/api/tools/fade", methods=["POST"])
@@ -3145,7 +3159,7 @@ def api_fade():
             "size_kb": round(len(out_bytes) / 1024, 1),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "apply fade to this file")
 
 
 @app.route("/api/tools/split-silence", methods=["POST"])
@@ -3189,7 +3203,7 @@ def api_split_silence():
             "zip_filename": f"VoxCraft-Split-{int(time.time())}.zip",
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "split this file on silence")
 
 
 
@@ -3209,7 +3223,7 @@ def api_reverse():
                         "filename": f"VoxCraft-Reverse-{int(time.time())}.{output_format}",
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "reverse this file")
 
 
 @app.route("/api/tools/mono", methods=["POST"])
@@ -3228,7 +3242,7 @@ def api_mono():
                         "filename": f"VoxCraft-Mono-{int(time.time())}.{output_format}",
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "convert this file to mono")
 
 
 @app.route("/api/tools/loop", methods=["POST"])
@@ -3248,7 +3262,7 @@ def api_loop():
                         "filename": f"VoxCraft-Loop-{int(time.time())}.{output_format}",
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "loop this file")
 
 
 @app.route("/api/tools/eq", methods=["POST"])
@@ -3271,7 +3285,7 @@ def api_eq():
                         "filename": f"VoxCraft-EQ-{int(time.time())}.{output_format}",
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return api_error(e, "apply EQ to this file")
 
 
 @app.route("/api/tts/preview", methods=["POST"])
@@ -3295,7 +3309,7 @@ def api_preview():
     try:
         audio = tts_dispatch(text, voice_id, rate=rate_str, speed_pct=speed_pct)
     except Exception as e:
-        return jsonify({"error": f"Preview error: {str(e)}"}), 500
+        return api_error(e, "generate this preview")
 
     _bump_counter("usage_previews")
     return send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="VoxCraft-Preview.mp3")
@@ -3389,7 +3403,8 @@ def api_batch():
             results.append({"idx": idx + 1, "text": line, "filename": fname, "audio": audio})
             _bump_monthly_chars(len(line))  # only bump for lines that actually succeeded
         except Exception as e:
-            errors.append(f"Line {idx + 1}: {str(e)}")
+            app.logger.error(f"[api] batch line {idx + 1} failed: {e}\n{traceback.format_exc()}")
+            errors.append(f"Line {idx + 1}: could not be generated.")
 
     if not results:
         return jsonify({"error": "All lines failed to generate.", "details": errors}), 500
@@ -3531,7 +3546,7 @@ def api_v1_tts():
     try:
         audio = tts_dispatch(processed_text, voice_id, rate=rate)
     except Exception as e:
-        return jsonify({"error": f"Generation failed: {str(e)}"}), 500
+        return api_error(e, "generate this audio")
 
     api_keys.bump_usage(record["key_hash"], len(text))
     usage_after = api_keys.get_usage(record["key_hash"])
@@ -3844,7 +3859,7 @@ def api_clone_reference_transcribe():
             file_bytes = f.read()
         result = audio_tools.transcribe(file_bytes, filename, "hi-IN")
     except Exception as e:
-        return jsonify({"error": f"Could not auto-transcribe this clip: {str(e)[:200]}"}), 502
+        return api_error(e, "auto-transcribe this clip", status=502)
 
     return jsonify({"text": result["text"]})
 
