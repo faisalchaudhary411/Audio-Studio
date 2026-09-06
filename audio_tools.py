@@ -13,9 +13,11 @@ Improvements (2026-09):
 - Normalize: simple peak / target loudness helper for chaining
 - Shared: better format handling, duration helpers
 
-Whisper remains disabled on lightweight hosts (loads ~140MB+ and can OOM).
-When GPU workers are available, add a whisper_transcribe() path and expose it
-as an option in the API without removing Google Speech fallback.
+Transcribe: tries the Modal faster-whisper GPU worker first (see
+modal_whisper.py) when MODAL_WHISPER_ENDPOINT_URL is configured; falls
+back to Google Speech Recognition automatically if Whisper isn't
+configured, or its call fails for any reason (network, cold start
+timeout, etc.) — so a Whisper outage never breaks the tool outright.
 """
 
 import io
@@ -25,6 +27,8 @@ import tempfile
 
 from pydub import AudioSegment
 from pydub.silence import detect_nonsilent, split_on_silence as _pydub_split_on_silence
+
+import modal_whisper
 
 MAX_UPLOAD_MB = 10
 
@@ -113,6 +117,30 @@ def estimate_output_size_mb(duration_sec: float, fmt: str, bitrate_kbps: int = N
 def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     check_file_size(file_bytes)
     audio = _load_segment(file_bytes, filename).set_frame_rate(16000).set_channels(1)
+    duration_sec = len(audio) / 1000.0
+
+    # Try the Modal Whisper GPU worker first when it's configured — better
+    # accuracy, handles the whole file in one call instead of chunking.
+    if modal_whisper.is_configured():
+        wav_buf = io.BytesIO()
+        audio.export(wav_buf, format="wav")
+        whisper_result = modal_whisper.transcribe_audio(wav_buf.getvalue(), language=lang_code)
+        if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
+            text = whisper_result["text"].strip()
+            return {
+                "text": text,
+                "method": f"Whisper ({whisper_result.get('language') or lang_code})",
+                "language": lang_code,
+                "word_count": len(text.split()),
+                "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
+                "segments_ok": 1,
+                "segments_total": 1,
+                "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
+            }
+        # Falls through to Google below on any failure (not configured,
+        # network error, cold-start timeout, empty result, etc.) — logged
+        # server-side by modal_whisper's own retry logging, silent to the
+        # user since Google still gets them a result.
 
     import speech_recognition as sr
     r = sr.Recognizer()
@@ -153,7 +181,6 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     text = " ".join(chunk_texts).strip()
     method = "Google Speech (standard)" if total_chunks == 1 else f"Google Speech ({len(chunk_texts)}/{total_chunks} segments)"
     words = len(text.split()) if text else 0
-    duration_sec = len(audio) / 1000.0
 
     return {
         "text": text,
