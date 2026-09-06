@@ -203,7 +203,8 @@ class ChatterboxWorker:
             return CloneResponse(success=True, audio_b64=audio_b64).model_dump()
 
         except Exception as exc:
-            return CloneResponse(success=False, error=str(exc)).model_dump()
+            print(f"[CHATTERBOX ERROR] {exc}\n{traceback.format_exc()}")
+            return CloneResponse(success=False, error="Chatterbox generation failed on the GPU worker.").model_dump()
         finally:
             for p in (tmp_path, ref_path, raw_out_path, tmp_path_out):
                 if p and os.path.exists(p):
