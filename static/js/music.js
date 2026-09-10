@@ -27,6 +27,8 @@
     const data = await res.json();
     if (data.status === 'done') {
       status.textContent = 'Done.';
+      if (status) status.classList.add('studio-status-ready');
+      if (typeof voxButtonSuccess === 'function') voxButtonSuccess(generateBtn);
       const fname = `VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav`;
       // Shared handoff so Ace-Step music can be sent to Trim/Denoise/etc.
       if (typeof voxAudioPlayerHtml === 'function') {

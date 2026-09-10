@@ -622,6 +622,11 @@
           const cloneName = `VoxCraft-Clone-${ts}.wav`;
           // Shared handoff: write to sessionStorage + consistent result panel
           // so Trim/Denoise/Merge/etc. can offer "Use this file".
+          if (typeof voxButtonSuccess === 'function') voxButtonSuccess(cloneBtn);
+          if (cloneStatus) {
+            cloneStatus.textContent = 'Ready';
+            cloneStatus.classList.add('studio-status-ready');
+          }
           if (typeof voxAudioPlayerHtml === 'function') {
             cloneResult.innerHTML = voxAudioPlayerHtml(result.audio_b64, cloneName, 'audio/wav');
           } else {

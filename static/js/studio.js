@@ -373,6 +373,9 @@
       }
       const secs = ((Date.now() - started) / 1000).toFixed(1);
       singleStatus.textContent = `Ready · ${data.size_kb} KB · ${secs}s`;
+      singleStatus.classList.add('studio-status-ready');
+      if (typeof voxButtonSuccess === 'function') voxButtonSuccess(generateSingleBtn);
+      try { window.dispatchEvent(new CustomEvent('voxcraft:generated')); } catch (e) {}
       const ext = (document.getElementById('export-format') || {}).value === 'wav' ? 'wav' : 'mp3';
       const secTag = (activeSection && activeSection !== 'none') ? ('-' + activeSection) : '';
       const fname = (data.filename || ('VoxCraft-Narration' + secTag + '.mp3')).replace(/\.mp3$/i, secTag + '.' + ext).replace(/--+/g, '-');
@@ -482,6 +485,9 @@
       }
       const secs = ((Date.now() - started) / 1000).toFixed(1);
       batchStatus.textContent = `${data.clips.length} clips ready · ${secs}s`;
+      batchStatus.classList.add('studio-status-ready');
+      if (typeof voxButtonSuccess === 'function') voxButtonSuccess(generateBatchBtn);
+      try { window.dispatchEvent(new CustomEvent('voxcraft:generated')); } catch (e) {}
       batchResult.innerHTML = `
         <div class="result-panel">
           <div class="result-panel__label">${data.clips.length} narrations</div>

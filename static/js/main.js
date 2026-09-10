@@ -304,58 +304,64 @@ function initBillingToggle(){
   yearBtn.addEventListener('click', () => setAnnual(true));
 }
 
-// ---- First-visit optional permissions sheet ----
-// Must NEVER trap the page: hide via hidden + display + class, always.
+// ---- Optional permissions (non-blocking) ----
+// Premium UX: never trap the landing page with a full-screen permissions
+// sheet. Mic is requested only when voice cloning starts. Notifications
+// are offered once, softly, after the user has engaged (first successful
+// TTS or after ~45s on Studio) — never on cold landing.
 function initPermissionsSheet(){
   const sheet = document.getElementById('perm-sheet');
-  if(!sheet) return;
-  const KEY = 'voxcraft_perm_seen';
-
-  function forceClose(){
-    try { localStorage.setItem(KEY, '1'); } catch(e) {}
+  if(sheet){
+    // Keep markup for accessibility but never auto-open.
     sheet.hidden = true;
     sheet.setAttribute('hidden', '');
     sheet.style.display = 'none';
     sheet.classList.add('perm-sheet--closed');
     sheet.setAttribute('aria-hidden', 'true');
   }
+  try { localStorage.setItem('voxcraft_perm_seen', '1'); } catch(e) {}
 
-  try {
-    if(localStorage.getItem(KEY)){
-      forceClose();
-      return;
-    }
-  } catch(e) {
-    forceClose();
-    return;
+  // Soft notification prompt after engagement (Studio only, once).
+  const NOTIF_KEY = 'voxcraft_notif_asked';
+  function softAskNotifications(){
+    try {
+      if(localStorage.getItem(NOTIF_KEY)) return;
+      if(typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+      // Only on studio / tools — never interrupt marketing homepage.
+      const path = location.pathname || '';
+      if(path === '/' || path === '') return;
+      if(!path.startsWith('/studio') && !path.startsWith('/tools') && !path.startsWith('/voice')) return;
+      localStorage.setItem(NOTIF_KEY, '1');
+      // Non-blocking toast, not a modal.
+      const toast = document.createElement('div');
+      toast.className = 'soft-perm-toast';
+      toast.setAttribute('role', 'status');
+      toast.innerHTML =
+        '<span class="soft-perm-toast__text">Want occasional product updates and discounts?</span>' +
+        '<button type="button" class="btn btn--brass btn--sm" data-soft-perm="yes">Enable</button>' +
+        '<button type="button" class="btn btn--ghost btn--sm" data-soft-perm="no">Not now</button>';
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add('is-visible'));
+      const dismiss = () => {
+        toast.classList.remove('is-visible');
+        setTimeout(() => toast.remove(), 280);
+      };
+      toast.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-soft-perm]');
+        if(!btn) return;
+        if(btn.getAttribute('data-soft-perm') === 'yes'){
+          try { Notification.requestPermission(); } catch(err) {}
+        }
+        dismiss();
+      });
+      setTimeout(dismiss, 12000);
+    } catch(e) {}
   }
-
-  sheet.hidden = false;
-  sheet.style.display = '';
-  sheet.classList.remove('perm-sheet--closed');
-
-  const close = (allowNotif) => {
-    forceClose();
-    if(allowNotif && typeof Notification !== 'undefined' && Notification.permission === 'default'){
-      setTimeout(() => {
-        try { Notification.requestPermission(); } catch(e) {}
-      }, 150);
-    }
-  };
-
-  const allow = document.getElementById('perm-allow');
-  const decline = document.getElementById('perm-decline');
-  if(allow) allow.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); close(true); });
-  if(decline) decline.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); close(false); });
-  sheet.addEventListener('click', (e) => {
-    if(e.target === sheet) close(false);
-  });
-  document.addEventListener('keydown', function onEsc(e){
-    if(e.key === 'Escape' && !sheet.hidden){
-      close(false);
-      document.removeEventListener('keydown', onEsc);
-    }
-  });
+  // After first successful generate (Studio posts a custom event) or delayed fallback.
+  window.addEventListener('voxcraft:generated', () => {
+    setTimeout(softAskNotifications, 2500);
+  }, { once: true });
+  setTimeout(softAskNotifications, 60000);
 }
 
 // ---- Custom select (replaces native open-dropdown UI on .studio-select) ----
@@ -496,12 +502,21 @@ function voxSetBusy(btn, on) {
   if (!btn) return;
   btn.disabled = !!on;
   btn.classList.toggle('is-loading', !!on);
+  if (on) btn.classList.remove('is-success');
   const panel = btn.closest('.panel');
   if (panel) {
     panel.querySelectorAll('.render-status').forEach((s) => {
       s.classList.toggle('is-busy', !!on);
     });
   }
+}
+
+/** Brief success pulse on primary generate CTAs after a clean finish. */
+function voxButtonSuccess(btn) {
+  if (!btn) return;
+  btn.classList.remove('is-loading');
+  btn.classList.add('is-success');
+  window.setTimeout(() => btn.classList.remove('is-success'), 650);
 }
 
 function voxShowProgress(bar, on) {
@@ -870,6 +885,30 @@ document.addEventListener('click', (e) => {
   }
 });
 
+
+// ---- Subtle section reveal on scroll (landing polish) ----
+function initRevealOnScroll(){
+  const nodes = document.querySelectorAll('.reveal-on-scroll');
+  if(!nodes.length) return;
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    nodes.forEach((n) => n.classList.add('is-inview'));
+    return;
+  }
+  if(!('IntersectionObserver' in window)){
+    nodes.forEach((n) => n.classList.add('is-inview'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((en) => {
+      if(en.isIntersecting){
+        en.target.classList.add('is-inview');
+        io.unobserve(en.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+  nodes.forEach((n) => io.observe(n));
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Admin pages don't currently use .studio-select at all, but this guard
   // keeps it that way explicitly — user-facing redesign only, per request.
@@ -882,6 +921,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initStickyCta();
   initBillingToggle();
   initPermissionsSheet();
+  initRevealOnScroll();
   try {
     // Run after a tick so tools.js can wrap inputs in dropzones first
     setTimeout(() => { voxOfferIncomingTransfer({ autoApply: true }); }, 0);
