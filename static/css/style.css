@@ -2486,3 +2486,63 @@ body:not(.has-sticky-ad) .section{padding-bottom:4px;}
   from{opacity:0;transform:translateY(4px);}
   to{opacity:1;transform:none;}
 }
+
+
+/* ===== Normalize field — no broken word-wrap on mobile ===== */
+.normalize-field{display:flex;align-items:flex-end;min-height:44px;}
+.normalize-label{
+  display:inline-flex;align-items:center;gap:10px;
+  font-size:0.85rem;color:var(--text-mid);cursor:pointer;
+  line-height:1.3;white-space:nowrap;
+  padding:10px 0;
+}
+.normalize-label input{flex-shrink:0;width:16px;height:16px;accent-color:var(--brass);}
+.normalize-label span{white-space:nowrap;}
+@media (max-width:520px){
+  .studio-advanced-row{grid-template-columns:1fr !important;}
+  .normalize-label{white-space:normal;}
+  .normalize-label span{white-space:normal;}
+}
+
+/* ===== Themed audio player (dark studio) ===== */
+.vox-player{
+  display:flex;flex-direction:column;gap:10px;
+  padding:14px 14px 12px;
+  border-radius:14px;
+  background:linear-gradient(165deg, rgba(28,40,52,0.95), rgba(18,26,34,0.98));
+  border:1px solid var(--line-strong);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.vox-player__meta{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);
+}
+.vox-player__meta strong{color:var(--text-hi);font-weight:500;}
+.vox-player audio{
+  width:100%;
+  height:40px;
+  border-radius:10px;
+  /* Dark chrome where the browser allows it */
+  color-scheme: dark;
+  background:var(--ink);
+}
+/* WebKit progress / volume tint toward brass/jade */
+.vox-player audio::-webkit-media-controls-panel{
+  background:linear-gradient(180deg, #1c2834 0%, #121a22 100%);
+}
+.vox-player audio::-webkit-media-controls-current-time-display,
+.vox-player audio::-webkit-media-controls-time-remaining-display{
+  color:var(--text-mid);
+  font-size:11px;
+}
+.result-panel .vox-player{margin:4px 0 12px;}
+.result-panel audio:not(.vox-player audio){
+  width:100%;margin:8px 0 14px;border-radius:10px;color-scheme:dark;
+  background:var(--ink);
+}
+
+/* Dropzone file name + size */
+.dropzone__name{
+  font-family:var(--mono);font-size:0.78rem;color:var(--jade-hi);
+  margin-top:8px;word-break:break-all;
+}
