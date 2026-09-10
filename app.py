@@ -1838,8 +1838,12 @@ def admin_limits():
             "CHECKOUT_URL_API_PRO": request.form.get("CHECKOUT_URL_API_PRO", ""),
         }
         ok, err = persistence.save_limits(limits)
-        _limits_cache["data"] = None  # force refresh so the change is visible immediately, not after LIMITS_CACHE_TTL
-        return render_template("admin/limits.html", limits=limits, saved=ok, error=err)
+        _limits_cache["data"] = None  # force refresh so the change is visible immediately
+        if ok:
+            flash("Limits saved. Clone/music/TTS monthly quotas and pricing labels are live now.", "ok")
+            return redirect(url_for("admin_limits"))
+        flash(err or "Could not save limits.", "error")
+        return render_template("admin/limits.html", limits=limits, saved=False, error=err)
     limits = persistence.load_limits()
     return render_template("admin/limits.html", limits=limits)
 

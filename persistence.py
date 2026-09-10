@@ -81,6 +81,14 @@ DEFAULT_LIMITS = {
     "CHECKOUT_URL_PRO_PLUS": "",
     "FREE_FEATURES": "",
     "PRO_FEATURES": "",
+    "PRO_PLUS_FEATURES": "",
+    # Pro/Pro+ monthly quotas (admin-editable; enforce via get_limits())
+    "TTS_CHAR_MONTHLY_LIMIT_PRO": 100000,
+    "TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS": 200000,
+    "CLONE_MONTHLY_LIMIT": 60,
+    "MUSIC_MONTHLY_LIMIT": 40,
+    "CLONE_DAILY_LIMIT": 30,
+    "MUSIC_DAILY_LIMIT": 20,
     "AUTO_APPROVE_MANUAL": True,
     "MANUAL_GRACE_HOURS": 72,
     # ---- Developer API self-serve tiers (auto flow: free = instant
@@ -461,7 +469,10 @@ def load_limits() -> dict:
     finally:
         conn.close()
     merged = DEFAULT_LIMITS.copy()
-    merged.update({k: stored[k] for k in stored if k in DEFAULT_LIMITS})
+    # Apply every stored key (not only DEFAULT keys) so newly added admin
+    # fields persist after deploy without requiring a code redeploy of defaults.
+    for k, v in stored.items():
+        merged[k] = v
     return merged
 
 
