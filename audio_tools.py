@@ -24,13 +24,27 @@ import io
 import os
 import math
 import tempfile
+import time
 
 from pydub import AudioSegment
 from pydub.silence import detect_nonsilent, split_on_silence as _pydub_split_on_silence
 
 import modal_whisper
+from errors import UserFacingError
 
 MAX_UPLOAD_MB = 10
+
+# --- Transcribe timing guards -----------------------------------------------
+# /api/tools/transcribe and /api/clone/reference/transcribe both call
+# transcribe() synchronously, inside the web request (unlike the clone/music
+# job pipelines, which hand off to a background thread). Without a bound
+# here, a slow Whisper cold-start plus a long chunked Google Speech fallback
+# can together run past gunicorn's --timeout (660s on the VPS), which kills
+# the whole worker process — see WORKER TIMEOUT incidents.
+MAX_TRANSCRIBE_DURATION_SEC = 20 * 60   # reject audio longer than this outright
+TRANSCRIBE_TIME_BUDGET_SEC = 420        # overall wall-clock budget for transcribe(); leaves ~4min headroom under gunicorn's 660s timeout for request/response overhead
+WHISPER_TIMEOUT_SEC = 90                # per-attempt cap for the synchronous Whisper call (module default is 650s, sized for the async clone/music jobs)
+WHISPER_MAX_RETRIES = 1                 # module default is 2; keep low here since this path is synchronous
 
 LANG_OPTIONS = {
     "English (US)": "en-US",
@@ -65,7 +79,7 @@ CONVERT_PRESETS = {
 def check_file_size(file_bytes: bytes, max_mb: int = MAX_UPLOAD_MB):
     size_mb = len(file_bytes) / (1024 * 1024)
     if size_mb > max_mb:
-        raise ValueError(f"File is {size_mb:.1f}MB — max allowed is {max_mb}MB.")
+        raise UserFacingError(f"File is {size_mb:.1f}MB — max allowed is {max_mb}MB.")
 
 
 def _load_segment(file_bytes: bytes, filename: str) -> AudioSegment:
@@ -115,9 +129,19 @@ def estimate_output_size_mb(duration_sec: float, fmt: str, bitrate_kbps: int = N
 # Transcribe
 # ---------------------------------------------------------------------------
 def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
+    _start = time.monotonic()
+
+    def _remaining_budget() -> float:
+        return TRANSCRIBE_TIME_BUDGET_SEC - (time.monotonic() - _start)
+
     check_file_size(file_bytes)
     audio = _load_segment(file_bytes, filename).set_frame_rate(16000).set_channels(1)
     duration_sec = len(audio) / 1000.0
+    if duration_sec > MAX_TRANSCRIBE_DURATION_SEC:
+        raise UserFacingError(
+            f"Audio is {duration_sec / 60:.1f} minutes — max allowed for this tool is "
+            f"{MAX_TRANSCRIBE_DURATION_SEC // 60:.0f} minutes."
+        )
 
     # Try the Modal Whisper GPU worker first when configured.
     # Any miss is recorded in whisper_note and shown in the UI method line
@@ -137,6 +161,8 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
             language=whisper_lang,
             vad_filter=True,
             word_timestamps=False,
+            timeout_sec=WHISPER_TIMEOUT_SEC,
+            max_retries=WHISPER_MAX_RETRIES,
         )
         if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
             text = whisper_result["text"].strip()
@@ -181,6 +207,16 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         whisper_note = "MODAL_WHISPER_ENDPOINT_URL not set in process env"
         print(f"[transcribe] {whisper_note} — using Google Speech only", flush=True)
 
+    # If Whisper alone already ate most of the time budget (slow cold start,
+    # exhausted retries), don't compound the delay by also running the full
+    # Google fallback loop — fail fast with a clear message instead of
+    # risking a gunicorn WORKER TIMEOUT.
+    if _remaining_budget() <= 30:
+        raise UserFacingError(
+            "Transcription is taking longer than usual right now. Please try again in a moment, "
+            "or with a shorter clip."
+        )
+
     import speech_recognition as sr
     r = sr.Recognizer()
     r.energy_threshold = 300
@@ -202,8 +238,16 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     total_chunks = max(1, math.ceil(len(audio) / CHUNK_MS))
     chunk_texts = []
     chunk_failures = 0
+    stopped_early = False
 
     for ci in range(total_chunks):
+        # Each chunk can take up to r.operation_timeout (25s) worst case.
+        # Bail before starting a new chunk rather than let the loop run
+        # past the overall budget — a partial transcript beats a killed
+        # gunicorn worker.
+        if _remaining_budget() <= 20:
+            stopped_early = True
+            break
         chunk = audio[ci * CHUNK_MS: (ci + 1) * CHUNK_MS]
         if len(chunk) == 0:
             continue
@@ -224,12 +268,16 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
                 os.unlink(chunk_path)
 
     if not chunk_texts:
+        if stopped_early:
+            raise UserFacingError("Transcription is taking longer than usual right now. Please try again in a moment, or with a shorter clip.")
         if chunk_failures == total_chunks:
-            raise Exception("Speech recognition service unavailable. Please try again in a moment.")
-        raise Exception("Could not understand the audio. Try a clearer recording with less background noise.")
+            raise UserFacingError("Speech recognition service unavailable. Please try again in a moment.")
+        raise UserFacingError("Could not understand the audio. Try a clearer recording with less background noise.")
 
     text = " ".join(chunk_texts).strip()
     base_method = "Google Speech (standard)" if total_chunks == 1 else f"Google Speech ({len(chunk_texts)}/{total_chunks} segments)"
+    if stopped_early:
+        base_method += " · stopped early (time budget) — transcript may be partial"
     # Surface the Whisper miss in the method string the UI already displays.
     if whisper_note:
         method = f"{base_method} · Whisper skipped: {whisper_note}"
@@ -248,6 +296,7 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         "srt": _text_to_simple_srt(text, duration_sec) if text else "",
         "engine": "google",
         "whisper_note": whisper_note or "",
+        "partial": stopped_early,
     }
 
 
@@ -324,7 +373,7 @@ def merge(files: list, gap_ms: int = 0, output_format: str = "mp3",
     crossfade_ms: overlap/crossfade at joins (ignores gap when > 0)
     """
     if len(files) < 2:
-        raise ValueError("Upload at least 2 files to merge.")
+        raise UserFacingError("Upload at least 2 files to merge.")
     crossfade_ms = max(0, int(crossfade_ms or 0))
     gap_ms = max(0, int(gap_ms or 0))
 
@@ -365,7 +414,7 @@ def trim(file_bytes: bytes, filename: str, start_sec: float, end_sec: float,
     start_ms = max(0, int(float(start_sec) * 1000))
     end_ms = min(len(audio), int(float(end_sec) * 1000))
     if end_ms <= start_ms:
-        raise ValueError("End time must be greater than start time.")
+        raise UserFacingError("End time must be greater than start time.")
     trimmed = audio[start_ms:end_ms]
     return _export_bytes(trimmed, output_format)
 
@@ -376,7 +425,7 @@ def split(file_bytes: bytes, filename: str, split_sec: float,
     audio = _load_segment(file_bytes, filename)
     split_ms = int(float(split_sec) * 1000)
     if split_ms <= 0 or split_ms >= len(audio):
-        raise ValueError("Split point must be inside the clip.")
+        raise UserFacingError("Split point must be inside the clip.")
     part1 = audio[:split_ms]
     part2 = audio[split_ms:]
     return _export_bytes(part1, output_format), _export_bytes(part2, output_format)
@@ -847,7 +896,7 @@ def voice_change(file_bytes: bytes, filename: str, effect: str,
         result = _pitch_resample(audio, -7)
 
     else:
-        raise ValueError(f"Unknown effect: {effect}")
+        raise UserFacingError(f"Unknown effect: {effect}")
 
     # Optional mix — sample blend only (never overlay two full voices)
     if dry_wet < 0.999:
@@ -866,7 +915,7 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
     check_file_size(file_bytes, max_mb=50)
     output_format = (output_format or "mp3").lower().strip()
     if output_format not in ("mp3", "wav", "ogg"):
-        raise ValueError("Output format must be mp3, wav, or ogg.")
+        raise UserFacingError("Output format must be mp3, wav, or ogg.")
     try:
         quality_kbps = int(quality_kbps)
     except (TypeError, ValueError):

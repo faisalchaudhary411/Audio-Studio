@@ -48,6 +48,7 @@ import accounts
 import pro_requests
 import notifications
 import promo
+from errors import UserFacingError
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import hmac
@@ -142,14 +143,18 @@ app = Flask(__name__)
 
 
 def api_error(e, action="process that request", status=500):
-    """Log the full exception + traceback server-side, return a clean,
-    generic message to the client. Raw exception text (str(e)) can contain
-    server file paths, ffmpeg/library internals, or other implementation
-    details that shouldn't reach an end user — this is the single place
-    every /api/* route should route through instead of jsonify({"error":
-    str(e)}). Mirrors the pattern already used in clone_engine.py and
-    music_engine.py for the async job pipelines."""
+    """Log the full exception + traceback server-side. If e is a
+    UserFacingError (see errors.py), its message was deliberately written
+    to be safe and useful for the end user, so it's passed through as-is.
+    Any other exception is genericized — raw exception text (str(e)) can
+    contain server file paths, ffmpeg/library internals, or other
+    implementation details that shouldn't reach an end user — this is the
+    single place every /api/* route should route through instead of
+    jsonify({"error": str(e)}). Mirrors the pattern already used in
+    clone_engine.py and music_engine.py for the async job pipelines."""
     app.logger.error(f"[api] failed to {action}: {e}\n{traceback.format_exc()}")
+    if isinstance(e, UserFacingError):
+        return jsonify({"error": str(e)}), status
     return jsonify({"error": f"Something went wrong trying to {action}. Please try again."}), status
 
 

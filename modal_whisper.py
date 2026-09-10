@@ -53,6 +53,7 @@ def _transcribe_once(
     vad_filter: bool = True,
     initial_prompt: Optional[str] = None,
     endpoint_url: Optional[str] = None,
+    timeout_sec: Optional[float] = None,
 ) -> dict:
     url = (endpoint_url or _endpoint_url()).strip()
     payload = {
@@ -66,7 +67,7 @@ def _transcribe_once(
     }
 
     try:
-        r = _session.post(url, json=payload, timeout=_TIMEOUT_SEC)
+        r = _session.post(url, json=payload, timeout=(timeout_sec if timeout_sec is not None else _TIMEOUT_SEC))
         if r.status_code == 200:
             res = r.json()
             if res.get("success") and (res.get("text") is not None):
@@ -113,6 +114,8 @@ def transcribe_audio(
     word_timestamps: bool = False,
     vad_filter: bool = True,
     initial_prompt: Optional[str] = None,
+    timeout_sec: Optional[float] = None,
+    max_retries: Optional[int] = None,
 ) -> dict:
     """
     Transcribe (or translate) audio bytes via the Modal faster-whisper worker.
@@ -120,6 +123,14 @@ def transcribe_audio(
     Returns a dict shaped for audio_tools / the Transcribe tool:
       success, text, method, language, duration_sec, srt, segments, ...
     or {success: False, error: "..."}.
+
+    timeout_sec / max_retries let a caller override the module defaults
+    (_TIMEOUT_SEC=650, MAX_RETRIES=2) for a specific call. Those defaults
+    are sized for a background job with a matching long gunicorn --timeout
+    (see clone_engine.py); a caller that runs synchronously inside a normal
+    web request (see audio_tools.transcribe()) should pass a much tighter
+    budget so a slow/cold-start worker can't block a gunicorn worker for
+    the worst case of (max_retries+1) * timeout_sec seconds.
     """
     endpoint = _endpoint_url()
     if not endpoint:
@@ -138,8 +149,10 @@ def transcribe_audio(
         if lang in ("", "auto", "none"):
             lang = None
 
+    retries = MAX_RETRIES if max_retries is None else max(0, int(max_retries))
+
     last_result = None
-    for attempt in range(MAX_RETRIES + 1):
+    for attempt in range(retries + 1):
         last_result = _transcribe_once(
             audio_bytes,
             language=lang,
@@ -149,10 +162,11 @@ def transcribe_audio(
             vad_filter=vad_filter,
             initial_prompt=initial_prompt,
             endpoint_url=endpoint,
+            timeout_sec=timeout_sec,
         )
         if last_result.get("success"):
             return last_result
-        if attempt < MAX_RETRIES:
+        if attempt < retries:
             wait = 1.5 * (2 ** attempt)
             logger.warning(
                 "Whisper attempt %s failed: %s — retrying in %.1fs",
