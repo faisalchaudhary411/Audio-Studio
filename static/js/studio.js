@@ -360,7 +360,12 @@
         // Friendlier limit messaging for a premium feel
         if (res.status === 429 || /limit|quota|daily/i.test(msg)) {
           singleStatus.innerHTML = '';
-          singleResult.innerHTML = `<div class="limit-toast">${msg} <a href="/pricing" style="color:var(--brass-hi);margin-left:6px;">Upgrade for unlimited →</a></div>`;
+          // Server message already tells free users to upgrade and Pro users to wait/contact support.
+          // Only append a pricing link when the message itself invites an upgrade (free tier).
+          const upgradeLink = /upgrade/i.test(msg)
+            ? ` <a href="/pricing" style="color:var(--brass-hi);margin-left:6px;">See plans →</a>`
+            : '';
+          singleResult.innerHTML = `<div class="limit-toast">${msg}${upgradeLink}</div>`;
         } else {
           singleStatus.textContent = msg;
         }
@@ -466,7 +471,10 @@
         const msg = data.error || 'Something went wrong.';
         if (res.status === 429 || /limit|quota|daily/i.test(msg)) {
           batchStatus.textContent = '';
-          batchResult.innerHTML = `<div class="limit-toast">${msg} <a href="/pricing" style="color:var(--brass-hi);margin-left:6px;">Upgrade →</a></div>`;
+          const upgradeLink = /upgrade/i.test(msg)
+            ? ` <a href="/pricing" style="color:var(--brass-hi);margin-left:6px;">See plans →</a>`
+            : '';
+          batchResult.innerHTML = `<div class="limit-toast">${msg}${upgradeLink}</div>`;
         } else {
           batchStatus.textContent = msg;
         }
