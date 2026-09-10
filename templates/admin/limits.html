@@ -6,9 +6,28 @@
   <div class="section__head">
     <span class="section__eyebrow">Admin</span>
     <h2 class="section__title">Pricing & limits</h2>
-    {% if saved %}<p style="color:var(--jade-hi);">Saved.</p>{% endif %}
-    {% if error %}<p style="color:#e88;">{{ error }}</p>{% endif %}
   </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+      <div class="admin-flash admin-flash--{{ category }}" role="status" style="margin:0 0 16px;padding:14px 16px;border-radius:12px;font-size:0.92rem;line-height:1.45;
+        {% if category == 'ok' or category == 'success' %}background:rgba(79,166,156,0.15);border:1px solid rgba(79,166,156,0.4);color:var(--jade-hi);{% else %}background:rgba(232,93,93,0.12);border:1px solid rgba(232,93,93,0.35);color:#f0a0a0;{% endif %}">
+        <strong>{% if category == 'ok' or category == 'success' %}Saved.{% else %}Error.{% endif %}</strong> {{ message }}
+      </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+  {% if saved %}
+  <div class="admin-flash admin-flash--ok" role="status" style="margin:0 0 16px;padding:14px 16px;border-radius:12px;font-size:0.92rem;background:rgba(79,166,156,0.15);border:1px solid rgba(79,166,156,0.4);color:var(--jade-hi);">
+    <strong>Saved.</strong> Limits are updated.
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="admin-flash admin-flash--error" role="status" style="margin:0 0 16px;padding:14px 16px;border-radius:12px;font-size:0.92rem;background:rgba(232,93,93,0.12);border:1px solid rgba(232,93,93,0.35);color:#f0a0a0;">
+    <strong>Error.</strong> {{ error }}
+  </div>
+  {% endif %}
 
   <form method="post" class="panel"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
