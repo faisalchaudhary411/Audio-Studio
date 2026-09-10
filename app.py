@@ -672,10 +672,11 @@ def _bump_monthly_chars(char_count: int):
 # license-keyed counters below (get_license_daily_counter et al.).
 def _tts_monthly_quota_for_plan() -> int:
     plan = get_plan()
+    lim = get_limits()
     if plan == "pro_plus":
-        return TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS
+        return int(lim.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS") or TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS)
     if plan == "pro":
-        return TTS_CHAR_MONTHLY_LIMIT_PRO
+        return int(lim.get("TTS_CHAR_MONTHLY_LIMIT_PRO") or TTS_CHAR_MONTHLY_LIMIT_PRO)
     return 0
 
 
@@ -806,20 +807,22 @@ def pro_usage_summary(license_key: str, plan: str) -> dict:
     the actual usage-bar display."""
     if not license_key or plan not in ("pro", "pro_plus"):
         return {}
+    lim = get_limits()
+    tts_cap = int(lim.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS") or TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS) if plan == "pro_plus" else int(lim.get("TTS_CHAR_MONTHLY_LIMIT_PRO") or TTS_CHAR_MONTHLY_LIMIT_PRO)
     out = {
         "tts_chars": {
             "used": usage_tracking.get_license_monthly_counter(license_key, "tts_chars"),
-            "limit": TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS if plan == "pro_plus" else TTS_CHAR_MONTHLY_LIMIT_PRO,
+            "limit": tts_cap,
         },
     }
     if plan == "pro_plus":
         out["clone_gen"] = {
             "used": usage_tracking.get_license_monthly_counter(license_key, "clone_gen"),
-            "limit": CLONE_MONTHLY_LIMIT,
+            "limit": int(lim.get("CLONE_MONTHLY_LIMIT") or CLONE_MONTHLY_LIMIT),
         }
         out["music_gen"] = {
             "used": usage_tracking.get_license_monthly_counter(license_key, "music_gen"),
-            "limit": MUSIC_MONTHLY_LIMIT,
+            "limit": int(lim.get("MUSIC_MONTHLY_LIMIT") or MUSIC_MONTHLY_LIMIT),
         }
     return out
 
@@ -869,17 +872,21 @@ def pricing():
         f"{limits['FREE_VOICES_COUNT']} voices",
         "Ads supported",
     ]
+    _tts_pro = int(limits.get("TTS_CHAR_MONTHLY_LIMIT_PRO") or TTS_CHAR_MONTHLY_LIMIT_PRO)
+    _tts_pp = int(limits.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS") or TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS)
+    _clone_mo = int(limits.get("CLONE_MONTHLY_LIMIT") or CLONE_MONTHLY_LIMIT)
+    _music_mo = int(limits.get("MUSIC_MONTHLY_LIMIT") or MUSIC_MONTHLY_LIMIT)
     pro_features = [f.strip() for f in (limits.get("PRO_FEATURES") or "").split("|") if f.strip()] or [
-        f"{TTS_CHAR_MONTHLY_LIMIT_PRO:,} TTS characters/month",
+        f"{_tts_pro:,} TTS characters/month",
         "All voices, all languages",
         "No ads",
         f"Batch up to {limits['PRO_BATCH_MAX']} lines",
         "Unlimited audio tools",
     ]
     pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or [
-        f"{TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS:,} TTS characters/month",
-        f"{CLONE_MONTHLY_LIMIT} voice clone generations/month",
-        f"{MUSIC_MONTHLY_LIMIT} AI music tracks/month",
+        f"{_tts_pp:,} TTS characters/month",
+        f"{_clone_mo} voice clone generations/month",
+        f"{_music_mo} AI music tracks/month",
         "All voices, all languages",
         "No ads",
         f"Batch up to {limits['PRO_BATCH_MAX']} lines",
@@ -1717,6 +1724,13 @@ def admin_limits():
             "FREE_BATCH_MAX_LINES": int(request.form.get("FREE_BATCH_MAX_LINES", 20)),
             "FREE_PREVIEW_LIMIT": int(request.form.get("FREE_PREVIEW_LIMIT", 5)),
             "PRO_BATCH_MAX": int(request.form.get("PRO_BATCH_MAX", 20)),
+            # Pro / Pro+ monthly quotas (TTS chars, clone gens, music tracks)
+            "TTS_CHAR_MONTHLY_LIMIT_PRO": int(request.form.get("TTS_CHAR_MONTHLY_LIMIT_PRO", 100000)),
+            "TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS": int(request.form.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS", 200000)),
+            "CLONE_MONTHLY_LIMIT": int(request.form.get("CLONE_MONTHLY_LIMIT", 60)),
+            "MUSIC_MONTHLY_LIMIT": int(request.form.get("MUSIC_MONTHLY_LIMIT", 40)),
+            "CLONE_DAILY_LIMIT": int(request.form.get("CLONE_DAILY_LIMIT", 30)),
+            "MUSIC_DAILY_LIMIT": int(request.form.get("MUSIC_DAILY_LIMIT", 20)),
             # Default matches len of FREE_VOICES in voices.py (currently 27).
             "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 27)),
             "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
@@ -3997,11 +4011,13 @@ def api_clone_generate():
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     license_key = session.get("license_key", "")
-    if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") >= CLONE_DAILY_LIMIT:
-        return jsonify({"error": f"Daily voice-cloning limit reached ({CLONE_DAILY_LIMIT}/day). "
+    _clone_day = int(get_limits().get("CLONE_DAILY_LIMIT") or CLONE_DAILY_LIMIT)
+    if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") >= _clone_day:
+        return jsonify({"error": f"Daily voice-cloning limit reached ({_clone_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
-    if license_key and usage_tracking.get_license_monthly_counter(license_key, "clone_gen") >= CLONE_MONTHLY_LIMIT:
-        return jsonify({"error": f"Monthly voice-cloning limit reached ({CLONE_MONTHLY_LIMIT}/month) for your plan. "
+    _clone_mo = int(get_limits().get("CLONE_MONTHLY_LIMIT") or CLONE_MONTHLY_LIMIT)
+    if license_key and usage_tracking.get_license_monthly_counter(license_key, "clone_gen") >= _clone_mo:
+        return jsonify({"error": f"Monthly voice-cloning limit reached ({_clone_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
 
     data = request.get_json(force=True) or {}
@@ -4130,11 +4146,13 @@ def api_music_generate():
         return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
     license_key = session.get("license_key", "")
-    if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") >= MUSIC_DAILY_LIMIT:
-        return jsonify({"error": f"Daily music-generation limit reached ({MUSIC_DAILY_LIMIT}/day). "
+    _music_day = int(get_limits().get("MUSIC_DAILY_LIMIT") or MUSIC_DAILY_LIMIT)
+    if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") >= _music_day:
+        return jsonify({"error": f"Daily music-generation limit reached ({_music_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
-    if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") >= MUSIC_MONTHLY_LIMIT:
-        return jsonify({"error": f"Monthly music-generation limit reached ({MUSIC_MONTHLY_LIMIT}/month) for your plan. "
+    _music_mo = int(get_limits().get("MUSIC_MONTHLY_LIMIT") or MUSIC_MONTHLY_LIMIT)
+    if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") >= _music_mo:
+        return jsonify({"error": f"Monthly music-generation limit reached ({_music_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
 
     data = request.get_json(force=True) or {}

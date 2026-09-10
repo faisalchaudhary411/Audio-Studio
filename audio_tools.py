@@ -143,12 +143,20 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
             f"{MAX_TRANSCRIBE_DURATION_SEC // 60:.0f} minutes."
         )
 
-    # Try the Modal Whisper GPU worker first when configured.
-    # Any miss is recorded in whisper_note and shown in the UI method line
-    # so fallback is never silent.
+    # Prefer Google for Urdu/Hindi when the user explicitly picks those
+    # languages: Whisper often maps Urdu speech to incomplete Hindi
+    # Devanagari and drops large stretches of the clip. Google with
+    # ur-PK / hi-IN returns the matching script and tends to cover the
+    # full duration better for these languages.
+    lang_lc = (lang_code or "").strip().lower()
+    prefer_google_first = lang_lc in ("ur-pk", "ur", "hi-in", "hi")
+
     whisper_note = None
     whisper_result = None
-    if modal_whisper.is_configured():
+    if prefer_google_first:
+        whisper_note = f"skip Whisper for {lang_code} — Google first for script fidelity"
+        print(f"[transcribe] {whisper_note}", flush=True)
+    elif modal_whisper.is_configured():
         print("[transcribe] MODAL_WHISPER_ENDPOINT_URL is set — calling Whisper worker", flush=True)
         wav_buf = io.BytesIO()
         audio.export(wav_buf, format="wav")
@@ -166,22 +174,26 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         )
         if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
             text = whisper_result["text"].strip()
-            # Quality gate: reject obvious Whisper hallucinations so we fall
-            # back to Google (often better on short noisy Urdu/Hindi clips).
+            # Quality gate: reject hallucinations AND incomplete coverage
+            # (e.g. 75s of speech but only ~15s worth of words).
             lang_prob = float(whisper_result.get("language_probability") or 0.0)
             words = text.split()
             unique_ratio = (len(set(words)) / len(words)) if words else 0.0
-            # Same short token repeated → classic loop hallucination
             from collections import Counter
             top_count = Counter(words).most_common(1)[0][1] if words else 0
+            # Spoken languages average ~2–3 words/sec; <0.6 words/sec is truncated.
+            words_per_sec = (len(words) / duration_sec) if duration_sec > 1 else 0
             looks_bad = (
                 (lang_prob and lang_prob < 0.35 and len(words) < 8)
                 or (len(words) >= 6 and unique_ratio < 0.25)
                 or (len(words) >= 8 and top_count >= max(6, int(len(words) * 0.5)))
+                or (duration_sec >= 25 and words_per_sec < 0.55 and len(words) < 40)
+                or (duration_sec >= 45 and len(text) < max(80, duration_sec * 2.5))
             )
             if looks_bad:
                 whisper_note = (
-                    f"low quality (prob={lang_prob:.2f}, unique={unique_ratio:.2f}) — retrying Google"
+                    f"low quality/incomplete (prob={lang_prob:.2f}, wps={words_per_sec:.2f}, "
+                    f"words={len(words)}, dur={duration_sec:.0f}s) — retrying Google"
                 )
                 print(f"[transcribe] Whisper REJECTED — {whisper_note}", flush=True)
             else:
