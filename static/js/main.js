@@ -788,8 +788,8 @@ function voxAudioPlayerHtml(b64, filename, mime) {
         <audio preload="metadata" src="${src}"></audio>
         <div class="vox-player__row">
           <button type="button" class="vox-player__play" data-vp-play aria-label="Play">
-            <svg class="vox-player__icon-play" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-            <svg class="vox-player__icon-pause" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" hidden><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+            <svg class="vox-player__icon vox-player__icon--play" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            <svg class="vox-player__icon vox-player__icon--pause" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
           </button>
           <div class="vox-player__timeline">
             <input type="range" class="vox-player__seek" data-vp-seek min="0" max="1000" value="0" step="1" aria-label="Seek">
@@ -830,15 +830,12 @@ function voxBindPlayers(root) {
     const cur = wrap.querySelector('[data-vp-cur]');
     const dur = wrap.querySelector('[data-vp-dur]');
     const state = wrap.querySelector('[data-vp-state]');
-    const iconPlay = wrap.querySelector('.vox-player__icon-play');
-    const iconPause = wrap.querySelector('.vox-player__icon-pause');
     const panel = wrap.closest('.result-panel');
     const replay = panel && panel.querySelector('[data-vp-replay]');
     if (!audio || !playBtn || !seek) return;
 
     const setPlaying = (on) => {
-      if (iconPlay) iconPlay.hidden = !!on;
-      if (iconPause) iconPause.hidden = !on;
+      playBtn.classList.toggle('is-playing', !!on);
       playBtn.setAttribute('aria-label', on ? 'Pause' : 'Play');
       if (state) state.textContent = on ? 'Playing' : 'Ready';
     };

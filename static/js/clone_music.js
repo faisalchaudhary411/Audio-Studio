@@ -100,7 +100,9 @@
 
   function updateEngineHint() {
     if (cloneRefTextRow) {
-      cloneRefTextRow.style.display = (cloneEngineSelect && cloneEngineSelect.value === 'f5tts') ? '' : 'none';
+      // Always hidden — transcript is auto-filled for F5 and never shown to users.
+      cloneRefTextRow.style.display = 'none';
+      cloneRefTextRow.hidden = true;
     }
     if (!cloneEngineSelect || !cloneEngineHint) return;
     if (cloneEngineSelect.value === 'f5tts' && detectScriptShort(cloneText.value) === 'English') {
