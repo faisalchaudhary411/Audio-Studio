@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Admin — Site Errors{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:1000px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Site errors</h2>
+    <p class="section__sub">Technical failures and generative issues from the live site. Last 24h: <strong style="color:var(--brass-hi);">{{ last24 }}</strong></p>
+  </div>
+
+  <div class="panel" style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <a href="{{ url_for('admin_errors') }}" class="btn btn--sm {{ 'btn--brass' if not category else 'btn--ghost' }}">All</a>
+      {% for cat in categories %}
+      <a href="{{ url_for('admin_errors', category=cat) }}" class="btn btn--sm {{ 'btn--brass' if category == cat else 'btn--ghost' }}">{{ cat }}</a>
+      {% endfor %}
+    </div>
+    <form method="post" onsubmit="return confirm('Clear all recorded site errors?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="clear">
+      <button type="submit" class="btn btn--ghost btn--sm">Clear log</button>
+    </form>
+  </div>
+
+  {% if not rows %}
+  <div class="panel">
+    <p style="color:var(--text-dim);margin:0;">No errors recorded{% if category %} in “{{ category }}”{% endif %} yet. New failures from TTS, clone, music, tools, and APIs will show up here automatically.</p>
+  </div>
+  {% else %}
+  <div style="display:flex;flex-direction:column;gap:12px;">
+    {% for r in rows %}
+    <div class="panel" style="padding:14px 16px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+          <span style="font-family:var(--mono);font-size:0.7rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--brass-hi);border:1px solid rgba(232,169,60,0.35);border-radius:999px;padding:2px 9px;">{{ r.category or 'system' }}</span>
+          {% if r.status %}<span style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);">HTTP {{ r.status }}</span>{% endif %}
+          {% if r.plan %}<span style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);">plan: {{ r.plan }}</span>{% endif %}
+        </div>
+        <span style="font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);">{{ r.at }}</span>
+      </div>
+      <p style="margin:0 0 4px;color:var(--text-hi);font-weight:600;font-size:0.92rem;">{{ r.action }}</p>
+      <p style="margin:0 0 6px;color:var(--text-mid);font-size:0.86rem;line-height:1.5;word-break:break-word;">{{ r.message }}</p>
+      {% if r.path %}
+      <p style="margin:0;font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);">{{ r.path }}</p>
+      {% endif %}
+      {% if r.detail %}
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-size:0.8rem;color:var(--text-dim);">Technical detail</summary>
+        <pre style="margin:8px 0 0;padding:12px;background:var(--ink);border-radius:10px;font-size:0.72rem;color:var(--text-mid);overflow:auto;max-height:240px;white-space:pre-wrap;word-break:break-word;">{{ r.detail }}</pre>
+      </details>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p style="margin-top:20px;"><a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Admin home</a></p>
+</section>
+{% endblock %}

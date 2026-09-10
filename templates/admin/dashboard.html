@@ -57,6 +57,12 @@
         <a href="{{ url_for('admin_promos') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage promos</a>
       </div>
       <div class="panel">
+        <span class="panel__label">Site errors</span>
+        <div style="font-family:var(--display);font-size:2rem;">{{ errors_24h|default(0) }} <span style="font-size:1rem;color:var(--text-dim);">last 24h</span></div>
+        <p style="color:var(--text-mid);font-size:0.88rem;margin-top:6px;">TTS, clone, music, tools, and API failures with time and detail.</p>
+        <a href="{{ url_for('admin_errors') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">View site errors</a>
+      </div>
+      <div class="panel">
         <span class="panel__label">Audit log</span>
         <p style="color:var(--text-mid);font-size:0.88rem;">Who did what — key creates, approvals, promos, resends.</p>
         <a href="{{ url_for('admin_audit') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">View audit log</a>
