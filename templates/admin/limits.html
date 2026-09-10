@@ -98,6 +98,10 @@
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro features (pipe-separated)</label>
         <input type="text" name="PRO_FEATURES" value="{{ limits.PRO_FEATURES }}" class="admin-input" style="width:100%;">
       </div>
+      <div style="grid-column:1/-1;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro+ features (pipe-separated)</label>
+        <input type="text" name="PRO_PLUS_FEATURES" value="{{ limits.PRO_PLUS_FEATURES }}" class="admin-input" style="width:100%;">
+      </div>
       <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:14px;margin-top:4px;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="AUTO_APPROVE_MANUAL" {% if limits.AUTO_APPROVE_MANUAL %}checked{% endif %}>
