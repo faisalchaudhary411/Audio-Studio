@@ -835,11 +835,17 @@ def studio():
     # time (line ~1332) already correctly used PRO_BATCH_MAX for them.
     # Cosmetic-only bug, but confusing: the UI looked capped when it wasn't.
     batch_max = lim["PRO_BATCH_MAX"] if is_pro() else lim["FREE_BATCH_MAX_LINES"]
+    # Pro/Pro+ monthly usage for the Studio strip (same source as /account).
+    plan_usage = {}
+    if is_pro():
+        lk = session.get("license_key") or ""
+        plan_usage = pro_usage_summary(lk, get_plan())
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
                             free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=batch_max,
                             monthly_char_quota=lim["FREE_MONTHLY_CHAR_QUOTA"],
                             daily_actions=lim["FREE_DAILY_ACTIONS"], batch_limit=lim["FREE_BATCH_LIMIT"],
-                            usage=usage_summary(), clone_char_limit=CLONE_CHAR_LIMIT)
+                            usage=usage_summary(), clone_char_limit=CLONE_CHAR_LIMIT,
+                            plan_usage=plan_usage)
 
 
 @app.route("/voice-cloning")
@@ -2788,9 +2794,20 @@ def account_dashboard():
     license_info = licensing.check_vox_license(license_key) if license_key else {"valid": False}
     api_key_records = api_keys.find_keys_by_email(email)
     plan_usage = pro_usage_summary(license_key, license_info.get("plan", "")) if license_info.get("valid") else {}
+    usage_near = False
+    usage_full = False
+    for bucket in (plan_usage or {}).values():
+        lim = int(bucket.get("limit") or 0)
+        used = int(bucket.get("used") or 0)
+        if lim <= 0:
+            continue
+        if used >= lim:
+            usage_full = True
+        elif used * 100 >= lim * 80:
+            usage_near = True
     return render_template("account.html", user=user, license_key=license_key,
                             license_info=license_info, api_key_records=api_key_records,
-                            plan_usage=plan_usage)
+                            plan_usage=plan_usage, usage_near=usage_near, usage_full=usage_full)
 
 
 @app.route("/account/rotate-api-key", methods=["POST"])
