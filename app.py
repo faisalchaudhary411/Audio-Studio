@@ -67,6 +67,23 @@ CLONE_CHAR_LIMIT = 6000  # aligned with Modal worker MAX_TOTAL_CHARS for stable 
 CLONE_DAILY_LIMIT = int(os.environ.get("CLONE_DAILY_LIMIT", "30"))
 MUSIC_DAILY_LIMIT = int(os.environ.get("MUSIC_DAILY_LIMIT", "20"))
 
+# Monthly plan quotas — the ADVERTISED numbers shown to customers (pricing
+# page copy, /account usage bars), replacing a bare "unlimited" claim for
+# Pro/Pro+. The DAILY limits above stay as-is: a hidden circuit-breaker
+# against burst abuse of a single leaked/shared key. These monthly figures
+# are the real ceiling a normal customer should never actually hit — start
+# generous, tighten/adjust once real Modal billing data comes in. Same
+# env-var-tunable pattern as the daily limits.
+#
+# Deliberately NOT applied to the CPU-only tools (merge/trim/denoise/
+# convert/voicechange/videoxtract/etc.) — those run on ffmpeg/pydub, cost
+# nothing per-run, and "unlimited" there is an honest claim, not a marketing
+# gap. Only the three GPU-billed surfaces get a stated monthly number.
+CLONE_MONTHLY_LIMIT = int(os.environ.get("CLONE_MONTHLY_LIMIT", "60"))              # Pro+ only
+MUSIC_MONTHLY_LIMIT = int(os.environ.get("MUSIC_MONTHLY_LIMIT", "40"))              # Pro+ only
+TTS_CHAR_MONTHLY_LIMIT_PRO = int(os.environ.get("TTS_CHAR_MONTHLY_LIMIT_PRO", "100000"))
+TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS = int(os.environ.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS", "200000"))
+
 # Persistent (survives redeploy/restart, unlike CLONE_UPLOAD_DIR's /tmp) home
 # for reference clips a customer has explicitly chosen to save for reuse.
 # Only ever populated via /api/clone/voices/save after the consent check —
@@ -647,6 +664,43 @@ def _bump_monthly_chars(char_count: int):
     usage_tracking.bump_monthly_chars(request, char_count)
 
 
+# ---- Pro/Pro+ monthly TTS character quota (license-keyed) ----
+# The two helpers above are free-tier-only (IP+fingerprint keyed, bypassed
+# entirely for is_pro()). This is the Pro/Pro+ equivalent: a monthly
+# character quota keyed on the license itself, replacing the previous
+# "no tracking at all for Pro" behavior. Mirrors the clone/music
+# license-keyed counters below (get_license_daily_counter et al.).
+def _tts_monthly_quota_for_plan() -> int:
+    plan = get_plan()
+    if plan == "pro_plus":
+        return TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS
+    if plan == "pro":
+        return TTS_CHAR_MONTHLY_LIMIT_PRO
+    return 0
+
+
+def _would_exceed_pro_tts_quota(char_count: int) -> bool:
+    """Read-only check — does NOT bump. Free-tier quota is handled
+    separately by _would_exceed_monthly_quota(); this only applies to a
+    Pro/Pro+ session with an active license_key."""
+    license_key = session.get("license_key")
+    if not license_key or not is_pro():
+        return False
+    quota = _tts_monthly_quota_for_plan()
+    if quota <= 0:
+        return False
+    used = usage_tracking.get_license_monthly_counter(license_key, "tts_chars")
+    return used + char_count > quota
+
+
+def _bump_pro_tts_chars(char_count: int):
+    """Only call this AFTER a generation actually succeeds."""
+    license_key = session.get("license_key")
+    if not license_key or not is_pro():
+        return
+    usage_tracking.bump_license_monthly_counter(license_key, "tts_chars", char_count)
+
+
 @app.route("/healthz")
 def healthz():
     """For UptimeRobot (or any external uptime monitor) to ping — checks
@@ -741,6 +795,33 @@ def usage_summary() -> dict:
         "loop": {"used": usage_tracking.get_daily_counter(request, "usage_loop"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "eq": {"used": usage_tracking.get_daily_counter(request, "usage_eq"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
+
+
+def pro_usage_summary(license_key: str, plan: str) -> dict:
+    """Pro/Pro+ equivalent of usage_summary() above — license-keyed monthly
+    quotas instead of IP+fingerprint daily ones. Returns {} for a falsy
+    license_key/plan (e.g. an expired or missing license) so callers can
+    just check truthiness rather than plan-branching themselves. Used by
+    /account today for the raw numbers; the UI/UX pass will turn this into
+    the actual usage-bar display."""
+    if not license_key or plan not in ("pro", "pro_plus"):
+        return {}
+    out = {
+        "tts_chars": {
+            "used": usage_tracking.get_license_monthly_counter(license_key, "tts_chars"),
+            "limit": TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS if plan == "pro_plus" else TTS_CHAR_MONTHLY_LIMIT_PRO,
+        },
+    }
+    if plan == "pro_plus":
+        out["clone_gen"] = {
+            "used": usage_tracking.get_license_monthly_counter(license_key, "clone_gen"),
+            "limit": CLONE_MONTHLY_LIMIT,
+        }
+        out["music_gen"] = {
+            "used": usage_tracking.get_license_monthly_counter(license_key, "music_gen"),
+            "limit": MUSIC_MONTHLY_LIMIT,
+        }
+    return out
 
 
 @app.route("/studio")
@@ -2695,8 +2776,10 @@ def account_dashboard():
     license_key = licensing.find_key_by_email(email)
     license_info = licensing.check_vox_license(license_key) if license_key else {"valid": False}
     api_key_records = api_keys.find_keys_by_email(email)
+    plan_usage = pro_usage_summary(license_key, license_info.get("plan", "")) if license_info.get("valid") else {}
     return render_template("account.html", user=user, license_key=license_key,
-                            license_info=license_info, api_key_records=api_key_records)
+                            license_info=license_info, api_key_records=api_key_records,
+                            plan_usage=plan_usage)
 
 
 @app.route("/account/rotate-api-key", methods=["POST"])
@@ -3344,6 +3427,9 @@ def api_generate():
     if _would_exceed_monthly_quota(len(text), lim["FREE_MONTHLY_CHAR_QUOTA"]):
         return jsonify({"error": f"Monthly free quota ({lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters) is used up. It resets next month — or upgrade for unlimited."}), 429
 
+    if _would_exceed_pro_tts_quota(len(text)):
+        return jsonify({"error": f"Monthly character quota reached for your plan ({_tts_monthly_quota_for_plan():,} characters/month). It resets at the start of next month — contact support if you need more."}), 429
+
     if not _under_limit("usage_singles", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Daily free limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Resets at midnight UTC — or upgrade for unlimited."}), 429
 
@@ -3364,6 +3450,7 @@ def api_generate():
 
     _bump_counter("usage_singles")
     _bump_monthly_chars(len(text))
+    _bump_pro_tts_chars(len(text))
 
     timestamp = int(time.time())
     filename = f"VoxCraft-TTS-{timestamp}.mp3"
@@ -3398,6 +3485,9 @@ def api_batch():
     if _would_exceed_monthly_quota(total_chars, lim["FREE_MONTHLY_CHAR_QUOTA"]):
         return jsonify({"error": f"This batch would exceed your monthly quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters. Upgrade to Pro for unlimited, or wait until next month."}), 402
 
+    if _would_exceed_pro_tts_quota(total_chars):
+        return jsonify({"error": f"This batch would exceed your monthly quota of {_tts_monthly_quota_for_plan():,} characters for your plan. It resets at the start of next month — contact support if you need more."}), 402
+
     rate_str = f"{speed_pct - 100:+d}%"
     results = []
     errors = []
@@ -3410,6 +3500,7 @@ def api_batch():
             fname = f"VoxCraft-TTS-{idx + 1:02d}-{timestamp_base}.mp3"
             results.append({"idx": idx + 1, "text": line, "filename": fname, "audio": audio})
             _bump_monthly_chars(len(line))  # only bump for lines that actually succeeded
+            _bump_pro_tts_chars(len(line))
         except Exception as e:
             app.logger.error(f"[api] batch line {idx + 1} failed: {e}\n{traceback.format_exc()}")
             errors.append(f"Line {idx + 1}: could not be generated.")
@@ -3881,6 +3972,9 @@ def api_clone_generate():
     if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") >= CLONE_DAILY_LIMIT:
         return jsonify({"error": f"Daily voice-cloning limit reached ({CLONE_DAILY_LIMIT}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
+    if license_key and usage_tracking.get_license_monthly_counter(license_key, "clone_gen") >= CLONE_MONTHLY_LIMIT:
+        return jsonify({"error": f"Monthly voice-cloning limit reached ({CLONE_MONTHLY_LIMIT}/month) for your plan. "
+                                  f"It resets at the start of next month — contact support if you need more."}), 429
 
     data = request.get_json(force=True) or {}
     text = (data.get("text") or "").strip()
@@ -3947,6 +4041,7 @@ def api_clone_generate():
 
     if license_key:
         usage_tracking.bump_license_daily_counter(license_key, "clone_gen")
+        usage_tracking.bump_license_monthly_counter(license_key, "clone_gen")
 
     return jsonify({"job_id": job_id})
 
@@ -4010,6 +4105,9 @@ def api_music_generate():
     if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") >= MUSIC_DAILY_LIMIT:
         return jsonify({"error": f"Daily music-generation limit reached ({MUSIC_DAILY_LIMIT}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
+    if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") >= MUSIC_MONTHLY_LIMIT:
+        return jsonify({"error": f"Monthly music-generation limit reached ({MUSIC_MONTHLY_LIMIT}/month) for your plan. "
+                                  f"It resets at the start of next month — contact support if you need more."}), 429
 
     data = request.get_json(force=True) or {}
     tags = (data.get("tags") or "").strip()
@@ -4027,6 +4125,7 @@ def api_music_generate():
         return jsonify(result), 503
     if license_key:
         usage_tracking.bump_license_daily_counter(license_key, "music_gen")
+        usage_tracking.bump_license_monthly_counter(license_key, "music_gen")
     return jsonify(result)
 
 

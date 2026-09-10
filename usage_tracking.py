@@ -190,37 +190,82 @@ def bump_monthly_chars(request, chars_added: int):
         holder["record"] = merged
 
 
-# ---- per-license daily caps for GPU-cost Pro+ tools (clone, music) ----
+# ---- per-license daily + monthly counters for GPU-cost Pro/Pro+ tools ----
 # The free-tier counters above are deliberately keyed on IP+fingerprint
-# because anonymous visitors have no stable identity otherwise. Pro+
+# because anonymous visitors have no stable identity otherwise. Pro/Pro+
 # features are different: every request already carries a license_key,
 # which is exactly the identity that matters here — the risk isn't "one
 # visitor resets their free quota by clearing cookies", it's "one leaked
-# or shared Pro+ key runs unlimited billed Modal GPU jobs with nothing to
+# or shared key runs unlimited billed Modal GPU jobs with nothing to
 # stop it". So this tracks against the license_key itself, not the
 # request's network/browser signals, using the SAME atomic
 # usage_pair_transaction() primitive (called with one key twice — there's
 # no IP/fingerprint pairing concern here, just reusing the already-correct
 # cross-worker-safe read-modify-write instead of writing a new one).
+#
+# One record per license holds BOTH a daily bucket (hidden circuit-breaker
+# against burst abuse of a single key, e.g. CLONE_DAILY_LIMIT) and a
+# monthly bucket (the number actually advertised to the customer on the
+# pricing page / /account, e.g. CLONE_MONTHLY_LIMIT) — same merged-record
+# approach the free-tier record above uses for day+month, so a single
+# read/write always carries the complete current state for that license.
 def _license_usage_key(license_key: str) -> str:
     return "lic:" + hashlib.sha256(license_key.encode()).hexdigest()[:16]
 
 
-def get_license_daily_counter(license_key: str, counter_key: str) -> int:
+def _normalize_license_record(rec: dict) -> dict:
+    """Roll the day and month buckets over independently — a record can be
+    mid-month but on a new day (reset `daily`, keep `monthly`), or the
+    reverse at a month boundary (reset `monthly`, keep `daily`)."""
+    rec = dict(rec or {})
+    today = _today()
+    month = _this_month()
+    if rec.get("day") != today:
+        rec["day"] = today
+        rec["daily"] = {}
+    else:
+        rec.setdefault("daily", {})
+    if rec.get("month") != month:
+        rec["month"] = month
+        rec["monthly"] = {}
+    else:
+        rec.setdefault("monthly", {})
+    return rec
+
+
+def _load_license_record(license_key: str) -> dict:
     key = _license_usage_key(license_key)
     with persistence.usage_pair_transaction(key, key) as holder:
-        rec = holder["a"] or {}
-        if rec.get("day") != _today():
-            rec = {}
+        return holder["a"] or {}
+
+
+def get_license_daily_counter(license_key: str, counter_key: str) -> int:
+    rec = _load_license_record(license_key)
+    if rec.get("day") != _today():
+        return 0
     return rec.get("daily", {}).get(counter_key, 0)
 
 
 def bump_license_daily_counter(license_key: str, counter_key: str):
     key = _license_usage_key(license_key)
     with persistence.usage_pair_transaction(key, key) as holder:
-        rec = holder["a"] or {}
-        if rec.get("day") != _today():
-            rec = {"day": _today(), "daily": {}}
-        rec.setdefault("daily", {})
+        rec = _normalize_license_record(holder["a"])
         rec["daily"][counter_key] = rec["daily"].get(counter_key, 0) + 1
+        holder["record"] = rec
+
+
+def get_license_monthly_counter(license_key: str, counter_key: str) -> int:
+    rec = _load_license_record(license_key)
+    if rec.get("month") != _this_month():
+        return 0
+    return rec.get("monthly", {}).get(counter_key, 0)
+
+
+def bump_license_monthly_counter(license_key: str, counter_key: str, amount: int = 1):
+    """amount lets a caller bump by more than 1 in one write — e.g. TTS
+    character counts, where each generation adds len(text), not just 1."""
+    key = _license_usage_key(license_key)
+    with persistence.usage_pair_transaction(key, key) as holder:
+        rec = _normalize_license_record(holder["a"])
+        rec["monthly"][counter_key] = rec["monthly"].get(counter_key, 0) + amount
         holder["record"] = rec
