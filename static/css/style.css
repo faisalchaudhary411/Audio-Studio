@@ -2546,3 +2546,128 @@ body:not(.has-sticky-ad) .section{padding-bottom:4px;}
   font-family:var(--mono);font-size:0.78rem;color:var(--jade-hi);
   margin-top:8px;word-break:break-all;
 }
+
+
+/* ===== Usage alerts (Account) ===== */
+.usage-alert{
+  margin:0 0 14px;padding:12px 14px;border-radius:12px;
+  font-size:0.84rem;line-height:1.55;color:var(--text-mid);
+}
+.usage-alert strong{color:var(--text-hi);}
+.usage-alert a{color:var(--brass-hi);text-decoration:underline;text-underline-offset:2px;}
+.usage-alert--near{
+  background:rgba(232,169,60,0.1);border:1px solid rgba(232,169,60,0.35);color:var(--brass-hi);
+}
+.usage-alert--near strong{color:var(--brass-hi);}
+.usage-alert--full{
+  background:rgba(232,93,93,0.1);border:1px solid rgba(232,93,93,0.35);color:#f0a0a0;
+}
+.usage-alert--full strong{color:#ffb4b4;}
+
+/* ===== Pro usage strip on Studio ===== */
+.pro-usage-strip{margin:0 0 4px;}
+.pro-usage-strip__warn{
+  margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);line-height:1.45;
+}
+.pro-usage-strip__warn a{color:var(--brass-hi);text-decoration:underline;text-underline-offset:2px;}
+
+/* ===== First-run coach mark ===== */
+.coach-mark{
+  position:relative;z-index:5;
+  max-width:900px;margin:0 auto 16px;padding:0 28px;
+}
+.coach-mark[hidden]{display:none !important;}
+.coach-mark__card{
+  background:linear-gradient(165deg, rgba(28,40,52,0.98), rgba(18,26,34,0.99));
+  border:1px solid rgba(232,169,60,0.35);
+  border-radius:16px;padding:16px 18px;
+  box-shadow:0 12px 36px rgba(0,0,0,0.35), 0 0 0 1px rgba(245,198,112,0.08);
+  animation:coachIn .45s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes coachIn{
+  from{opacity:0;transform:translateY(-8px);}
+  to{opacity:1;transform:none;}
+}
+.coach-mark__eyebrow{
+  font-family:var(--mono);font-size:0.7rem;letter-spacing:0.1em;
+  text-transform:uppercase;color:var(--jade-hi);
+}
+.coach-mark__title{
+  margin:6px 0 4px;font-family:var(--display);font-size:1.15rem;
+  color:var(--text-hi);letter-spacing:-0.02em;
+}
+.coach-mark__body{
+  margin:0 0 12px;font-size:0.88rem;color:var(--text-mid);line-height:1.5;
+}
+@media (prefers-reduced-motion: reduce){
+  .coach-mark__card{animation:none;}
+}
+
+/* ===== Custom audio player ===== */
+.vox-player{
+  display:flex;flex-direction:column;gap:10px;
+  padding:14px;
+  border-radius:14px;
+  background:linear-gradient(165deg, rgba(28,40,52,0.95), rgba(18,26,34,0.98));
+  border:1px solid var(--line-strong);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.vox-player audio{display:none;}
+.vox-player__row{display:flex;align-items:center;gap:12px;}
+.vox-player__play{
+  flex-shrink:0;width:44px;height:44px;border-radius:50%;
+  border:none;cursor:pointer;
+  background:linear-gradient(180deg, var(--brass-hi), var(--brass));
+  color:#1A1204;
+  display:inline-flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px var(--brass-glow);
+  transition:transform .18s ease, filter .18s ease;
+}
+.vox-player__play:hover{transform:scale(1.05);filter:brightness(1.05);}
+.vox-player__play:active{transform:scale(0.97);}
+.vox-player__timeline{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;}
+.vox-player__seek{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:6px;border-radius:999px;
+  background:rgba(245,242,234,0.12);
+  outline:none;cursor:pointer;
+}
+.vox-player__seek::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--brass-hi);border:2px solid #1A1204;
+  box-shadow:0 0 0 3px rgba(232,169,60,0.25);
+  cursor:pointer;
+}
+.vox-player__seek::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;
+  background:var(--brass-hi);border:2px solid #1A1204;
+  cursor:pointer;
+}
+.vox-player__times{
+  display:flex;justify-content:space-between;
+  font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);
+}
+.vox-player__meta{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);
+}
+.vox-player__meta strong{color:var(--text-hi);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.result-panel .vox-player{margin:4px 0 12px;}
+
+/* ===== Tool empty / error states ===== */
+.tool-empty,.tool-error{
+  margin-top:12px;padding:16px 16px;border-radius:14px;
+  font-size:0.88rem;line-height:1.55;
+}
+.tool-empty{
+  background:rgba(245,242,234,0.03);border:1px dashed var(--line-strong);
+  color:var(--text-dim);text-align:center;
+}
+.tool-empty strong{display:block;color:var(--text-mid);margin-bottom:4px;font-weight:600;}
+.tool-error{
+  background:rgba(232,93,93,0.08);border:1px solid rgba(232,93,93,0.28);
+  color:#f0a8a8;
+}
+.tool-error strong{color:#ffc0c0;display:block;margin-bottom:4px;}
+.tool-error a{color:var(--brass-hi);}
