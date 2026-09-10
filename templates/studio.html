@@ -62,7 +62,7 @@
 
     {% if not pro %}
     <p class="limit-note">Free plan: {{ free_char_limit }} chars/generation · {{ monthly_char_quota }} chars/month total · {{ daily_actions }} generations/day · {{ batch_limit }} batch/day · {{ batch_max }} lines max.
-      <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> to remove all limits.</p>
+      <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">Upgrade to Pro</a> for a much higher monthly character quota and no daily generation caps.</p>
     {% endif %}
   </div>
 
@@ -244,7 +244,7 @@
     </details>
     <details style="margin-top:10px;">
       <summary>What's the difference between Pro and Pro+?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;">Pro removes free-tier limits on text-to-speech. Pro+ additionally unlocks <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">voice cloning</a> and AI music generation. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">pricing</a> for details.</p>
+      <p style="color:var(--text-mid);line-height:1.7;">Pro raises the TTS character quota substantially and removes daily generation caps. Pro+ adds higher TTS quota plus <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">voice cloning</a> and AI music generation (with monthly limits). See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">pricing</a> for the exact numbers.</p>
     </details>
     <details style="margin-top:10px;">
       <summary>Can I use generated narration commercially?</summary>

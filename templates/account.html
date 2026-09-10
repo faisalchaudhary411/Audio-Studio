@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/usage_bar.html" import usage_bar %}
 {% block title %}My Account — VoxCraft{% endblock %}
 
 {% block content %}
@@ -21,6 +22,22 @@
       <p style="color:var(--text-dim);font-size:0.85rem;margin:8px 0 0;">No active app subscription on this account. <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);">See plans</a>.</p>
     {% endif %}
   </div>
+
+  {% if plan_usage %}
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">This month's usage</span>
+    <p style="color:var(--text-dim);font-size:0.78rem;margin:6px 0 12px;">Resets at the start of each calendar month. Audio tools (merge, trim, denoise, convert, etc.) stay unlimited.</p>
+    {% if plan_usage.tts_chars %}
+      {{ usage_bar('TTS characters', plan_usage.tts_chars.used, plan_usage.tts_chars.limit) }}
+    {% endif %}
+    {% if plan_usage.clone_gen %}
+      {{ usage_bar('Voice clone generations', plan_usage.clone_gen.used, plan_usage.clone_gen.limit) }}
+    {% endif %}
+    {% if plan_usage.music_gen %}
+      {{ usage_bar('AI music tracks', plan_usage.music_gen.used, plan_usage.music_gen.limit) }}
+    {% endif %}
+  </div>
+  {% endif %}
 
   <div class="panel">
     <span class="panel__label">Developer API keys</span>
