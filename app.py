@@ -997,10 +997,15 @@ def pricing():
          "cta": "Current plan" if current_plan == "pro_plus" else "Get Pro+",
          "cta_url": None if current_plan == "pro_plus" else url_for("upgrade", plan="pro_plus")},
     ]
-    return render_template("pricing.html", plans=plans)
-
-
-def _developers_ctx(lim):
+        compare = {
+        "free_tts": f"{limits.get('FREE_DAILY_ACTIONS', 10)} gens/day · {int(limits.get('FREE_CHAR_LIMIT', 5000)):,} chars",
+        "pro_tts": f"{_tts_pro:,} chars/mo",
+        "pro_plus_tts": f"{_tts_pp:,} chars/mo",
+        "free_tools": f"{limits.get('FREE_DAILY_ACTIONS', 10)} actions/day",
+        "clone_mo": f"{_clone_mo} gens/mo",
+        "music_mo": f"{_music_mo} tracks/mo",
+    }
+    return render_template("pricing.html", plans=plans, compare=compare)ef _developers_ctx(lim):
     """Shared context for /developers and /developers/signup (GET-error and
     POST-success/error re-renders) — was three separate copies of this same
     dict that had already drifted out of sync once (Starter/Pro annual
