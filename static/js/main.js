@@ -780,16 +780,27 @@ function voxAudioPlayerHtml(b64, filename, mime) {
     ? ''
     : `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
   const safeName = String(filename).replace(/[<>&"']/g, '');
+  const src = `data:${mime};base64,${b64}`;
   return `
     <div class="result-panel">
       <div class="result-panel__label">Your audio</div>
-      <div class="vox-player">
-        <div class="vox-player__meta"><strong>${safeName}</strong><span>Ready</span></div>
-        <audio controls preload="metadata" src="data:${mime};base64,${b64}"></audio>
+      <div class="vox-player" data-vox-player>
+        <audio preload="metadata" src="${src}"></audio>
+        <div class="vox-player__row">
+          <button type="button" class="vox-player__play" data-vp-play aria-label="Play">
+            <svg class="vox-player__icon-play" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            <svg class="vox-player__icon-pause" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" hidden><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+          </button>
+          <div class="vox-player__timeline">
+            <input type="range" class="vox-player__seek" data-vp-seek min="0" max="1000" value="0" step="1" aria-label="Seek">
+            <div class="vox-player__times"><span data-vp-cur>0:00</span><span data-vp-dur>0:00</span></div>
+          </div>
+        </div>
+        <div class="vox-player__meta"><strong>${safeName}</strong><span data-vp-state>Ready</span></div>
       </div>
       <div class="result-panel__actions">
-        <a class="btn btn--brass btn--sm" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
-        <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
+        <a class="btn btn--brass btn--sm" download="${filename}" href="${src}">Download</a>
+        <button type="button" class="btn btn--ghost btn--sm" data-vp-replay>Play again</button>
       </div>
       <div class="result-panel__next">
         <span class="result-panel__next-label">Send to another tool</span>
@@ -799,6 +810,101 @@ function voxAudioPlayerHtml(b64, filename, mime) {
     </div>
   `;
 }
+
+function voxFormatTime(sec) {
+  if (!isFinite(sec) || sec < 0) return '0:00';
+  const s = Math.floor(sec % 60);
+  const m = Math.floor(sec / 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+/** Wire custom players inside a root (or document). Safe to call repeatedly. */
+function voxBindPlayers(root) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-vox-player]').forEach((wrap) => {
+    if (wrap.dataset.bound === '1') return;
+    wrap.dataset.bound = '1';
+    const audio = wrap.querySelector('audio');
+    const playBtn = wrap.querySelector('[data-vp-play]');
+    const seek = wrap.querySelector('[data-vp-seek]');
+    const cur = wrap.querySelector('[data-vp-cur]');
+    const dur = wrap.querySelector('[data-vp-dur]');
+    const state = wrap.querySelector('[data-vp-state]');
+    const iconPlay = wrap.querySelector('.vox-player__icon-play');
+    const iconPause = wrap.querySelector('.vox-player__icon-pause');
+    const panel = wrap.closest('.result-panel');
+    const replay = panel && panel.querySelector('[data-vp-replay]');
+    if (!audio || !playBtn || !seek) return;
+
+    const setPlaying = (on) => {
+      if (iconPlay) iconPlay.hidden = !!on;
+      if (iconPause) iconPause.hidden = !on;
+      playBtn.setAttribute('aria-label', on ? 'Pause' : 'Play');
+      if (state) state.textContent = on ? 'Playing' : 'Ready';
+    };
+
+    playBtn.addEventListener('click', () => {
+      if (audio.paused) {
+        document.querySelectorAll('[data-vox-player] audio').forEach((a) => {
+          if (a !== audio) { try { a.pause(); } catch (e) {} }
+        });
+        audio.play().catch(() => {});
+      } else {
+        audio.pause();
+      }
+    });
+    if (replay) {
+      replay.addEventListener('click', () => {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      });
+    }
+    audio.addEventListener('play', () => setPlaying(true));
+    audio.addEventListener('pause', () => setPlaying(false));
+    audio.addEventListener('ended', () => {
+      setPlaying(false);
+      seek.value = '0';
+      if (cur) cur.textContent = '0:00';
+    });
+    audio.addEventListener('loadedmetadata', () => {
+      if (dur) dur.textContent = voxFormatTime(audio.duration);
+    });
+    audio.addEventListener('timeupdate', () => {
+      if (!audio.duration) return;
+      if (!seek.dataset.dragging) {
+        seek.value = String(Math.round((audio.currentTime / audio.duration) * 1000));
+      }
+      if (cur) cur.textContent = voxFormatTime(audio.currentTime);
+    });
+    seek.addEventListener('pointerdown', () => { seek.dataset.dragging = '1'; });
+    seek.addEventListener('pointerup', () => {
+      delete seek.dataset.dragging;
+      if (audio.duration) audio.currentTime = (Number(seek.value) / 1000) * audio.duration;
+    });
+    seek.addEventListener('input', () => {
+      if (!audio.duration) return;
+      const t = (Number(seek.value) / 1000) * audio.duration;
+      if (cur) cur.textContent = voxFormatTime(t);
+    });
+    seek.addEventListener('change', () => {
+      if (audio.duration) audio.currentTime = (Number(seek.value) / 1000) * audio.duration;
+    });
+  });
+}
+
+// Auto-bind players when result HTML is injected
+const _vpObserver = new MutationObserver((muts) => {
+  for (const m of muts) {
+    if (m.addedNodes && m.addedNodes.length) {
+      voxBindPlayers(document);
+      break;
+    }
+  }
+});
+try {
+  _vpObserver.observe(document.documentElement, { childList: true, subtree: true });
+} catch (e) {}
+
 
 function voxFindTransferInput() {
   const inputs = Array.from(document.querySelectorAll('input.file-input[type="file"], input[type="file"].file-input, input[type="file"]'));
@@ -923,6 +1029,25 @@ function initRevealOnScroll(){
   nodes.forEach((n) => io.observe(n));
 }
 
+
+function initStudioCoach(){
+  const el = document.getElementById('studio-coach');
+  if(!el) return;
+  const KEY = 'voxcraft_studio_coach_v1';
+  try {
+    if(localStorage.getItem(KEY)) return;
+  } catch(e) { return; }
+  el.hidden = false;
+  const dismiss = () => {
+    el.hidden = true;
+    try { localStorage.setItem(KEY, '1'); } catch(e) {}
+  };
+  const btn = document.getElementById('studio-coach-dismiss');
+  if(btn) btn.addEventListener('click', dismiss);
+  // Also dismiss after first successful generate
+  window.addEventListener('voxcraft:generated', dismiss, { once: true });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Admin pages don't currently use .studio-select at all, but this guard
   // keeps it that way explicitly — user-facing redesign only, per request.
@@ -936,6 +1061,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initBillingToggle();
   initPermissionsSheet();
   initRevealOnScroll();
+  initStudioCoach();
+  voxBindPlayers(document);
   try {
     // Run after a tick so tools.js can wrap inputs in dropzones first
     setTimeout(() => { voxOfferIncomingTransfer({ autoApply: true }); }, 0);

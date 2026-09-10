@@ -288,7 +288,7 @@
   function friendlyError(data, fallback) {
     const msg = (data && (data.error || data.message)) || fallback || 'Something went wrong.';
     if (/limit|quota|daily|monthly/i.test(msg)) {
-      return msg + ' — Upgrade on the Pricing page for higher limits.';
+      return msg + ' — See Pricing for higher limits.';
     }
     if (/network|fetch|failed to fetch/i.test(msg)) {
       return 'Network error — check your connection and try again.';
@@ -300,6 +300,23 @@
       return 'Choose an audio file first.';
     }
     return msg;
+  }
+
+  /** Consistent empty / error panels for tool result areas. */
+  function toolEmptyHtml(title, body) {
+    return `<div class="tool-empty"><strong>${title || 'Nothing here yet'}</strong>${body || 'Upload a file and run the tool to see results.'}</div>`;
+  }
+  function toolErrorHtml(msg) {
+    const safe = String(msg || 'Something went wrong.').replace(/[<>&]/g, (ch) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+    const upgrade = /limit|quota|pricing/i.test(safe)
+      ? ` <a href="/pricing">See plans</a>`
+      : '';
+    return `<div class="tool-error" role="alert"><strong>Couldn’t finish</strong>${safe}${upgrade}</div>`;
+  }
+  function setToolError(resultEl, statusEl, data, fallback) {
+    const msg = friendlyError(data, fallback);
+    if (statusEl) statusEl.textContent = msg;
+    if (resultEl) resultEl.innerHTML = toolErrorHtml(msg);
   }
 
   function bindFileLabel(input) {
@@ -351,7 +368,7 @@
       const res = await fetch('/api/tools/transcribe', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (transcribeStatus) transcribeStatus.textContent = friendlyError(data, 'Transcription failed.');
+        setToolError(transcribeResult, transcribeStatus, data, 'Transcription failed.');
         return;
       }
       if (transcribeStatus) transcribeStatus.textContent = `Done (${data.method || 'ok'})`;
@@ -429,7 +446,7 @@
         transcribeResult.appendChild(actions);
       }
     } catch (e) {
-      if (transcribeStatus) transcribeStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(transcribeResult, transcribeStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(transcribeBtn, false);
       showProgress(transcribeProgress, false);
@@ -474,13 +491,13 @@
       const res = await fetch('/api/tools/convert', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (convertStatus) convertStatus.textContent = friendlyError(data, 'Conversion failed.');
+        setToolError(convertResult, convertStatus, data, 'Conversion failed.');
         return;
       }
       if (convertStatus) convertStatus.textContent = `Converted to ${(data.format || '').toUpperCase()}`;
       if (convertResult) convertResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
-      if (convertStatus) convertStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(convertResult, convertStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(convertBtn, false);
       showProgress(convertProgress, false);
@@ -572,13 +589,13 @@
       const res = await fetch('/api/tools/merge', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (mergeStatus) mergeStatus.textContent = friendlyError(data, 'Merge failed.');
+        setToolError(mergeResult, mergeStatus, data, 'Merge failed.');
         return;
       }
       if (mergeStatus) mergeStatus.textContent = `Merged ${mergeSelectedFiles.length} files`;
       if (mergeResult) mergeResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
-      if (mergeStatus) mergeStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(mergeResult, mergeStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(mergeBtn, false);
       showProgress(mergeProgress, false);
@@ -660,7 +677,7 @@
         const res = await fetch('/api/tools/cutter/auto-trim', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (cutterStatus) cutterStatus.textContent = friendlyError(data, 'Auto-trim failed.');
+          setToolError(cutterResult, cutterStatus, data, 'Auto-trim failed.');
           return;
         }
         if (cutterStatus) cutterStatus.textContent = 'Silence trimmed';
@@ -672,7 +689,7 @@
         const res = await fetch('/api/tools/cutter/trim', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (cutterStatus) cutterStatus.textContent = friendlyError(data, 'Trim failed.');
+          setToolError(cutterResult, cutterStatus, data, 'Trim failed.');
           return;
         }
         if (cutterStatus) cutterStatus.textContent = 'Trimmed';
@@ -684,7 +701,7 @@
         const res = await fetch('/api/tools/cutter/split', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (cutterStatus) cutterStatus.textContent = friendlyError(data, 'Split failed.');
+          setToolError(cutterResult, cutterStatus, data, 'Split failed.');
           return;
         }
         if (cutterStatus) cutterStatus.textContent = 'Split complete';
@@ -698,7 +715,7 @@
         }
       }
     } catch (e) {
-      if (cutterStatus) cutterStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(cutterResult, cutterStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(cutterBtn, false);
       showProgress(cutterProgress, false);
@@ -763,13 +780,13 @@
       const res = await fetch('/api/tools/denoise', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (denoiseStatus) denoiseStatus.textContent = friendlyError(data, 'Denoise failed.');
+        setToolError(denoiseResult, denoiseStatus, data, 'Denoise failed.');
         return;
       }
       if (denoiseStatus) denoiseStatus.textContent = 'Noise removed';
       if (denoiseResult) denoiseResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
     } catch (e) {
-      if (denoiseStatus) denoiseStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(denoiseResult, denoiseStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(denoiseBtn, false);
       showProgress(denoiseProgress, false);
@@ -862,13 +879,13 @@
       const res = await fetch('/api/tools/voicechange', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (vcStatus) vcStatus.textContent = friendlyError(data, 'Effect failed.');
+        setToolError(vcResult, vcStatus, data, 'Effect failed.');
         return;
       }
       if (vcStatus) vcStatus.textContent = 'Effect applied';
       if (vcResult) vcResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
     } catch (e) {
-      if (vcStatus) vcStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(vcResult, vcStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(vcBtn, false);
       showProgress(vcProgress, false);
@@ -923,13 +940,13 @@
       const res = await fetch('/api/tools/videoxtract', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (vxStatus) vxStatus.textContent = friendlyError(data, 'Extraction failed.');
+        setToolError(vxResult, vxStatus, data, 'Extraction failed.');
         return;
       }
       if (vxStatus) vxStatus.textContent = `Extracted · ${data.size_kb} KB`;
       if (vxResult) vxResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
-      if (vxStatus) vxStatus.textContent = 'Network error — check your connection and try again.';
+      setToolError(vxResult, vxStatus, null, 'Network error — check your connection and try again.');
     } finally {
       setLoading(vxBtn, false);
       showProgress(vxProgress, false);
