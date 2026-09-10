@@ -19,6 +19,10 @@
     {{ usage_bar('Characters (this month)', usage.chars_monthly.used, usage.chars_monthly.limit) }}
     {{ usage_bar('Batch runs', usage.batches.used, usage.batches.limit) }}
     <div style="border-top:1px solid var(--line);margin:14px 0;"></div>
+    {% else %}
+    <p style="color:var(--text-dim);font-size:0.78rem;margin:0 0 12px;">
+      Pro plan active · <a href="{{ url_for('account_dashboard') }}" style="color:var(--brass-hi);">View monthly usage</a>
+    </p>
     {% endif %}
     <span class="panel__label">Voice &amp; language</span>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
