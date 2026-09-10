@@ -864,11 +864,21 @@ def pricing():
         "Ads supported",
     ]
     pro_features = [f.strip() for f in (limits.get("PRO_FEATURES") or "").split("|") if f.strip()] or [
-        "Unlimited generations", "Unlimited characters", "All voices, all languages",
-        "No ads", f"Batch up to {limits['PRO_BATCH_MAX']} lines",
+        f"{TTS_CHAR_MONTHLY_LIMIT_PRO:,} TTS characters/month",
+        "All voices, all languages",
+        "No ads",
+        f"Batch up to {limits['PRO_BATCH_MAX']} lines",
+        "Unlimited audio tools",
     ]
-    pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or \
-        pro_features + ["Voice cloning", "AI music generation"]
+    pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or [
+        f"{TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS:,} TTS characters/month",
+        f"{CLONE_MONTHLY_LIMIT} voice clone generations/month",
+        f"{MUSIC_MONTHLY_LIMIT} AI music tracks/month",
+        "All voices, all languages",
+        "No ads",
+        f"Batch up to {limits['PRO_BATCH_MAX']} lines",
+        "Unlimited audio tools",
+    ]
 
     # BUG FIX: "Current plan" was hardcoded onto the Free tier's card
     # regardless of the visitor's actual plan — so a Pro or Pro+ customer
@@ -1716,6 +1726,7 @@ def admin_limits():
             "CHECKOUT_URL_PRO_PLUS": request.form.get("CHECKOUT_URL_PRO_PLUS", ""),
             "FREE_FEATURES": request.form.get("FREE_FEATURES", ""),
             "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
+            "PRO_PLUS_FEATURES": request.form.get("PRO_PLUS_FEATURES", ""),
             "AUTO_APPROVE_MANUAL": request.form.get("AUTO_APPROVE_MANUAL") == "on",
             "MANUAL_GRACE_HOURS": int(request.form.get("MANUAL_GRACE_HOURS", 72)),
             "API_FREE_QUOTA": int(request.form.get("API_FREE_QUOTA", 10000)),
@@ -3422,16 +3433,16 @@ def api_generate():
     lim = get_limits()
     char_limit_widget = None if is_pro() else lim["FREE_CHAR_LIMIT"]
     if char_limit_widget and len(text) > char_limit_widget:
-        return jsonify({"error": f"Free plan allows up to {char_limit_widget:,} characters per generation. Shorten the script, or upgrade for unlimited length."}), 429
+        return jsonify({"error": f"Free plan allows up to {char_limit_widget:,} characters per generation. Shorten the script, or upgrade to Pro for longer generations."}), 429
 
     if _would_exceed_monthly_quota(len(text), lim["FREE_MONTHLY_CHAR_QUOTA"]):
-        return jsonify({"error": f"Monthly free quota ({lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters) is used up. It resets next month — or upgrade for unlimited."}), 429
+        return jsonify({"error": f"Monthly free quota ({lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters) is used up. It resets next month — or upgrade to Pro for a much higher monthly quota."}), 429
 
     if _would_exceed_pro_tts_quota(len(text)):
         return jsonify({"error": f"Monthly character quota reached for your plan ({_tts_monthly_quota_for_plan():,} characters/month). It resets at the start of next month — contact support if you need more."}), 429
 
     if not _under_limit("usage_singles", lim["FREE_DAILY_ACTIONS"]):
-        return jsonify({"error": f"Daily free limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Resets at midnight UTC — or upgrade for unlimited."}), 429
+        return jsonify({"error": f"Daily free limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Resets at midnight UTC — or upgrade to Pro to remove the daily generation cap."}), 429
 
     rate_str = f"{speed_pct - 100:+d}%"
     text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
@@ -3479,11 +3490,11 @@ def api_batch():
         return jsonify({"error": f"{'Pro' if is_pro() else 'Free'} plan limit is {max_lines} lines."}), 402
 
     if not _under_limit("usage_batches", lim["FREE_BATCH_LIMIT"]):
-        return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for unlimited."}), 402
+        return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for more batch runs."}), 402
 
     total_chars = sum(len(ln) for ln in lines)
     if _would_exceed_monthly_quota(total_chars, lim["FREE_MONTHLY_CHAR_QUOTA"]):
-        return jsonify({"error": f"This batch would exceed your monthly quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters. Upgrade to Pro for unlimited, or wait until next month."}), 402
+        return jsonify({"error": f"This batch would exceed your monthly free quota of {lim['FREE_MONTHLY_CHAR_QUOTA']:,} characters. Upgrade to Pro for a higher monthly quota, or wait until next month."}), 402
 
     if _would_exceed_pro_tts_quota(total_chars):
         return jsonify({"error": f"This batch would exceed your monthly quota of {_tts_monthly_quota_for_plan():,} characters for your plan. It resets at the start of next month — contact support if you need more."}), 402
