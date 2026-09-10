@@ -6,6 +6,17 @@
 {% block content %}
 <div class="studio">
 
+
+  {# First-run coach — dismissed into localStorage by main.js #}
+  <div class="coach-mark" id="studio-coach" hidden>
+    <div class="coach-mark__card">
+      <span class="coach-mark__eyebrow">Quick start</span>
+      <p class="coach-mark__title">Paste a script, pick a voice, hit Generate.</p>
+      <p class="coach-mark__body">Preview a voice first if you like. Free tier works with no signup.</p>
+      <button type="button" class="btn btn--brass btn--sm" id="studio-coach-dismiss">Got it</button>
+    </div>
+  </div>
+
   <div class="section__head" style="padding:0 28px;max-width:900px;margin:0 auto;">
     <span class="section__eyebrow">AI Voice Studio</span>
     <h1 class="section__title" style="font-size:1.6rem;">Turn a script into narration</h1>
@@ -20,9 +31,31 @@
     {{ usage_bar('Batch runs', usage.batches.used, usage.batches.limit) }}
     <div style="border-top:1px solid var(--line);margin:14px 0;"></div>
     {% else %}
-    <p style="color:var(--text-dim);font-size:0.78rem;margin:0 0 12px;">
-      Pro plan active · <a href="{{ url_for('account_dashboard') }}" style="color:var(--brass-hi);">View monthly usage</a>
-    </p>
+    <div class="pro-usage-strip">
+      <span class="panel__label" style="margin-bottom:8px;">This month</span>
+      {% if plan_usage and plan_usage.tts_chars %}
+        {{ usage_bar('TTS characters', plan_usage.tts_chars.used, plan_usage.tts_chars.limit) }}
+        {% set tts = plan_usage.tts_chars %}
+        {% if tts.limit > 0 and tts.used * 100 >= tts.limit * 80 %}
+        <p class="pro-usage-strip__warn">
+          {% if tts.used >= tts.limit %}Monthly TTS quota reached — resets next month.
+          {% else %}Approaching monthly TTS limit.
+          {% endif %}
+          <a href="{{ url_for('account_dashboard') }}">Account details</a>
+        </p>
+        {% endif %}
+      {% endif %}
+      {% if plan_usage and plan_usage.clone_gen %}
+        {{ usage_bar('Voice clones', plan_usage.clone_gen.used, plan_usage.clone_gen.limit) }}
+      {% endif %}
+      {% if plan_usage and plan_usage.music_gen %}
+        {{ usage_bar('Music tracks', plan_usage.music_gen.used, plan_usage.music_gen.limit) }}
+      {% endif %}
+      <p style="color:var(--text-dim);font-size:0.72rem;margin:8px 0 0;">
+        <a href="{{ url_for('account_dashboard') }}" style="color:var(--brass-hi);">Full usage on Account</a>
+      </p>
+    </div>
+    <div style="border-top:1px solid var(--line);margin:14px 0;"></div>
     {% endif %}
     <span class="panel__label">Voice &amp; language</span>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">

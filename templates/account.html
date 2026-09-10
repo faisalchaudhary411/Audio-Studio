@@ -27,6 +27,19 @@
   <div class="panel" style="margin-bottom:20px;">
     <span class="panel__label">This month's usage</span>
     <p style="color:var(--text-dim);font-size:0.78rem;margin:6px 0 12px;">Resets at the start of each calendar month. Audio tools (merge, trim, denoise, convert, etc.) stay unlimited.</p>
+
+    {% if usage_full %}
+    <div class="usage-alert usage-alert--full" role="status">
+      <strong>Monthly limit reached.</strong> One or more quotas are used up until next month.
+      <a href="{{ url_for('contact') }}">Contact support</a> if you need more{% if license_info.plan != 'pro_plus' %}, or <a href="{{ url_for('pricing') }}">upgrade to Pro+</a>{% endif %}.
+    </div>
+    {% elif usage_near %}
+    <div class="usage-alert usage-alert--near" role="status">
+      <strong>You're close to a monthly limit</strong> (80%+ used). Resets next month.
+      {% if license_info.plan != 'pro_plus' %}<a href="{{ url_for('pricing') }}">See Pro+</a> for higher quotas.{% else %}<a href="{{ url_for('contact') }}">Contact support</a> if you need a top-up.{% endif %}
+    </div>
+    {% endif %}
+
     {% if plan_usage.tts_chars %}
       {{ usage_bar('TTS characters', plan_usage.tts_chars.used, plan_usage.tts_chars.limit) }}
     {% endif %}
