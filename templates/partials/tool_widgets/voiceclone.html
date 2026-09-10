@@ -61,14 +61,11 @@
           </select>
           <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-engine-hint"></span>
         </div>
-        {# F5-only: reference transcript. Auto-filled; kept out of the main flow so new users aren't confused. #}
-        <div id="clone-ref-text-row" style="display:none;margin-bottom:8px;">
-          <label class="studio-label" for="clone-ref-text">Reference transcript (F5-TTS only)</label>
-          <div style="display:flex;gap:8px;align-items:flex-start;">
-            <textarea class="script-input" id="clone-ref-text" placeholder="Auto-filled from your clip when needed…" maxlength="300" style="min-height:56px;flex:1;"></textarea>
-            <button class="btn btn--ghost btn--sm" id="clone-auto-transcribe-btn" type="button" style="white-space:nowrap;" title="Re-run speech recognition on the reference clip">Re-fill</button>
-          </div>
-          <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-ref-text-hint">Only required for F5-TTS. Filled automatically from your clip — edit only if recognition was wrong.</span>
+        {# Reference transcript stays in DOM for F5 auto-fill / API payload but is never shown — auto transcription only. #}
+        <div id="clone-ref-text-row" hidden aria-hidden="true" style="display:none !important;">
+          <textarea id="clone-ref-text" maxlength="300" tabindex="-1"></textarea>
+          <button type="button" id="clone-auto-transcribe-btn" tabindex="-1" hidden></button>
+          <span id="clone-ref-text-hint" hidden></span>
         </div>
       </div>
     </details>
