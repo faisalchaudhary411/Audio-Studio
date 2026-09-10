@@ -371,16 +371,23 @@
         setToolError(transcribeResult, transcribeStatus, data, 'Transcription failed.');
         return;
       }
-      if (transcribeStatus) transcribeStatus.textContent = `Done (${data.method || 'ok'})`;
+      const wordBit = data.word_count ? `${data.word_count} words` : '';
+      const durBit = data.duration_sec ? ` · ${Number(data.duration_sec).toFixed(0)}s` : '';
+      const partialBit = data.partial ? ' · may be partial' : '';
+      if (transcribeStatus) {
+        transcribeStatus.textContent = wordBit
+          ? `Done · ${wordBit}${durBit}${partialBit}`
+          : `Done${partialBit}`;
+      }
       if (transcribeResult) {
-        const meta = data.word_count ? ` · ${data.word_count} words` : '';
-        const engine = data.engine ? ` · engine: ${data.engine}` : '';
         // Build DOM nodes so Urdu/Hindi is never HTML-escaped wrong and downloads
         // use a real UTF-8 Blob (data: URIs often save without charset on Android).
         transcribeResult.innerHTML = '';
         const metaP = document.createElement('p');
         metaP.style.cssText = 'font-size:0.8rem;color:var(--text-dim);margin-bottom:6px;';
-        metaP.textContent = (data.method || '') + meta + engine;
+        metaP.textContent = wordBit
+          ? `${wordBit}${durBit}${partialBit}`
+          : (partialBit ? 'Transcript may be partial' : '');
         const ta = document.createElement('textarea');
         ta.className = 'script-input';
         ta.style.minHeight = '140px';
