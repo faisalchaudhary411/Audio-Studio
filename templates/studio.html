@@ -47,18 +47,18 @@
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Speed: <span id="speed-label">100%</span></label>
         <input id="speed-slider" class="studio-range" type="range" min="50" max="200" step="5" value="100">
       </div>
-      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="studio-advanced-row" style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end;">
         <div>
-          <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Export format</label>
+          <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:6px;">Export format</label>
           <select id="export-format" class="studio-select">
             <option value="mp3">MP3 (share / YouTube)</option>
             <option value="wav">WAV (edit master)</option>
           </select>
         </div>
-        <div style="display:flex;align-items:flex-end;">
-          <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:var(--text-mid);cursor:pointer;">
+        <div class="normalize-field">
+          <label class="normalize-label" for="normalize-toggle">
             <input type="checkbox" id="normalize-toggle" checked>
-            Normalize loudness
+            <span>Normalize loudness</span>
           </label>
         </div>
       </div>
