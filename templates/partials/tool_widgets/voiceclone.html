@@ -3,24 +3,24 @@
     <span class="panel__label">Clone a voice</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;">English, Hindi &amp; Urdu</span>
-      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference clip: 5–10s, one speaker</span>
+      <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference: 5–15s, one speaker</span>
     </div>
-    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:4px;">Upload a clear reference clip and generate new speech in that voice.</p>
-    <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:12px;">Write in English, Hindi (Devanagari), or Urdu (Nastaliq) — language is detected automatically. Urdu text is converted to spoken Hindi pronunciation behind the scenes (there's no separate Urdu voice model yet, but Urdu and Hindi sound the same when spoken — only the script differs).</p>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:14px;">Upload a short clip of the voice you own, then type what you want it to say. Language is detected automatically.</p>
 
-    <div class="panel" style="margin-bottom:14px;background:rgba(232,169,60,0.06);border-color:rgba(232,169,60,0.25);padding:12px;">
-      <span class="panel__label">Ideal reference checklist</span>
+    <div class="panel" style="margin-bottom:16px;background:rgba(232,169,60,0.06);border-color:rgba(232,169,60,0.25);padding:12px;">
+      <span class="panel__label">Good reference tips</span>
       <ul style="margin:6px 0 0;padding-left:18px;color:var(--text-mid);font-size:0.82rem;line-height:1.65;">
         <li>5–15 seconds of <strong>one speaker</strong> only</li>
-        <li>Quiet room — no music, TV, or other voices</li>
-        <li>Natural speech (not whispering or shouting)</li>
-        <li>Clear mic, not tiny laptop far-field audio</li>
+        <li>Quiet room — no music or other voices</li>
+        <li>Natural speech, clear mic</li>
       </ul>
       <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-dim);">Only clone voices you own or have explicit permission to use.</p>
     </div>
     <div id="clone-quality-warn" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(232,169,60,0.4);color:var(--brass-hi);font-size:0.82rem;line-height:1.5;"></div>
 
-    <div style="margin-bottom:12px;">
+    <!-- Step 1: voice -->
+    <span class="studio-primary-label">1. Choose a voice</span>
+    <div style="margin-bottom:14px;">
       <label class="studio-label" for="clone-voice-select">Voice source</label>
       <select class="studio-select" id="clone-voice-select" aria-label="Voice source">
         <option value="">Upload a new reference clip…</option>
@@ -32,40 +32,51 @@
       <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-voice-access-hint"></span>
     </div>
 
-    <div id="clone-upload-row">
+    <div id="clone-upload-row" style="margin-bottom:16px;">
       <input type="file" class="file-input" id="clone-ref-audio" accept="audio/*" style="margin-bottom:8px;" aria-label="Reference audio clip">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
         <button class="btn btn--ghost btn--sm" id="clone-save-voice-btn" type="button" disabled>Save this voice for reuse</button>
         <span style="color:var(--text-dim);font-size:0.72rem;" id="clone-save-hint">Upload a clip first, then save it to reuse later.</span>
       </div>
     </div>
 
-    <div style="margin-bottom:12px;">
-      <label class="studio-label" for="clone-engine-select">Engine</label>
-      <select class="studio-select" id="clone-engine-select" aria-label="Cloning engine">
-        <option value="chatterbox">Chatterbox — English, Hindi &amp; Urdu</option>
-        <option value="f5tts">F5-TTS — Hindi &amp; Urdu only</option>
-      </select>
-      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-engine-hint"></span>
-    </div>
-
-    <div id="clone-ref-text-row" style="display:none;margin-bottom:12px;">
-      <label class="studio-label" for="clone-ref-text">What does the reference clip say? (Devanagari)</label>
-      <div style="display:flex;gap:8px;align-items:flex-start;">
-        <textarea class="script-input" id="clone-ref-text" placeholder="जो कुछ भी रेफरेंस क्लिप में बोला गया है, वह यहाँ हिंदी में लिखें…" maxlength="300" style="min-height:56px;flex:1;"></textarea>
-        <button class="btn btn--ghost btn--sm" id="clone-auto-transcribe-btn" type="button" style="white-space:nowrap;" title="Auto-fill from the reference clip using speech recognition">Auto-fill</button>
-      </div>
-      <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-ref-text-hint">F5-TTS needs to know what your reference clip says. Upload a clip and this fills in automatically — always double-check it before generating, speech recognition isn't perfect. If you save this clip as a reusable voice below, this text is saved with it too.</span>
-    </div>
-
-    <label class="studio-label" for="clone-text">Script to speak</label>
+    <!-- Step 2: script -->
+    <span class="studio-primary-label">2. Script to speak</span>
+    <label class="studio-label" for="clone-text" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">Script to speak</label>
     <textarea class="script-input" id="clone-text" placeholder="اردو، हिंदी، or English…" maxlength="{{ clone_char_limit }}" style="min-height:100px;"></textarea>
     <div class="script-meta" style="margin-top:4px;">
       <span style="color:var(--jade-hi);" id="clone-lang-detect"></span>
       <span id="clone-char-count">0 / {{ clone_char_limit }} characters</span>
     </div>
-    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:var(--text-mid);line-height:1.45;margin:12px 0;cursor:pointer;">
-      <input type="checkbox" id="clone-gen-consent" style="margin-top:3px;">
+
+    <!-- Advanced: engine + optional F5 transcript (hidden by default) -->
+    <details class="clone-advanced" style="margin:14px 0 4px;">
+      <summary style="cursor:pointer;font-size:0.88rem;color:var(--text-mid);">Advanced options</summary>
+      <div style="margin-top:12px;">
+        <div style="margin-bottom:12px;">
+          <label class="studio-label" for="clone-engine-select">Engine</label>
+          <select class="studio-select" id="clone-engine-select" aria-label="Cloning engine">
+            <option value="chatterbox">Chatterbox — English, Hindi &amp; Urdu (recommended)</option>
+            <option value="f5tts">F5-TTS — Hindi &amp; Urdu only</option>
+          </select>
+          <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-engine-hint"></span>
+        </div>
+        {# F5-only: reference transcript. Auto-filled; kept out of the main flow so new users aren't confused. #}
+        <div id="clone-ref-text-row" style="display:none;margin-bottom:8px;">
+          <label class="studio-label" for="clone-ref-text">Reference transcript (F5-TTS only)</label>
+          <div style="display:flex;gap:8px;align-items:flex-start;">
+            <textarea class="script-input" id="clone-ref-text" placeholder="Auto-filled from your clip when needed…" maxlength="300" style="min-height:56px;flex:1;"></textarea>
+            <button class="btn btn--ghost btn--sm" id="clone-auto-transcribe-btn" type="button" style="white-space:nowrap;" title="Re-run speech recognition on the reference clip">Re-fill</button>
+          </div>
+          <span style="display:block;color:var(--text-dim);font-size:0.72rem;margin-top:4px;" id="clone-ref-text-hint">Only required for F5-TTS. Filled automatically from your clip — edit only if recognition was wrong.</span>
+        </div>
+      </div>
+    </details>
+
+    <!-- Step 3: generate -->
+    <span class="studio-primary-label" style="margin-top:8px;">3. Generate</span>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:var(--text-mid);line-height:1.45;margin:8px 0 12px;cursor:pointer;">
+      <input type="checkbox" id="clone-gen-consent" style="margin-top:3px;flex-shrink:0;">
       <span>I own this voice or have explicit permission to clone it. I will not use cloning to impersonate someone without consent.</span>
     </label>
     <div class="render-bar" style="margin-top:4px;">
@@ -74,12 +85,9 @@
     </div>
     <div class="gen-progress" id="clone-progress" aria-hidden="true"><div class="gen-progress__bar"></div></div>
     <p id="clone-progress-label" style="font-size:0.8rem;color:var(--text-dim);margin-top:6px;"></p>
-    <p class="privacy-note" style="margin-top:12px;">Voice cloning runs on a GPU and can take 30–90 seconds — don't close this tab while it's working. Longer text is automatically split and stitched for stable quality.</p>
+    <p class="privacy-note" style="margin-top:12px;">Runs on a GPU (about 30–90s). Keep this tab open. Longer scripts are split and stitched automatically.</p>
     <div id="clone-result" style="margin-top:16px;"></div>
 
-    <!-- Consent modal — shown before any voice is ever saved for reuse.
-         Saving is refused server-side without consent:true, this is just
-         the UI gate; see /api/clone/voices/save in app.py. -->
     <div id="clone-consent-modal" class="modal-backdrop" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="clone-consent-title">
       <div class="panel modal-panel">
         <span class="panel__label" id="clone-consent-title">Save this voice</span>
@@ -96,10 +104,6 @@
       </div>
     </div>
 
-    <!-- Public-sharing consent modal — a SEPARATE, stronger consent from the
-         save-time one above. Making a voice public is refused server-side
-         without consent:true on this specific request; see
-         /api/clone/voices/<id>/access in app.py. -->
     <div id="clone-public-consent-modal" class="modal-backdrop" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="clone-public-consent-title">
       <div class="panel modal-panel">
         <span class="panel__label" id="clone-public-consent-title">Make this voice public</span>
