@@ -69,13 +69,13 @@
         <tbody>
           <tr>
             <th scope="row">Text-to-speech</th>
-            <td class="is-yes">Daily limits</td>
-            <td class="is-yes">100,000 chars/mo</td>
-            <td class="is-yes">200,000 chars/mo</td>
+            <td class="is-yes">{{ compare.free_tts }}</td>
+            <td class="is-yes">{{ compare.pro_tts }}</td>
+            <td class="is-yes">{{ compare.pro_plus_tts }}</td>
           </tr>
           <tr>
             <th scope="row">Audio tools</th>
-            <td class="is-yes">Daily limits</td>
+            <td class="is-yes">{{ compare.free_tools }}</td>
             <td class="is-yes">Unlimited</td>
             <td class="is-yes">Unlimited</td>
           </tr>
@@ -83,13 +83,13 @@
             <th scope="row">Voice cloning</th>
             <td class="is-no">—</td>
             <td class="is-no">—</td>
-            <td class="is-yes">60 gens/mo</td>
+            <td class="is-yes">{{ compare.clone_mo }}</td>
           </tr>
           <tr>
             <th scope="row">AI music</th>
             <td class="is-no">—</td>
             <td class="is-no">—</td>
-            <td class="is-yes">40 tracks/mo</td>
+            <td class="is-yes">{{ compare.music_mo }}</td>
           </tr>
           <tr>
             <th scope="row">Signup</th>
