@@ -197,11 +197,11 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
                 )
                 print(f"[transcribe] Whisper REJECTED — {whisper_note}", flush=True)
             else:
-                method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
-                print(f"[transcribe] Whisper OK — method={method} chars={len(text)}", flush=True)
+                raw_method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
+                print(f"[transcribe] Whisper OK — method={raw_method} chars={len(text)}", flush=True)
                 return {
                     "text": text,
-                    "method": method,
+                    "method": "Speech recognition",
                     "language": whisper_result.get("language") or lang_code,
                     "word_count": len(words),
                     "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
@@ -287,15 +287,13 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
         raise UserFacingError("Could not understand the audio. Try a clearer recording with less background noise.")
 
     text = " ".join(chunk_texts).strip()
-    base_method = "Google Speech (standard)" if total_chunks == 1 else f"Google Speech ({len(chunk_texts)}/{total_chunks} segments)"
+    # User-facing method stays short; technical notes stay in whisper_note for logs only.
+    method = "Speech recognition"
     if stopped_early:
-        base_method += " · stopped early (time budget) — transcript may be partial"
-    # Surface the Whisper miss in the method string the UI already displays.
-    if whisper_note:
-        method = f"{base_method} · Whisper skipped: {whisper_note}"
-    else:
-        method = base_method
+        method = "Speech recognition (partial)"
     words = len(text.split()) if text else 0
+    if whisper_note:
+        print(f"[transcribe] google ok — internal note: {whisper_note}", flush=True)
 
     return {
         "text": text,

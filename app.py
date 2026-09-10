@@ -159,20 +159,81 @@ _start_clone_ref_sweep_thread()
 app = Flask(__name__)
 
 
-def api_error(e, action="process that request", status=500):
-    """Log the full exception + traceback server-side. If e is a
-    UserFacingError (see errors.py), its message was deliberately written
-    to be safe and useful for the end user, so it's passed through as-is.
-    Any other exception is genericized — raw exception text (str(e)) can
-    contain server file paths, ffmpeg/library internals, or other
-    implementation details that shouldn't reach an end user — this is the
-    single place every /api/* route should route through instead of
-    jsonify({"error": str(e)}). Mirrors the pattern already used in
-    clone_engine.py and music_engine.py for the async job pipelines."""
-    app.logger.error(f"[api] failed to {action}: {e}\n{traceback.format_exc()}")
+def api_error(e, action="process that request", status=500, category: str = None):
+    """Log the full exception + traceback server-side. UserFacingError
+    messages pass through; other exceptions are genericized for the client.
+    Also records a row in the admin Site Errors panel."""
+    tb = traceback.format_exc()
+    app.logger.error(f"[api] failed to {action}: {e}\n{tb}")
+    path = ""
+    try:
+        path = request.path or ""
+    except Exception:
+        path = ""
+    cat = category
+    if not cat:
+        p = path.lower()
+        if "/clone" in p:
+            cat = "clone"
+        elif "/music" in p:
+            cat = "music"
+        elif "/tts" in p or "generate" in p:
+            cat = "tts"
+        elif "/transcribe" in p:
+            cat = "transcribe"
+        elif "/tools" in p:
+            cat = "tools"
+        elif "/api/v1" in p:
+            cat = "api"
+        else:
+            cat = "system"
+    try:
+        plan = ""
+        try:
+            plan = get_plan() or ("pro" if is_pro() else "free")
+        except Exception:
+            plan = ""
+        msg = str(e) if isinstance(e, UserFacingError) else f"{type(e).__name__}: {e}"
+        persistence.append_site_error(
+            category=cat,
+            action=action,
+            message=msg[:400],
+            detail=(tb or "")[-2000:],
+            path=path,
+            status=int(status or 500),
+            plan=plan,
+        )
+    except Exception:
+        pass
     if isinstance(e, UserFacingError):
         return jsonify({"error": str(e)}), status
     return jsonify({"error": f"Something went wrong trying to {action}. Please try again."}), status
+
+
+def log_site_issue(category: str, action: str, message: str, status: int = 0, detail: str = ""):
+    """Record non-exception issues (quota hits, rejected jobs) for admin."""
+    try:
+        path = ""
+        try:
+            path = request.path or ""
+        except Exception:
+            path = ""
+        plan = ""
+        try:
+            plan = get_plan() or ("pro" if is_pro() else "free")
+        except Exception:
+            plan = ""
+        persistence.append_site_error(
+            category=category or "system",
+            action=action,
+            message=(message or "")[:400],
+            detail=(detail or "")[:1500],
+            path=path,
+            status=int(status or 0),
+            plan=plan,
+        )
+    except Exception:
+        pass
 
 
 # Single source of truth for the canonical domain — used by the canonical
@@ -399,45 +460,57 @@ def _auto_restore_pro_session():
 # (not a "visit"), the admin panel itself (so Faisal checking his own
 # dashboard doesn't inflate his own traffic numbers), API/webhook calls
 # (machine-to-machine, not a page view), and misc crawler/infra paths.
-_TRAFFIC_EXCLUDED_PREFIXES = ("/static/", "/admin", "/api/", "/webhook/", "/ads/", "/ads.txt")
+_TRAFFIC_EXCLUDED_PREFIXES = (
+    "/static/", "/admin", "/api/", "/webhook/", "/ads/", "/ads.txt",
+    "/robots.txt", "/sitemap", "/favicon", "/.well-known/",
+)
 
-# Substrings matched case-insensitively against User-Agent. Covers the bulk
-# of non-human traffic: search engine crawlers, SEO/backlink tools, uptime
-# monitors, and bare HTTP clients (curl/requests/scanners with no UA
-# customization at all). Not exhaustive — a bot that spoofs a normal
-# browser UA will still get counted, same as any server-side approach
-# without a JS challenge — but this removes the most common, highest-volume
-# noise sources that were inflating the daily visitor count.
+# Substrings matched case-insensitively against User-Agent. Covers crawlers,
+# SEO tools, AI scrapers, uptime monitors, and bare HTTP clients.
 _BOT_USER_AGENT_MARKERS = (
-    "bot", "spider", "crawl", "slurp", "curl/", "python-requests", "go-http-client",
-    "wget", "scrapy", "headlesschrome", "phantomjs", "facebookexternalhit",
-    "monitor", "pingdom", "uptimerobot", "statuscake", "ahrefsbot", "semrushbot",
-    "mj12bot", "dotbot", "petalbot", "bytespider", "yandex", "baiduspider",
+    "bot", "spider", "crawl", "slurp", "crawler",
+    "curl/", "wget", "python-requests", "python-urllib", "go-http-client",
+    "java/", "libwww", "httpclient", "okhttp", "scrapy", "aiohttp",
+    "headlesschrome", "phantomjs", "selenium", "puppeteer", "playwright",
+    "facebookexternalhit", "facebot", "twitterbot", "linkedinbot", "whatsapp",
+    "telegrambot", "discordbot", "slackbot", "embedly", "quora link preview",
+    "monitor", "pingdom", "uptimerobot", "statuscake", "newrelic", "datadog",
+    "ahrefs", "semrush", "mj12bot", "dotbot", "petalbot", "bytespider",
+    "yandex", "baidu", "sogou", "exabot", "duckduckbot", "bingpreview",
+    "google-inspectiontool", "googleother", "apis-google", "mediapartners-google",
+    "gptbot", "chatgpt", "claudebot", "anthropic", "ccbot", "bytespider",
+    "amazonbot", "applebot", "ia_archiver", "archive.org", "wayback",
+    "preview", "validator", "checker", "scanner", "security",
 )
 
 
 def _looks_like_bot(request) -> bool:
-    ua = request.headers.get("User-Agent", "").lower()
-    if not ua:
-        return True  # no UA at all is almost never a real browser
-    return any(marker in ua for marker in _BOT_USER_AGENT_MARKERS)
+    ua = (request.headers.get("User-Agent") or "").strip().lower()
+    if not ua or len(ua) < 12:
+        return True
+    if any(marker in ua for marker in _BOT_USER_AGENT_MARKERS):
+        return True
+    # Browsers almost always send Accept-Language; many scanners omit it.
+    al = (request.headers.get("Accept-Language") or "").strip()
+    accept = (request.headers.get("Accept") or "").strip().lower()
+    if not al and accept in ("", "*/*"):
+        return True
+    return False
 
 
 @app.before_request
 def _track_traffic():
-    """One row per (day, ip_hash) — see persistence.log_visit(). GET-only
-    so form submissions/API calls from an already-counted page load don't
-    double-count; excluded prefixes above; known-bot user agents skipped
-    so the admin traffic count reflects real visitors, not crawler/monitor
-    noise. Best-effort: a logging failure here should never take down the
-    actual page request."""
+    """Count real human pageviews separately from bots.
+    Real → traffic_hits; bots → traffic_bot_hits (admin can compare both).
+    GET-only; excluded prefixes; best-effort never blocks the page."""
     if request.method != "GET" or request.path.startswith(_TRAFFIC_EXCLUDED_PREFIXES):
-        return
-    if _looks_like_bot(request):
         return
     try:
         ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
-        persistence.log_visit(ip_hash)
+        if _looks_like_bot(request):
+            persistence.log_bot_visit(ip_hash)
+        else:
+            persistence.log_visit(ip_hash)
     except Exception:
         pass
 
@@ -1703,12 +1776,17 @@ def admin_dashboard():
     anns = persistence.load_announcements()
     live_anns = sum(1 for a in anns if a.get("active"))
     today_visitors = persistence.get_daily_traffic(1)[0]["visitors"]
+    try:
+        errors_24h = persistence.count_site_errors(24)
+    except Exception:
+        errors_24h = 0
     return render_template("admin/dashboard.html",
                             total_keys=len(keys), active_keys=active_keys,
                             pending_reqs=pending_reqs, pending_grace=pending_grace,
                             total_posts=len(posts),
                             total_anns=len(anns), live_anns=live_anns,
                             today_visitors=today_visitors,
+                            errors_24h=errors_24h,
                             db_path=persistence.DB_PATH)
 
 
@@ -1829,17 +1907,32 @@ def admin_requests():
 @admin_required
 def admin_traffic():
     days = int(request.args.get("days", 30))
-    days = max(7, min(days, 90))  # sane bounds — a bad ?days= value shouldn't trigger a huge query
+    days = max(7, min(days, 90))
     daily = persistence.get_daily_traffic(days)
-    chart_data = list(reversed(daily))  # oldest-first for left-to-right chart reading
-    today_stats = daily[0] if daily else {"visitors": 0, "pageviews": 0}
+    bots = persistence.get_daily_bot_traffic(days)
+    bot_by_date = {b["date"]: b for b in bots}
+    # Merge bot columns onto each human row for the table
+    for d in daily:
+        b = bot_by_date.get(d["date"], {"visitors": 0, "pageviews": 0})
+        d["bot_visitors"] = b.get("visitors", 0)
+        d["bot_pageviews"] = b.get("pageviews", 0)
+    chart_data = list(reversed(daily))
+    today_stats = daily[0] if daily else {"visitors": 0, "pageviews": 0, "bot_visitors": 0, "bot_pageviews": 0}
     month_visitors = sum(d["visitors"] for d in daily[:30])
     month_pageviews = sum(d["pageviews"] for d in daily[:30])
+    month_bot_visitors = sum(d.get("bot_visitors", 0) for d in daily[:30])
     max_visitors = max((d["visitors"] for d in chart_data), default=0) or 1
-    return render_template("admin/traffic.html", daily=daily, chart_data=chart_data,
-                            today_stats=today_stats, month_visitors=month_visitors,
-                            month_pageviews=month_pageviews, max_visitors=max_visitors,
-                            days=days)
+    return render_template(
+        "admin/traffic.html",
+        daily=daily,
+        chart_data=chart_data,
+        today_stats=today_stats,
+        month_visitors=month_visitors,
+        month_pageviews=month_pageviews,
+        month_bot_visitors=month_bot_visitors,
+        max_visitors=max_visitors,
+        days=days,
+    )
 
 
 @app.route("/admin/blog", methods=["GET", "POST"])
@@ -2461,6 +2554,26 @@ def confirm_unlock_device(token):
 def admin_audit():
     rows = persistence.load_audit_log(200)
     return render_template("admin/audit.html", rows=rows)
+
+
+@app.route("/admin/errors", methods=["GET", "POST"])
+@admin_required
+def admin_errors():
+    """Technical + generative failures recorded from the live site."""
+    if request.method == "POST" and request.form.get("action") == "clear":
+        n = persistence.clear_site_errors()
+        flash(f"Cleared {n} error entries.", "ok")
+        return redirect(url_for("admin_errors"))
+    cat = (request.args.get("category") or "").strip() or None
+    rows = persistence.load_site_errors(limit=200, category=cat)
+    last24 = persistence.count_site_errors(24)
+    return render_template(
+        "admin/errors.html",
+        rows=rows,
+        category=cat or "",
+        last24=last24,
+        categories=["tts", "clone", "music", "transcribe", "tools", "api", "limit", "system"],
+    )
 
 
 @app.route("/api/announcements")
@@ -4013,10 +4126,12 @@ def api_clone_generate():
     license_key = session.get("license_key", "")
     _clone_day = int(get_limits().get("CLONE_DAILY_LIMIT") or CLONE_DAILY_LIMIT)
     if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") >= _clone_day:
+        log_site_issue("limit", "clone daily backstop", f"Daily voice-cloning limit reached ({_clone_day}/day)", status=429)
         return jsonify({"error": f"Daily voice-cloning limit reached ({_clone_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
     _clone_mo = int(get_limits().get("CLONE_MONTHLY_LIMIT") or CLONE_MONTHLY_LIMIT)
     if license_key and usage_tracking.get_license_monthly_counter(license_key, "clone_gen") >= _clone_mo:
+        log_site_issue("limit", "clone monthly quota", f"Monthly voice-cloning limit reached ({_clone_mo}/month)", status=429)
         return jsonify({"error": f"Monthly voice-cloning limit reached ({_clone_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
 
@@ -4148,10 +4263,12 @@ def api_music_generate():
     license_key = session.get("license_key", "")
     _music_day = int(get_limits().get("MUSIC_DAILY_LIMIT") or MUSIC_DAILY_LIMIT)
     if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") >= _music_day:
+        log_site_issue("limit", "music daily backstop", f"Daily music-generation limit reached ({_music_day}/day)", status=429)
         return jsonify({"error": f"Daily music-generation limit reached ({_music_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
     _music_mo = int(get_limits().get("MUSIC_MONTHLY_LIMIT") or MUSIC_MONTHLY_LIMIT)
     if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") >= _music_mo:
+        log_site_issue("limit", "music monthly quota", f"Monthly music-generation limit reached ({_music_mo}/month)", status=429)
         return jsonify({"error": f"Monthly music-generation limit reached ({_music_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
 

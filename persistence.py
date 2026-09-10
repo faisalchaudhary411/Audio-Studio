@@ -187,6 +187,10 @@ def init_db():
                     id   TEXT PRIMARY KEY,
                     data TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS site_errors (
+                    id   TEXT PRIMARY KEY,
+                    data TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS saved_voices (
                     id          TEXT PRIMARY KEY,
                     license_key TEXT NOT NULL,
@@ -370,6 +374,62 @@ def get_daily_traffic(days: int = 30) -> list:
         rows = conn.execute(
             "SELECT date, COUNT(DISTINCT ip_hash) AS visitors, SUM(hits) AS pageviews "
             "FROM traffic_hits WHERE date >= ? GROUP BY date",
+            (start,),
+        ).fetchall()
+    finally:
+        conn.close()
+    by_date = {r[0]: {"visitors": r[1], "pageviews": r[2]} for r in rows}
+    out = []
+    for i in range(days):
+        d = (today - _dt.timedelta(days=i)).isoformat()
+        stats = by_date.get(d, {"visitors": 0, "pageviews": 0})
+        out.append({"date": d, "visitors": stats["visitors"], "pageviews": stats["pageviews"]})
+    return out
+
+
+def log_bot_visit(ip_hash: str, date: str = None):
+    """Same shape as log_visit, but for traffic classified as bots.
+    Kept separate so admin can show real humans vs filtered noise."""
+    import datetime as _dt
+    date = date or _dt.date.today().isoformat()
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS traffic_bot_hits ("
+                "date TEXT NOT NULL, ip_hash TEXT NOT NULL, "
+                "hits INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (date, ip_hash))"
+            )
+            conn.execute(
+                "INSERT INTO traffic_bot_hits(date, ip_hash, hits) VALUES (?, ?, 1) "
+                "ON CONFLICT(date, ip_hash) DO UPDATE SET hits = hits + 1",
+                (date, ip_hash),
+            )
+            if random.random() < 0.002:
+                cutoff = (_dt.date.today() - _dt.timedelta(days=180)).isoformat()
+                conn.execute("DELETE FROM traffic_bot_hits WHERE date < ?", (cutoff,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        finally:
+            conn.close()
+
+
+def get_daily_bot_traffic(days: int = 30) -> list:
+    """Newest-first bot counts for the last `days` (mirrors get_daily_traffic)."""
+    import datetime as _dt
+    today = _dt.date.today()
+    start = (today - _dt.timedelta(days=days - 1)).isoformat()
+    conn = _connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS traffic_bot_hits ("
+            "date TEXT NOT NULL, ip_hash TEXT NOT NULL, "
+            "hits INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (date, ip_hash))"
+        )
+        rows = conn.execute(
+            "SELECT date, COUNT(DISTINCT ip_hash) AS visitors, SUM(hits) AS pageviews "
+            "FROM traffic_bot_hits WHERE date >= ? GROUP BY date",
             (start,),
         ).fetchall()
     finally:
@@ -905,6 +965,116 @@ def load_audit_log(limit: int = 100) -> list:
     finally:
         conn.close()
 
+
+
+# ---- Site error / incident log (technical + generative failures) ----------
+def append_site_error(
+    category: str,
+    action: str,
+    message: str = "",
+    detail: str = "",
+    path: str = "",
+    status: int = 0,
+    plan: str = "",
+    extra: dict = None,
+) -> None:
+    """Record a site-side failure for the admin Errors panel.
+
+    Never raises — logging must not break the request that failed.
+    Keeps the newest 800 entries (oldest pruned).
+    """
+    import uuid
+    import datetime as _dt
+    entry = {
+        "id": str(uuid.uuid4()),
+        "at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "category": (category or "system")[:40],
+        "action": (action or "")[:120],
+        "message": (message or "")[:400],
+        "detail": (detail or "")[:2500],
+        "path": (path or "")[:200],
+        "status": int(status or 0),
+        "plan": (plan or "")[:20],
+        "extra": extra or {},
+    }
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                # Ensure table exists on older DBs that were created before this feature
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS site_errors (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+                )
+                conn.execute(
+                    "INSERT INTO site_errors(id, data) VALUES (?, ?)",
+                    (entry["id"], json.dumps(entry, ensure_ascii=False)),
+                )
+                count = conn.execute("SELECT COUNT(*) FROM site_errors").fetchone()[0]
+                if count > 800:
+                    old = conn.execute(
+                        "SELECT id FROM site_errors ORDER BY id ASC LIMIT ?",
+                        (count - 800,),
+                    ).fetchall()
+                    for (oid,) in old:
+                        conn.execute("DELETE FROM site_errors WHERE id = ?", (oid,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            finally:
+                conn.close()
+    except Exception:
+        pass
+
+
+def load_site_errors(limit: int = 150, category: str = None) -> list:
+    conn = _connect()
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS site_errors (id TEXT PRIMARY KEY, data TEXT NOT NULL)"
+        )
+        rows = conn.execute("SELECT data FROM site_errors").fetchall()
+        items = []
+        for r in rows:
+            try:
+                items.append(json.loads(r[0]))
+            except Exception:
+                continue
+        if category:
+            cat = category.lower().strip()
+            items = [x for x in items if (x.get("category") or "").lower() == cat]
+        items.sort(key=lambda x: x.get("at", ""), reverse=True)
+        return items[:limit]
+    finally:
+        conn.close()
+
+
+def count_site_errors(hours: int = 24) -> int:
+    """Rough count of errors in the last N hours (string compare on at)."""
+    import datetime as _dt
+    cutoff = (_dt.datetime.now() - _dt.timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    items = load_site_errors(limit=800)
+    return sum(1 for x in items if (x.get("at") or "") >= cutoff)
+
+
+def clear_site_errors() -> int:
+    """Delete all site error rows. Returns number removed (best-effort)."""
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("CREATE TABLE IF NOT EXISTS site_errors (id TEXT PRIMARY KEY, data TEXT NOT NULL)")
+                n = conn.execute("SELECT COUNT(*) FROM site_errors").fetchone()[0]
+                conn.execute("DELETE FROM site_errors")
+                conn.commit()
+                return int(n or 0)
+            except Exception:
+                conn.rollback()
+                return 0
+            finally:
+                conn.close()
+    except Exception:
+        return 0
 
 # ---- Saved (reusable) cloned voices ----------------------------------------
 # One row per voice a Pro+ customer has chosen to keep for reuse. Kept
