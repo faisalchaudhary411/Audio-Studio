@@ -8,7 +8,7 @@
 <div style="margin:6px 0;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
     <span style="color:var(--text-dim);font-size:0.76rem;">{{ label }}</span>
-    <span style="color:var(--text-dim);font-size:0.76rem;font-family:var(--mono);">{{ used }} / {{ limit }}</span>
+    <span style="color:var(--text-dim);font-size:0.76rem;font-family:var(--mono);">{{ '{:,}'.format(used) }} / {{ '{:,}'.format(limit) }}</span>
   </div>
   <div style="background:rgba(245,242,234,0.08);border-radius:999px;height:6px;">
     <div style="background:{{ color }};width:{{ pct }}%;height:6px;border-radius:999px;transition:width 0.3s;"></div>
