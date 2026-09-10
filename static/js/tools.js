@@ -201,11 +201,22 @@
       zone.appendChild(hint);
       zone.appendChild(input);
       zone.appendChild(name);
+      const formatSize = (bytes) => {
+        if (!bytes && bytes !== 0) return '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      };
       const updateName = () => {
         const files = input.files;
         if (!files || !files.length) { name.textContent = ''; return; }
-        if (files.length === 1) name.textContent = files[0].name;
-        else name.textContent = files.length + ' files selected';
+        if (files.length === 1) {
+          name.textContent = files[0].name + ' · ' + formatSize(files[0].size);
+        } else {
+          let total = 0;
+          for (let i = 0; i < files.length; i++) total += files[i].size || 0;
+          name.textContent = files.length + ' files · ' + formatSize(total);
+        }
       };
       input.addEventListener('change', updateName);
       zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('is-drag'); });

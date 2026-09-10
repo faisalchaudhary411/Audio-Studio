@@ -305,14 +305,12 @@ function initBillingToggle(){
 }
 
 // ---- Optional permissions (non-blocking) ----
-// Premium UX: never trap the landing page with a full-screen permissions
-// sheet. Mic is requested only when voice cloning starts. Notifications
-// are offered once, softly, after the user has engaged (first successful
-// TTS or after ~45s on Studio) — never on cold landing.
+// Never trap the landing page. Never prompt during an active generation
+// (mobile browsers can reload/navigate when the system permission dialog
+// opens mid-request). Mic is still requested only inside the clone flow.
 function initPermissionsSheet(){
   const sheet = document.getElementById('perm-sheet');
   if(sheet){
-    // Keep markup for accessibility but never auto-open.
     sheet.hidden = true;
     sheet.setAttribute('hidden', '');
     sheet.style.display = 'none';
@@ -321,48 +319,58 @@ function initPermissionsSheet(){
   }
   try { localStorage.setItem('voxcraft_perm_seen', '1'); } catch(e) {}
 
-  // Soft notification prompt after engagement (Studio only, once).
   const NOTIF_KEY = 'voxcraft_notif_asked';
   function softAskNotifications(){
     try {
       if(localStorage.getItem(NOTIF_KEY)) return;
       if(typeof Notification === 'undefined' || Notification.permission !== 'default') return;
-      // Only on studio / tools — never interrupt marketing homepage.
+      if(window.__voxGenerating) return; // never during generate
       const path = location.pathname || '';
       if(path === '/' || path === '') return;
       if(!path.startsWith('/studio') && !path.startsWith('/tools') && !path.startsWith('/voice')) return;
+      // Don't stack over sticky generate bars on small screens
+      if(window.matchMedia && window.matchMedia('(max-width:700px)').matches){
+        // On mobile, only ask from Account or after explicit idle — skip auto.
+        return;
+      }
       localStorage.setItem(NOTIF_KEY, '1');
-      // Non-blocking toast, not a modal.
       const toast = document.createElement('div');
       toast.className = 'soft-perm-toast';
       toast.setAttribute('role', 'status');
       toast.innerHTML =
-        '<span class="soft-perm-toast__text">Want occasional product updates and discounts?</span>' +
+        '<span class="soft-perm-toast__text">Want occasional product updates?</span>' +
         '<button type="button" class="btn btn--brass btn--sm" data-soft-perm="yes">Enable</button>' +
         '<button type="button" class="btn btn--ghost btn--sm" data-soft-perm="no">Not now</button>';
       document.body.appendChild(toast);
       requestAnimationFrame(() => toast.classList.add('is-visible'));
       const dismiss = () => {
         toast.classList.remove('is-visible');
-        setTimeout(() => toast.remove(), 280);
+        setTimeout(() => { if(toast.parentNode) toast.remove(); }, 280);
       };
       toast.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-soft-perm]');
         if(!btn) return;
         if(btn.getAttribute('data-soft-perm') === 'yes'){
-          try { Notification.requestPermission(); } catch(err) {}
+          // Defer so we are not mid-fetch when the OS dialog opens
+          setTimeout(() => { try { Notification.requestPermission(); } catch(err) {} }, 400);
         }
         dismiss();
       });
-      setTimeout(dismiss, 12000);
+      setTimeout(dismiss, 10000);
     } catch(e) {}
   }
-  // After first successful generate (Studio posts a custom event) or delayed fallback.
+  // Only after generate completed AND user is idle (8s), never on a timer alone.
   window.addEventListener('voxcraft:generated', () => {
-    setTimeout(softAskNotifications, 2500);
+    setTimeout(() => {
+      if(!window.__voxGenerating) softAskNotifications();
+    }, 8000);
   }, { once: true });
-  setTimeout(softAskNotifications, 60000);
 }
+
+// Track in-flight generation so permission prompts never interrupt it.
+window.__voxGenerating = false;
+const _origSetBusy = typeof voxSetBusy === 'function' ? null : null;
+
 
 // ---- Custom select (replaces native open-dropdown UI on .studio-select) ----
 // See the .custom-select CSS block for why this exists: a native <select>'s
@@ -500,6 +508,7 @@ function enhanceAllSelects() {
 // between tools again.
 function voxSetBusy(btn, on) {
   if (!btn) return;
+  window.__voxGenerating = !!on;
   btn.disabled = !!on;
   btn.classList.toggle('is-loading', !!on);
   if (on) btn.classList.remove('is-success');
@@ -770,9 +779,14 @@ function voxAudioPlayerHtml(b64, filename, mime) {
   const handoffNote = ok
     ? ''
     : `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
+  const safeName = String(filename).replace(/[<>&"']/g, '');
   return `
     <div class="result-panel">
-      <audio controls src="data:${mime};base64,${b64}"></audio>
+      <div class="result-panel__label">Your audio</div>
+      <div class="vox-player">
+        <div class="vox-player__meta"><strong>${safeName}</strong><span>Ready</span></div>
+        <audio controls preload="metadata" src="data:${mime};base64,${b64}"></audio>
+      </div>
       <div class="result-panel__actions">
         <a class="btn btn--brass btn--sm" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
         <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>

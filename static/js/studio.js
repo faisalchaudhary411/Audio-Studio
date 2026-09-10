@@ -382,8 +382,8 @@
       const mime = ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
       if (typeof voxAudioPlayerHtml === 'function') {
         singleResult.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, mime).replace(
-          '<div class="result-panel">',
-          '<div class="result-panel"><div class="result-panel__label">Your narration</div>'
+          'Your audio',
+          'Your narration'
         );
       } else {
         try {
