@@ -61,6 +61,11 @@ def _init_db():
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_music_jobs_created ON music_jobs(created_at)")
+        for col, typedef in (("license_key", "TEXT"), ("quota_billed", "INTEGER DEFAULT 0")):
+            try:
+                conn.execute(f"ALTER TABLE music_jobs ADD COLUMN {col} {typedef}")
+            except Exception:
+                pass
         conn.commit()
         conn.close()
 
@@ -95,14 +100,21 @@ def _start_sweep_thread():
 _start_sweep_thread()
 
 
-def _insert_job(job_id: str) -> None:
+def _insert_job(job_id: str, license_key: str = "") -> None:
     now = time.time()
     with _db_lock:
         conn = _db_conn()
-        conn.execute(
-            "INSERT INTO music_jobs (job_id, status, created_at, updated_at) VALUES (?, 'queued', ?, ?)",
-            (job_id, now, now),
-        )
+        try:
+            conn.execute(
+                "INSERT INTO music_jobs (job_id, status, created_at, updated_at, license_key, quota_billed) "
+                "VALUES (?, 'queued', ?, ?, ?, 0)",
+                (job_id, now, now, license_key or ""),
+            )
+        except Exception:
+            conn.execute(
+                "INSERT INTO music_jobs (job_id, status, created_at, updated_at) VALUES (?, 'queued', ?, ?)",
+                (job_id, now, now),
+            )
         conn.commit()
         conn.close()
 
@@ -153,6 +165,8 @@ def _fetch_job(job_id: str):
         "error": row["error"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "license_key": row["license_key"] if "license_key" in row.keys() else "",
+        "quota_billed": int(row["quota_billed"] if "quota_billed" in row.keys() else 0),
     }
 
 
@@ -188,14 +202,47 @@ def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int, seed: i
 
 # ── Public API (unchanged interface — app.py calls these) ──────────────────
 
-def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int = None) -> dict:
+
+def claim_quota_bill(job_id: str) -> str:
+    """Atomically mark music job billed. Returns license_key if caller should charge."""
+    with _db_lock:
+        conn = _db_conn()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT COALESCE(license_key,'') AS license_key, COALESCE(quota_billed,0) AS quota_billed "
+                "FROM music_jobs WHERE job_id = ? AND status = 'done'",
+                (job_id,),
+            ).fetchone()
+            if not row or int(row["quota_billed"] or 0) != 0:
+                conn.commit()
+                return ""
+            key = row["license_key"] or ""
+            if not key:
+                conn.commit()
+                return ""
+            conn.execute(
+                "UPDATE music_jobs SET quota_billed = 1, updated_at = ? WHERE job_id = ?",
+                (time.time(), job_id),
+            )
+            conn.commit()
+            return key
+        except Exception:
+            conn.rollback()
+            return ""
+        finally:
+            conn.close()
+
+
+def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int = None,
+                    license_key: str = "") -> dict:
     """Queue a music generation job and return its ID immediately.
 
     NOTE: parameter is still called 'tags' for backward compatibility with
     app.py — it's mapped to ACE-Step's 'prompt'/caption field.
     """
     job_id = uuid.uuid4().hex
-    _insert_job(job_id)
+    _insert_job(job_id, license_key=license_key)
 
     if not music_client.is_configured():
         _update_job(

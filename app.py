@@ -4189,6 +4189,7 @@ def api_clone_generate():
             language_id=language_id,
             engine=engine,
             ref_text=ref_text,
+            license_key=license_key or "",
         )
     except Exception as e:
         # Full traceback goes server-side only — it was previously returned
@@ -4202,10 +4203,7 @@ def api_clone_generate():
     if not job_id:
         return jsonify({"error": "Failed to create clone job — no job ID returned."}), 500
 
-    if license_key:
-        usage_tracking.bump_license_daily_counter(license_key, "clone_gen")
-        usage_tracking.bump_license_monthly_counter(license_key, "clone_gen")
-
+    # Quota charged only when status becomes done (see api_clone_status).
     return jsonify({"job_id": job_id})
 
 
@@ -4234,6 +4232,15 @@ def api_clone_status(job_id):
         }), 404
 
     if job["status"] == "done":
+        # Charge quota once, only on successful completion.
+        try:
+            from clone_engine import claim_quota_bill
+            bill_key = claim_quota_bill(job_id)
+            if bill_key:
+                usage_tracking.bump_license_daily_counter(bill_key, "clone_gen")
+                usage_tracking.bump_license_monthly_counter(bill_key, "clone_gen")
+        except Exception:
+            app.logger.exception("clone quota bill failed")
         return jsonify({
             "status": "done",
             "audio_b64": base64.b64encode(job["audio"]).decode("ascii"),
@@ -4287,12 +4294,12 @@ def api_music_generate():
     if duration < 10 or duration > MUSIC_MAX_DURATION_SEC:
         return jsonify({"error": f"Duration must be between 10 and {MUSIC_MAX_DURATION_SEC} seconds."}), 400
 
-    result = music_engine.start_music_job(tags, "" if instrumental else lyrics, duration)
+    result = music_engine.start_music_job(
+        tags, "" if instrumental else lyrics, duration, license_key=license_key or ""
+    )
     if result.get("error"):
         return jsonify(result), 503
-    if license_key:
-        usage_tracking.bump_license_daily_counter(license_key, "music_gen")
-        usage_tracking.bump_license_monthly_counter(license_key, "music_gen")
+    # Quota charged only when status becomes done (see api_music_status).
     return jsonify(result)
 
 
@@ -4305,6 +4312,13 @@ def api_music_status(job_id):
     if not job:
         return jsonify({"error": "Unknown job."}), 404
     if job["status"] == "done":
+        try:
+            bill_key = music_engine.claim_quota_bill(job_id)
+            if bill_key:
+                usage_tracking.bump_license_daily_counter(bill_key, "music_gen")
+                usage_tracking.bump_license_monthly_counter(bill_key, "music_gen")
+        except Exception:
+            app.logger.exception("music quota bill failed")
         return jsonify({"status": "done", "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
     if job["status"] == "error":
         return jsonify({"status": "error", "error": job["error"]})
