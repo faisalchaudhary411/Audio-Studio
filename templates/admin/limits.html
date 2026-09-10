@@ -44,6 +44,36 @@
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Free voices count</label>
         <input type="number" name="FREE_VOICES_COUNT" value="{{ limits.FREE_VOICES_COUNT }}" class="admin-input" style="width:100%;">
       </div>
+
+      <div style="grid-column:1/-1;margin-top:8px;padding-top:12px;border-top:1px solid var(--line);">
+        <span style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--jade-hi);">Pro / Pro+ monthly quotas</span>
+        <p style="color:var(--text-dim);font-size:0.75rem;margin:6px 0 10px;">Advertised ceilings for TTS, voice clone, and AI music. Daily clone/music caps remain as burst backstops.</p>
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro TTS chars / month</label>
+        <input type="number" name="TTS_CHAR_MONTHLY_LIMIT_PRO" value="{{ limits.get('TTS_CHAR_MONTHLY_LIMIT_PRO', 100000) }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro+ TTS chars / month</label>
+        <input type="number" name="TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS" value="{{ limits.get('TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS', 200000) }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Voice clone gens / month (Pro+)</label>
+        <input type="number" name="CLONE_MONTHLY_LIMIT" value="{{ limits.get('CLONE_MONTHLY_LIMIT', 60) }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">AI music tracks / month (Pro+)</label>
+        <input type="number" name="MUSIC_MONTHLY_LIMIT" value="{{ limits.get('MUSIC_MONTHLY_LIMIT', 40) }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Clone daily backstop</label>
+        <input type="number" name="CLONE_DAILY_LIMIT" value="{{ limits.get('CLONE_DAILY_LIMIT', 30) }}" class="admin-input" style="width:100%;">
+      </div>
+      <div>
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Music daily backstop</label>
+        <input type="number" name="MUSIC_DAILY_LIMIT" value="{{ limits.get('MUSIC_DAILY_LIMIT', 20) }}" class="admin-input" style="width:100%;">
+      </div>
+
       <div>
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Pro price (PKR, manual payment)</label>
         <input type="number" name="PRO_PRICE_PKR" value="{{ limits.PRO_PRICE_PKR }}" class="admin-input" style="width:100%;">
