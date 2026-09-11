@@ -1,3 +1,9 @@
+{% extends "base.html" %}
+{% from "partials/usage_bar.html" import usage_bar %}
+{% block title %}AI Voice Studio — Text-to-Speech in 27 Languages — VoxCraft{% endblock %}
+{% block meta_description %}Generate natural narration from text in 27 languages (88 neural voices), including Urdu and Hindi. Free tier available, batch mode, SSML-style markup, and Pro+ voice cloning.{% endblock %}
+
+{% block content %}
 <div class="studio">
 
   {# First-run coach — dismissed into localStorage by main.js #}
