@@ -33,35 +33,50 @@
   </div>
 
   <div class="api-plans">
-    <div class="api-plan">
+    <div class="api-plan{% if current_api_plan == 'api_free' %} api-plan--current{% endif %}">
       <span class="api-plan__tag">Free</span>
       <p class="api-plan__price">$0</p>
       <p class="api-plan__quota">{{ '{:,}'.format(api_free_quota) }} chars / month · instant, no card</p>
+      {% if current_api_plan == 'api_free' %}
+      <button type="button" class="btn btn--ghost btn--block" disabled>Current plan</button>
+      <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;text-align:center;">Manage keys on <a href="{{ url_for('account_dashboard') }}" style="color:var(--brass-hi);">Account</a>.</p>
+      {% elif current_api_plan in ('api_starter', 'api_pro') %}
+      <button type="button" class="btn btn--ghost btn--block" disabled>Included in your plan</button>
+      {% else %}
       <form method="post" action="{{ url_for('developers_signup') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="customer_name" placeholder="Your name" class="upgrade-field" required>
-        <input type="email" name="customer_email" placeholder="you@example.com" class="upgrade-field" required>
+        <input type="email" name="customer_email" placeholder="you@example.com" class="upgrade-field" required value="{{ account_email_ctx or '' }}">
         <button type="submit" class="btn btn--brass btn--block">Get free key</button>
       </form>
+      {% endif %}
       {% if signup_error %}<p class="upgrade-err" style="margin-top:8px;">{{ signup_error }}</p>{% endif %}
     </div>
 
-    <div class="api-plan">
+    <div class="api-plan{% if current_api_plan == 'api_starter' %} api-plan--current{% endif %}">
       <span class="api-plan__tag">Starter</span>
       <p class="api-plan__price"><span class="api-plan__price-val" data-monthly="{{ api_starter_price }}" data-annual="{{ api_starter_price_annual }}">{{ api_starter_price }}</span><span class="api-plan__price-period">/mo</span></p>
       <p class="api-plan__quota">{{ '{:,}'.format(api_starter_quota) }} chars / month · key on payment</p>
-      {% if checkout_url_api_starter %}
+      {% if current_api_plan == 'api_starter' %}
+      <button type="button" class="btn btn--ghost btn--block" disabled>Current plan</button>
+      <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;text-align:center;">Manage keys on <a href="{{ url_for('account_dashboard') }}" style="color:var(--brass-hi);">Account</a>.</p>
+      {% elif current_api_plan == 'api_pro' %}
+      <button type="button" class="btn btn--ghost btn--block" disabled>Included in Pro</button>
+      {% elif checkout_url_api_starter %}
       <a href="{{ checkout_url_api_starter }}" class="btn btn--ghost btn--block" data-fs-checkout>Subscribe · Starter</a>
       {% else %}
       <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--ghost btn--block">Contact for Starter</a>
       {% endif %}
     </div>
 
-    <div class="api-plan api-plan--featured">
+    <div class="api-plan api-plan--featured{% if current_api_plan == 'api_pro' %} api-plan--current{% endif %}">
       <span class="api-plan__tag">Pro</span>
       <p class="api-plan__price"><span class="api-plan__price-val" data-monthly="{{ api_pro_price }}" data-annual="{{ api_pro_price_annual }}">{{ api_pro_price }}</span><span class="api-plan__price-period">/mo</span></p>
       <p class="api-plan__quota">{{ '{:,}'.format(api_pro_quota) }} chars / month · key on payment</p>
-      {% if checkout_url_api_pro %}
+      {% if current_api_plan == 'api_pro' %}
+      <button type="button" class="btn btn--ghost btn--block" disabled>Current plan</button>
+      <p style="color:var(--text-dim);font-size:0.78rem;margin-top:8px;text-align:center;">Manage keys on <a href="{{ url_for('account_dashboard') }}" style="color:var(--brass-hi);">Account</a>.</p>
+      {% elif checkout_url_api_pro %}
       <a href="{{ checkout_url_api_pro }}" class="btn btn--brass btn--block" data-fs-checkout>Subscribe · Pro</a>
       {% else %}
       <a href="{{ url_for('contact', topic='API Access') }}" class="btn btn--brass btn--block">Contact for Pro</a>
