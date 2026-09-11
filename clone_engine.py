@@ -535,6 +535,45 @@ def _run_clone_job(job_id: str, text: str, reference_audio_path: str,
 
 
 
+def count_active_jobs_for_license(license_key: str) -> int:
+    """Jobs for this license, created within the job-expiry window, that
+    are still in progress (any status other than done/error) — i.e. not
+    yet billed and not yet failed.
+
+    Checked alongside the billed daily/monthly counters at request time
+    in app.py. Without this, the daily/monthly limit only actually gets
+    enforced when a job completes (see claim_quota_bill()) — so a burst of
+    requests fired before any of them finishes would each see the billed
+    count as still low and all get dispatched to the GPU worker, well
+    past the intended cap. This closes most of that window: an in-flight
+    job now counts against the limit the moment it's queued, not just
+    once it's billed.
+
+    Not a perfect lock — two requests arriving within the same few
+    milliseconds can still both read this count before either one's row
+    is inserted, so a determined burst could still slip a small number of
+    extra jobs through. That residual race would need the check and the
+    insert wrapped in one atomic transaction to close completely, which
+    isn't practical here since the billed counters live in a separate
+    store (usage_tracking.py) from this jobs table. This trades a
+    theoretical remaining few-millisecond race for a real, large fix to
+    the actual reported gap (an effectively unbounded one)."""
+    if not license_key:
+        return 0
+    cutoff = time.time() - JOB_MAX_AGE_SECONDS
+    with _db_lock:
+        conn = _db_conn()
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM clone_jobs "
+                "WHERE license_key = ? AND created_at > ? AND status NOT IN ('done', 'error')",
+                (license_key, cutoff),
+            ).fetchone()
+            return int(row["n"] or 0)
+        finally:
+            conn.close()
+
+
 def claim_quota_bill(job_id: str) -> str:
     """Atomically mark job as quota-billed. Returns license_key if this
     caller should charge (first successful claim), else empty string."""

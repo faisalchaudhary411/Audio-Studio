@@ -203,6 +203,27 @@ def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int, seed: i
 # ── Public API (unchanged interface — app.py calls these) ──────────────────
 
 
+def count_active_jobs_for_license(license_key: str) -> int:
+    """Music equivalent of clone_engine.count_active_jobs_for_license() —
+    see that docstring for the full rationale (closes the race where a
+    burst of requests fired before any job bills could all pass the
+    billed-count check)."""
+    if not license_key:
+        return 0
+    cutoff = time.time() - JOB_MAX_AGE_SECONDS
+    with _db_lock:
+        conn = _db_conn()
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM music_jobs "
+                "WHERE license_key = ? AND created_at > ? AND status NOT IN ('done', 'error')",
+                (license_key, cutoff),
+            ).fetchone()
+            return int(row["n"] or 0)
+        finally:
+            conn.close()
+
+
 def claim_quota_bill(job_id: str) -> str:
     """Atomically mark music job billed. Returns license_key if caller should charge."""
     with _db_lock:

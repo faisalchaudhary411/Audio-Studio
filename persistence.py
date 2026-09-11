@@ -469,10 +469,14 @@ def load_limits() -> dict:
     finally:
         conn.close()
     merged = DEFAULT_LIMITS.copy()
-    # Apply every stored key (not only DEFAULT keys) so newly added admin
-    # fields persist after deploy without requiring a code redeploy of defaults.
-    for k, v in stored.items():
-        merged[k] = v
+    # Only apply stored keys that DEFAULT_LIMITS still recognizes. A new
+    # key added to DEFAULT_LIMITS already gets its default from the
+    # .copy() above even if `stored` predates it (nothing to fix there) —
+    # but the reverse matters: if a key is later renamed or removed from
+    # DEFAULT_LIMITS, a leftover value under the old name sitting in the
+    # DB would otherwise silently flow into the live config forever. The
+    # whitelist is what makes a removed/renamed key actually stop applying.
+    merged.update({k: stored[k] for k in stored if k in DEFAULT_LIMITS})
     return merged
 
 
@@ -948,11 +952,16 @@ def append_audit(action: str, detail: str = "", actor: str = "admin") -> None:
                     "INSERT INTO audit_log(id, data) VALUES (?, ?)",
                     (entry["id"], json.dumps(entry, ensure_ascii=False)),
                 )
-                # Cap at 500 rows
+                # Cap at 500 rows. `id` is a uuid4() — random, not
+                # chronological — so ordering by it does NOT find the
+                # oldest rows, it finds whichever happen to sort first
+                # alphabetically. Order by SQLite's implicit rowid
+                # instead, which is insertion-ordered for a normal
+                # (non-WITHOUT-ROWID) table like this one.
                 count = conn.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0]
                 if count > 500:
                     old = conn.execute(
-                        "SELECT id FROM audit_log ORDER BY id ASC LIMIT ?",
+                        "SELECT id FROM audit_log ORDER BY rowid ASC LIMIT ?",
                         (count - 500,),
                     ).fetchall()
                     for (oid,) in old:
@@ -1023,8 +1032,11 @@ def append_site_error(
                 )
                 count = conn.execute("SELECT COUNT(*) FROM site_errors").fetchone()[0]
                 if count > 800:
+                    # See append_audit()'s comment above — order by rowid,
+                    # not the random uuid4() id, to actually prune the
+                    # oldest rows rather than an arbitrary alphabetical set.
                     old = conn.execute(
-                        "SELECT id FROM site_errors ORDER BY id ASC LIMIT ?",
+                        "SELECT id FROM site_errors ORDER BY rowid ASC LIMIT ?",
                         (count - 800,),
                     ).fetchall()
                     for (oid,) in old:

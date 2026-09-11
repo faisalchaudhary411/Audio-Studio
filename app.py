@@ -4161,14 +4161,22 @@ def api_clone_generate():
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     license_key = session.get("license_key", "")
+    # In-flight jobs (queued/generating, not yet billed) count toward both
+    # limits too — otherwise a burst of requests fired before any of them
+    # completes would each see the billed count as still low and all get
+    # dispatched. See clone_engine.count_active_jobs_for_license().
+    _clone_in_flight = 0
+    if license_key:
+        from clone_engine import count_active_jobs_for_license as _clone_in_flight_fn
+        _clone_in_flight = _clone_in_flight_fn(license_key)
     _clone_day = int(get_limits().get("CLONE_DAILY_LIMIT") or CLONE_DAILY_LIMIT)
-    if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") >= _clone_day:
-        log_site_issue("limit", "clone daily backstop", f"Daily voice-cloning limit reached ({_clone_day}/day)", status=429)
+    if license_key and usage_tracking.get_license_daily_counter(license_key, "clone_gen") + _clone_in_flight >= _clone_day:
+        log_site_issue("limit", "clone daily backstop", f"Daily voice-cloning limit reached ({_clone_day}/day, {_clone_in_flight} in progress)", status=429)
         return jsonify({"error": f"Daily voice-cloning limit reached ({_clone_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
     _clone_mo = int(get_limits().get("CLONE_MONTHLY_LIMIT") or CLONE_MONTHLY_LIMIT)
-    if license_key and usage_tracking.get_license_monthly_counter(license_key, "clone_gen") >= _clone_mo:
-        log_site_issue("limit", "clone monthly quota", f"Monthly voice-cloning limit reached ({_clone_mo}/month)", status=429)
+    if license_key and usage_tracking.get_license_monthly_counter(license_key, "clone_gen") + _clone_in_flight >= _clone_mo:
+        log_site_issue("limit", "clone monthly quota", f"Monthly voice-cloning limit reached ({_clone_mo}/month, {_clone_in_flight} in progress)", status=429)
         return jsonify({"error": f"Monthly voice-cloning limit reached ({_clone_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
 
@@ -4305,14 +4313,17 @@ def api_music_generate():
         return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
     license_key = session.get("license_key", "")
+    _music_in_flight = 0
+    if license_key:
+        _music_in_flight = music_engine.count_active_jobs_for_license(license_key)
     _music_day = int(get_limits().get("MUSIC_DAILY_LIMIT") or MUSIC_DAILY_LIMIT)
-    if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") >= _music_day:
-        log_site_issue("limit", "music daily backstop", f"Daily music-generation limit reached ({_music_day}/day)", status=429)
+    if license_key and usage_tracking.get_license_daily_counter(license_key, "music_gen") + _music_in_flight >= _music_day:
+        log_site_issue("limit", "music daily backstop", f"Daily music-generation limit reached ({_music_day}/day, {_music_in_flight} in progress)", status=429)
         return jsonify({"error": f"Daily music-generation limit reached ({_music_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
     _music_mo = int(get_limits().get("MUSIC_MONTHLY_LIMIT") or MUSIC_MONTHLY_LIMIT)
-    if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") >= _music_mo:
-        log_site_issue("limit", "music monthly quota", f"Monthly music-generation limit reached ({_music_mo}/month)", status=429)
+    if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") + _music_in_flight >= _music_mo:
+        log_site_issue("limit", "music monthly quota", f"Monthly music-generation limit reached ({_music_mo}/month, {_music_in_flight} in progress)", status=429)
         return jsonify({"error": f"Monthly music-generation limit reached ({_music_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
 
