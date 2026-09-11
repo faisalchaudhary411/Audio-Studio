@@ -1039,7 +1039,28 @@ def developers():
     issuance/overrides, it's just no longer required for a customer to get
     a key."""
     lim = persistence.load_limits()
-    return render_template("developers.html", **_developers_ctx(lim))
+    ctx = _developers_ctx(lim)
+    # Mark which API plan the signed-in account already holds (if any).
+    ctx["current_api_plan"] = _current_api_plan_for_session()
+    return render_template("developers.html", **ctx)
+
+
+def _current_api_plan_for_session() -> str:
+    """Return api_free / api_starter / api_pro for the logged-in account email, or ''."""
+    email = (session.get("account_email") or "").strip().lower()
+    if not email:
+        return ""
+    try:
+        keys = [k for k in persistence.load_api_keys()
+                if (k.get("customer_email") or "").strip().lower() == email and k.get("active", True)]
+    except Exception:
+        return ""
+    if not keys:
+        return ""
+    # Prefer highest tier if multiple keys exist
+    rank = {"api_pro": 3, "api_starter": 2, "api_free": 1}
+    keys.sort(key=lambda k: rank.get((k.get("plan") or "").lower(), 0), reverse=True)
+    return (keys[0].get("plan") or "").lower()
 
 
 @app.route("/developers/signup", methods=["POST"])
@@ -1057,7 +1078,9 @@ def developers_signup():
     quota = int(lim.get("API_FREE_QUOTA", 10000))
 
     if not name or not email or "@" not in email:
-        return render_template("developers.html", **_developers_ctx(lim), signup_error="Enter a name and a valid email.")
+        ctx = _developers_ctx(lim)
+        ctx["current_api_plan"] = _current_api_plan_for_session()
+        return render_template("developers.html", **ctx, signup_error="Enter a name and a valid email.")
 
     existing = api_keys.find_key_by_email(email, plan="api_free")
     if existing:
@@ -1067,7 +1090,9 @@ def developers_signup():
         notifications.send_api_key_email(email, name, result["raw_key"], "api_free", quota)
         signup_result = {"already_had_key": False, "raw_key": result["raw_key"], "customer_email": email}
 
-    return render_template("developers.html", **_developers_ctx(lim), signup_result=signup_result)
+    ctx = _developers_ctx(lim)
+    ctx["current_api_plan"] = _current_api_plan_for_session()
+    return render_template("developers.html", **ctx, signup_result=signup_result)
 
 
 # ---------------------------------------------------------------------------
