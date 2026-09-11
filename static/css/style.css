@@ -721,6 +721,29 @@ img{max-width:100%;display:block;}
   border-radius:var(--radius);
   padding:20px;
 }
+
+/* Reusable 1-col→2-col card grid — for short lists of panel cards (audience
+   sections, related posts, use-case lists) that were previously inline
+   `style="display:grid;gap:12px;"` with no wider breakpoint, so they sat
+   as a single narrow stacked column even on desktop. 2 columns keeps
+   individual cards readable at the ~900px section width these live in —
+   3 would make the paragraph text inside each card feel cramped. */
+.card-grid{display:grid;gap:12px;}
+@media (min-width:640px){
+  .card-grid{grid-template-columns:repeat(2,1fr);}
+}
+
+/* Same idea as .card-grid but for the blog index — more, smaller cards
+   inside the wider 1100px .section container, so 3 columns at full
+   desktop width reads better than 2 (which would leave each card
+   uncomfortably wide relative to its short excerpt text). */
+.blog-grid{display:grid;gap:16px;}
+@media (min-width:640px){
+  .blog-grid{grid-template-columns:repeat(2,1fr);}
+}
+@media (min-width:960px){
+  .blog-grid{grid-template-columns:repeat(3,1fr);}
+}
 .chain__node h3{font-size:1.05rem;color:var(--text-hi);margin-bottom:6px;}
 .chain__node p{color:var(--text-mid);font-size:0.9rem;}
 .chain__label{
