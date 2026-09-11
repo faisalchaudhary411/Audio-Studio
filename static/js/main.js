@@ -369,7 +369,6 @@ function initPermissionsSheet(){
 
 // Track in-flight generation so permission prompts never interrupt it.
 window.__voxGenerating = false;
-const _origSetBusy = typeof voxSetBusy === 'function' ? null : null;
 
 
 // ---- Custom select (replaces native open-dropdown UI on .studio-select) ----
