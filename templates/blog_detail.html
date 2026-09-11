@@ -65,7 +65,7 @@
       <span class="section__eyebrow">Keep reading</span>
       <h2 class="section__title" style="font-size:1.7rem;">Related guides</h2>
     </div>
-    <div style="display:grid;gap:12px;">
+    <div class="card-grid">
       {% for related in related_posts %}
       <a href="{{ url_for('blog_detail', identifier=related._slug) }}" class="panel" style="display:block;">
         <span class="voice-card__tag" style="margin-bottom:8px;display:inline-block;">{{ related.category or 'General' }}</span>

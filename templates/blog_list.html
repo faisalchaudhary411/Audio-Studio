@@ -42,7 +42,7 @@
   {% if not posts %}
     <p style="color:var(--text-dim);">{% if active_tag %}No guides tagged "{{ active_tag }}" yet.{% else %}No published guides yet — check back soon.{% endif %}</p>
   {% else %}
-  <div style="display:grid;gap:16px;">
+  <div class="blog-grid">
     {% for post in posts %}
     <a href="{{ url_for('blog_detail', identifier=post._slug) }}" class="panel" style="display:block;">
       <span class="voice-card__tag" style="margin-bottom:10px;display:inline-block;">{{ post.category or 'General' }}</span>
