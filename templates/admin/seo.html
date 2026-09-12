@@ -2,6 +2,23 @@
 {% block title %}Admin — Page SEO & content{% endblock %}
 
 {% block content %}
+<style>
+  .admin-seo-grid{
+    display:grid;
+    grid-template-columns:minmax(220px,280px) 1fr;
+    gap:20px;
+    align-items:start;
+  }
+  @media (max-width:640px){
+    .admin-seo-grid{
+      grid-template-columns:1fr;
+    }
+    .admin-seo-grid > div:first-child{
+      position:static !important;
+      max-height:none;
+    }
+  }
+</style>
 <section class="section">
   <div class="section__head">
     <span class="section__eyebrow">Admin</span>
@@ -32,7 +49,7 @@
     <span style="font-size:0.8rem;color:var(--text-dim);">Optional snapshot you can commit to the repo if you want a versioned copy.</span>
   </div>
 
-  <div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:20px;align-items:start;">
+  <div class="admin-seo-grid">
     <div class="panel" style="position:sticky;top:80px;">
       <span class="panel__label">Pages</span>
       <div style="max-height:70vh;overflow:auto;margin-top:8px;">
