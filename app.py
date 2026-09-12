@@ -159,6 +159,18 @@ _start_clone_ref_sweep_thread()
 app = Flask(__name__)
 
 
+def _fill_placeholders(text: str, url_map: dict) -> str:
+    """Substitute only exact known {token} placeholders (e.g. {privacy_url})
+    with their url_map value, leaving any other "{" / "}" in the string
+    untouched. Safe to run on admin-typed text (see tool_page below) —
+    unlike str.format(**url_map), a stray or unmatched brace typed into an
+    admin-edited field can never raise KeyError/ValueError here."""
+    if not text:
+        return text
+    pattern = re.compile(r"\{(" + "|".join(re.escape(k) for k in url_map) + r")\}")
+    return pattern.sub(lambda m: url_map[m.group(1)], text)
+
+
 def api_error(e, action="process that request", status=500, category: str = None):
     """Log the full exception + traceback server-side. UserFacingError
     messages pass through; other exceptions are genericized for the client.
@@ -3267,11 +3279,21 @@ def tool_page(slug):
         "upgrade_url": url_for("upgrade"),
         "voiceclone_url": url_for("voice_cloning"),
     }
+    # NOTE: tool dict may now contain admin-edited text (see
+    # tool_pages.get_tool_page, which merges page_content overrides on top
+    # of the code defaults). A blind str.format(**url_map) call is only
+    # safe on the hardcoded defaults, which are guaranteed to contain only
+    # the placeholders we wrote. Once this text is admin-editable via
+    # /admin/seo, any stray "{" or "}" typed into Tips/FAQ/Intro/Use cases
+    # (e.g. "use braces like {this}") would raise KeyError/ValueError here
+    # and 500 the live tool page for every visitor. _fill_placeholders only
+    # substitutes the exact known tokens below and leaves any other brace
+    # text untouched, so admin content can never crash this route.
     tool = dict(tool)
-    tool["intro"] = [p.format(**url_map) for p in tool.get("intro", [])]
-    tool["tips"] = [t.format(**url_map) for t in tool.get("tips", [])]
-    tool["use_cases"] = [(n, d.format(**url_map)) for n, d in tool.get("use_cases", [])]
-    tool["faq"] = [(q, a.format(**url_map)) for q, a in tool.get("faq", [])]
+    tool["intro"] = [_fill_placeholders(p, url_map) for p in tool.get("intro", [])]
+    tool["tips"] = [_fill_placeholders(t, url_map) for t in tool.get("tips", [])]
+    tool["use_cases"] = [(n, _fill_placeholders(d, url_map)) for n, d in tool.get("use_cases", [])]
+    tool["faq"] = [(q, _fill_placeholders(a, url_map)) for q, a in tool.get("faq", [])]
 
     return render_template("tool_page.html", tool=tool, related_tools=related_tools, related_posts=related_posts,
                             lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
