@@ -544,3 +544,31 @@ TOOL_ORDER = [
     "fade-audio", "split-audio-by-silence", "reverse-audio", "stereo-to-mono", "loop-audio",
     "simple-audio-eq", "voice-changer", "extract-audio-from-video", "ai-music-generator",
 ]
+
+
+# Fields the admin form is allowed to override. Structural keys (widget,
+# usage_key, related_tools, blog_keywords) stay in code so a bad form
+# save cannot break routing or the widget include.
+EDITABLE_TOOL_FIELDS = (
+    "title", "meta_description", "eyebrow", "h1", "sub",
+    "intro", "how_it_works", "use_cases", "tips", "faq",
+)
+
+
+def get_tool_page(slug: str):
+    """Return the effective tool page dict: code defaults merged with any
+    admin overrides stored in page_content. Returns None if slug unknown.
+    """
+    base = TOOL_PAGES.get(slug)
+    if not base:
+        return None
+    try:
+        import persistence
+        override = persistence.load_page_content(f"tool:{slug}") or {}
+    except Exception:
+        override = {}
+    out = dict(base)
+    for key in EDITABLE_TOOL_FIELDS:
+        if key in override and override[key] is not None:
+            out[key] = override[key]
+    return out

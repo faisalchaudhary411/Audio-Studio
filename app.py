@@ -2097,6 +2097,146 @@ def admin_blog():
     )
 
 
+
+@app.route("/admin/seo", methods=["GET", "POST"])
+@admin_required
+def admin_seo():
+    """Edit title / meta description / H1 (and full body sections for tool
+    pages) without touching Python files. Live source of truth is the DB
+    (page_content table). Code files remain safe defaults. Covered by the
+    existing backup_db.py nightly job.
+    """
+    import tool_pages
+    import seo_pages
+    import json as _json
+
+    pages = []
+    for slug in tool_pages.TOOL_ORDER:
+        pages.append({
+            "id": f"tool:{slug}",
+            "kind": "tool",
+            "slug": slug,
+            "label": tool_pages.TOOL_PAGES[slug].get("h1") or slug,
+            "title": tool_pages.TOOL_PAGES[slug].get("title", slug),
+        })
+    for slug, data in seo_pages.SEO_PAGES.items():
+        pages.append({
+            "id": f"seo:{slug}",
+            "kind": "seo",
+            "slug": slug,
+            "label": data.get("h1") or slug,
+            "title": data.get("title", slug),
+        })
+
+    # Export all overrides as downloadable JSON (optional repo snapshot)
+    if request.args.get("export") == "1":
+        all_overrides = persistence.load_all_page_content()
+        from flask import Response
+        payload = _json.dumps(all_overrides, ensure_ascii=False, indent=2)
+        return Response(
+            payload,
+            mimetype="application/json",
+            headers={
+                "Content-Disposition": "attachment; filename=page_content_overrides.json"
+            },
+        )
+
+    selected_id = request.args.get("page") or (request.form.get("page_id") if request.method == "POST" else None)
+    selected = next((p for p in pages if p["id"] == selected_id), None)
+    message = None
+    error = None
+
+    defaults = {}
+    override = {}
+    if selected:
+        if selected["kind"] == "tool":
+            defaults = dict(tool_pages.TOOL_PAGES[selected["slug"]])
+        else:
+            defaults = dict(seo_pages.SEO_PAGES[selected["slug"]])
+        override = persistence.load_page_content(selected["id"]) or {}
+
+    if request.method == "POST":
+        action = request.form.get("action")
+        page_id = request.form.get("page_id")
+        if action == "save" and page_id:
+            data = {}
+            for key in ("title", "meta_description", "eyebrow", "h1", "sub", "cta_label"):
+                val = request.form.get(key)
+                if val is not None:
+                    data[key] = val.strip()
+            for key in ("intro", "how_it_works", "steps", "tips"):
+                raw = request.form.get(key)
+                if raw is not None:
+                    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+                    data[key] = lines
+            for key in ("use_cases", "faq"):
+                raw = request.form.get(key)
+                if raw is not None:
+                    pairs = []
+                    for ln in raw.splitlines():
+                        ln = ln.strip()
+                        if not ln:
+                            continue
+                        if " | " in ln:
+                            a, b = ln.split(" | ", 1)
+                            pairs.append((a.strip(), b.strip()))
+                        else:
+                            pairs.append((ln, ""))
+                    data[key] = pairs
+            ok, msg = persistence.save_page_content(page_id, data)
+            if ok:
+                message = "Saved. Live pages now use these values."
+                override = data
+                selected = next((p for p in pages if p["id"] == page_id), selected)
+                if selected and selected["kind"] == "tool":
+                    defaults = dict(tool_pages.TOOL_PAGES[selected["slug"]])
+                elif selected:
+                    defaults = dict(seo_pages.SEO_PAGES[selected["slug"]])
+            else:
+                error = f"Save failed: {msg}"
+        elif action == "reset" and page_id:
+            ok, msg = persistence.delete_page_content(page_id)
+            if ok:
+                message = "Override removed. Page is back to the values in the code files."
+                override = {}
+            else:
+                error = f"Reset failed: {msg}"
+
+    form = {}
+    if selected:
+        for key in ("title", "meta_description", "eyebrow", "h1", "sub", "cta_label"):
+            form[key] = override.get(key, defaults.get(key, ""))
+        for key in ("intro", "how_it_works", "steps", "tips"):
+            val = override.get(key, defaults.get(key, []))
+            form[key] = "\n".join(val) if isinstance(val, list) else (val or "")
+        for key in ("use_cases", "faq"):
+            val = override.get(key, defaults.get(key, []))
+            if isinstance(val, list):
+                lines = []
+                for item in val:
+                    if isinstance(item, (list, tuple)) and len(item) >= 2:
+                        lines.append(f"{item[0]} | {item[1]}")
+                    else:
+                        lines.append(str(item))
+                form[key] = "\n".join(lines)
+            else:
+                form[key] = val or ""
+
+    has_override = bool(override)
+    all_override_count = len(persistence.load_all_page_content())
+
+    return render_template(
+        "admin/seo.html",
+        pages=pages,
+        selected=selected,
+        form=form,
+        has_override=has_override,
+        message=message,
+        error=error,
+        all_override_count=all_override_count,
+    )
+
+
 @app.route("/admin/notifications", methods=["GET", "POST"])
 @admin_required
 def admin_notifications():
@@ -3080,7 +3220,7 @@ def tools_hub():
     exactly one place (the tool_widgets partials, unchanged) while giving
     search traffic a real reason to land on, and stay on, the specific
     page that matches their query."""
-    ordered_tools = [dict(slug=s, **tool_pages.TOOL_PAGES[s]) for s in tool_pages.TOOL_ORDER]
+    ordered_tools = [dict(slug=s, **(tool_pages.get_tool_page(s) or tool_pages.TOOL_PAGES[s])) for s in tool_pages.TOOL_ORDER]
     return render_template("tools.html", ordered_tools=ordered_tools,
                             filedesk_url=os.environ.get("FILEDESK_URL", "").strip())
 
@@ -3092,12 +3232,12 @@ def tool_page(slug):
     shared partials/tool_widgets/ include. See tool_pages.py for why this
     exists: individual URLs with real content instead of one tabbed page
     with almost no unique text per tool."""
-    tool = tool_pages.TOOL_PAGES.get(slug)
+    tool = tool_pages.get_tool_page(slug)
     if not tool:
         return render_template("404.html") if os.path.exists(os.path.join(app.root_path, "templates", "404.html")) \
             else (f"Tool '{slug}' not found.", 404)
 
-    related_tools = [dict(slug=s, **tool_pages.TOOL_PAGES[s]) for s in tool.get("related_tools", [])
+    related_tools = [dict(slug=s, **(tool_pages.get_tool_page(s) or tool_pages.TOOL_PAGES[s])) for s in tool.get("related_tools", [])
                       if s in tool_pages.TOOL_PAGES]
 
     # Related blog posts: cheap keyword match against title/category/excerpt

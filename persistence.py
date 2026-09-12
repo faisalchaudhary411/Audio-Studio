@@ -210,6 +210,10 @@ def init_db():
                     id   TEXT PRIMARY KEY,
                     data TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS page_content (
+                    page_id TEXT PRIMARY KEY,
+                    data    TEXT NOT NULL
+                );
             """)
             conn.commit()
         finally:
@@ -282,6 +286,81 @@ def load_blogs() -> list:
 
 def save_blogs(posts: list) -> tuple:
     return _replace_ordered_table("blogs", "id", posts)
+
+
+# ---- page_content (admin-editable SEO + tool-page copy overrides) ----
+# page_id examples: "tool:convert-audio-format", "seo:urdu-text-to-speech".
+# Live source of truth is the DB; code files remain safe defaults/fallback.
+# Covered automatically by backup_db.py (same SQLite file).
+def load_page_content(page_id: str):
+    """Return the override dict for page_id, or None if none saved yet."""
+    if not page_id:
+        return None
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT data FROM page_content WHERE page_id = ?", (page_id,)
+        ).fetchone()
+        if not row:
+            return None
+        return json.loads(row[0])
+    finally:
+        conn.close()
+
+
+def load_all_page_content() -> dict:
+    """Return {page_id: data_dict} for every saved override."""
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT page_id, data FROM page_content").fetchall()
+        return {r[0]: json.loads(r[1]) for r in rows}
+    finally:
+        conn.close()
+
+
+def save_page_content(page_id: str, data: dict) -> tuple:
+    """Upsert one page's content override. Returns (ok, message)."""
+    if not page_id or not isinstance(data, dict):
+        return False, "invalid page_id or data"
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute(
+                    "INSERT OR REPLACE INTO page_content (page_id, data) VALUES (?, ?)",
+                    (page_id, json.dumps(data, ensure_ascii=False)),
+                )
+                conn.commit()
+                return True, "saved"
+            except Exception as e:
+                conn.rollback()
+                return False, str(e)
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
+
+
+def delete_page_content(page_id: str) -> tuple:
+    """Remove an override so the page falls back to code defaults."""
+    if not page_id:
+        return False, "invalid page_id"
+    try:
+        with _write_lock:
+            conn = _connect()
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("DELETE FROM page_content WHERE page_id = ?", (page_id,))
+                conn.commit()
+                return True, "deleted"
+            except Exception as e:
+                conn.rollback()
+                return False, str(e)
+            finally:
+                conn.close()
+    except Exception as e:
+        return False, str(e)
 
 
 # ---- announcements (admin-authored notices — discounts / product updates —
