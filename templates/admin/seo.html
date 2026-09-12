@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Admin — Page SEO & content{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="section__head">
+    <span class="section__eyebrow">Admin</span>
+    <h2 class="section__title">Page SEO & tool content</h2>
+    <p class="section__sub" style="max-width:64ch;">
+      Edit title, meta description, H1 and (for tool pages) the full body sections
+      without touching Python files. Changes live in the database and take effect
+      immediately. They are covered by your existing nightly <code>backup_db.py</code>
+      job. Code files remain the safe defaults.
+    </p>
+  </div>
+
+  {% if message %}
+  <div class="panel" style="margin:0 0 16px;border-color:var(--jade);">
+    <p style="color:var(--jade-hi);margin:0;">{{ message }}</p>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="panel" style="margin:0 0 16px;border-color:#c44;">
+    <p style="color:#f88;margin:0;">{{ error }}</p>
+  </div>
+  {% endif %}
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+    <a href="{{ url_for('admin_seo', export=1) }}" class="btn btn--ghost btn--sm">
+      Export all overrides (JSON){% if all_override_count %} — {{ all_override_count }} page{{ 's' if all_override_count != 1 else '' }}{% endif %}
+    </a>
+    <span style="font-size:0.8rem;color:var(--text-dim);">Optional snapshot you can commit to the repo if you want a versioned copy.</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr;gap:20px;align-items:start;">
+    <div class="panel" style="position:sticky;top:80px;">
+      <span class="panel__label">Pages</span>
+      <div style="max-height:70vh;overflow:auto;margin-top:8px;">
+        <div style="font-size:0.75rem;color:var(--text-dim);margin:8px 0 4px;text-transform:uppercase;letter-spacing:0.04em;">Tool pages</div>
+        {% for p in pages if p.kind == 'tool' %}
+        <a href="{{ url_for('admin_seo', page=p.id) }}"
+           style="display:block;padding:8px 10px;border-radius:8px;margin-bottom:2px;font-size:0.88rem;
+                  {% if selected and selected.id == p.id %}background:rgba(200,160,60,0.15);color:var(--brass-hi);{% else %}color:var(--text-mid);{% endif %}">
+          {{ p.label }}
+        </a>
+        {% endfor %}
+        <div style="font-size:0.75rem;color:var(--text-dim);margin:14px 0 4px;text-transform:uppercase;letter-spacing:0.04em;">SEO landing pages</div>
+        {% for p in pages if p.kind == 'seo' %}
+        <a href="{{ url_for('admin_seo', page=p.id) }}"
+           style="display:block;padding:8px 10px;border-radius:8px;margin-bottom:2px;font-size:0.88rem;
+                  {% if selected and selected.id == p.id %}background:rgba(200,160,60,0.15);color:var(--brass-hi);{% else %}color:var(--text-mid);{% endif %}">
+          {{ p.label }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      {% if not selected %}
+      <div class="panel">
+        <p style="color:var(--text-mid);margin:0;">Select a page on the left to edit its SEO fields and content.</p>
+      </div>
+      {% else %}
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="panel__label" style="margin:0;">{{ selected.kind|capitalize }} — {{ selected.slug }}</span>
+          {% if has_override %}
+          <span style="font-size:0.8rem;color:var(--jade-hi);">● Has saved overrides</span>
+          {% else %}
+          <span style="font-size:0.8rem;color:var(--text-dim);">Using code defaults</span>
+          {% endif %}
+        </div>
+
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="page_id" value="{{ selected.id }}">
+          <input type="hidden" name="action" value="save">
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Title (browser tab + search result title)</label>
+          <input type="text" name="title" class="script-input" style="min-height:auto;padding:12px;margin-bottom:12px;" value="{{ form.title }}">
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Meta description</label>
+          <textarea name="meta_description" class="script-input" style="min-height:72px;margin-bottom:12px;line-height:1.45;" rows="3">{{ form.meta_description }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Eyebrow (small label above H1)</label>
+          <input type="text" name="eyebrow" class="script-input" style="min-height:auto;padding:12px;margin-bottom:12px;" value="{{ form.eyebrow }}">
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">H1</label>
+          <input type="text" name="h1" class="script-input" style="min-height:auto;padding:12px;margin-bottom:12px;" value="{{ form.h1 }}">
+
+          {% if selected.kind == 'tool' %}
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Sub (short line under H1)</label>
+          <input type="text" name="sub" class="script-input" style="min-height:auto;padding:12px;margin-bottom:12px;" value="{{ form.sub }}">
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Intro paragraphs (one per line)</label>
+          <textarea name="intro" class="script-input" style="min-height:100px;margin-bottom:12px;line-height:1.5;" rows="4">{{ form.intro }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">How it works (one step per line)</label>
+          <textarea name="how_it_works" class="script-input" style="min-height:100px;margin-bottom:12px;line-height:1.5;" rows="4">{{ form.how_it_works }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Use cases (one per line: Name | description)</label>
+          <textarea name="use_cases" class="script-input" style="min-height:100px;margin-bottom:12px;line-height:1.5;font-family:var(--mono);font-size:0.88rem;" rows="4">{{ form.use_cases }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Tips (one per line)</label>
+          <textarea name="tips" class="script-input" style="min-height:80px;margin-bottom:12px;line-height:1.5;" rows="3">{{ form.tips }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">FAQ (one per line: Question | answer)</label>
+          <textarea name="faq" class="script-input" style="min-height:120px;margin-bottom:16px;line-height:1.5;font-family:var(--mono);font-size:0.88rem;" rows="5">{{ form.faq }}</textarea>
+          {% else %}
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">CTA button label</label>
+          <input type="text" name="cta_label" class="script-input" style="min-height:auto;padding:12px;margin-bottom:12px;" value="{{ form.cta_label }}">
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Intro paragraphs (one per line)</label>
+          <textarea name="intro" class="script-input" style="min-height:100px;margin-bottom:12px;line-height:1.5;" rows="4">{{ form.intro }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Steps (one per line)</label>
+          <textarea name="steps" class="script-input" style="min-height:100px;margin-bottom:12px;line-height:1.5;" rows="4">{{ form.steps }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">Use cases (one per line: Name | description)</label>
+          <textarea name="use_cases" class="script-input" style="min-height:100px;margin-bottom:12px;line-height:1.5;font-family:var(--mono);font-size:0.88rem;" rows="4">{{ form.use_cases }}</textarea>
+
+          <label style="display:block;font-size:0.85rem;color:var(--text-dim);margin-bottom:4px;">FAQ (one per line: Question | answer)</label>
+          <textarea name="faq" class="script-input" style="min-height:120px;margin-bottom:16px;line-height:1.5;font-family:var(--mono);font-size:0.88rem;" rows="5">{{ form.faq }}</textarea>
+          {% endif %}
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button type="submit" class="btn btn--brass">Save changes</button>
+            {% if has_override %}
+            <button type="submit" name="action" value="reset" class="btn btn--ghost"
+                    onclick="return confirm('Remove all overrides for this page and revert to code defaults?');">
+              Reset to code defaults
+            </button>
+            {% endif %}
+            {% if selected.kind == 'tool' %}
+            <a href="{{ url_for('tool_page', slug=selected.slug) }}" target="_blank" class="btn btn--ghost">View live page ↗</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="margin-top:24px;">
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn--ghost btn--sm">← Back to dashboard</a>
+  </div>
+</section>
+{% endblock %}

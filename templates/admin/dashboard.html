@@ -27,6 +27,11 @@
         <a href="{{ url_for('admin_blog') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Manage blog</a>
       </div>
       <div class="panel">
+        <span class="panel__label">Page SEO & content</span>
+        <p style="color:var(--text-mid);font-size:0.88rem;">Title, meta description, H1 and tool-page copy — edit without touching code. Covered by nightly DB backup.</p>
+        <a href="{{ url_for('admin_seo') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">Edit page content</a>
+      </div>
+      <div class="panel">
         <span class="panel__label">Traffic</span>
         <div style="font-family:var(--display);font-size:2rem;">{{ today_visitors }} <span style="font-size:1rem;color:var(--text-dim);">visitors today</span></div>
         <a href="{{ url_for('admin_traffic') }}" class="btn btn--ghost btn--sm" style="margin-top:12px;display:inline-flex;">View traffic</a>
