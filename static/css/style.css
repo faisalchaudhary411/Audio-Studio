@@ -1313,29 +1313,6 @@ input.admin-input{
   align-self:flex-start;
 }
 
-/* ===== Sticky mobile CTA ===== */
-.sticky-cta{
-  display:none;
-  position:fixed;bottom:0;left:0;right:0;z-index:40;
-  padding:12px 16px calc(12px + env(safe-area-inset-bottom));
-  background:rgba(12,17,23,0.92);
-  backdrop-filter:blur(14px) saturate(1.2);
-  -webkit-backdrop-filter:blur(14px) saturate(1.2);
-  border-top:1px solid var(--line);
-  box-shadow:0 -8px 32px rgba(0,0,0,0.4);
-}
-.sticky-cta.is-visible{display:block;}
-.sticky-cta .btn{width:100%;}
-@media (min-width:721px){
-  .sticky-cta{display:none !important;}
-}
-/* Clear sticky ad + sticky CTA stacking */
-body.has-sticky-ad .sticky-cta{bottom:80px;}
-@media (max-width:768px){
-  body.has-sticky-cta{padding-bottom:72px;}
-  body.has-sticky-ad.has-sticky-cta{padding-bottom:160px;}
-}
-
 /* Batch clip cards */
 .batch-clips{display:grid;gap:12px;margin-top:8px;}
 .batch-clip{
@@ -2488,26 +2465,9 @@ select.script-input:focus{
   margin-bottom:8px;
   display:block;
 }
-.studio-sticky-bar{
-  display:none;
-}
 @media (max-width:720px){
   .studio .panel{padding:14px;}
   .studio-select, .studio-input, .script-input{font-size:16px;} /* prevent iOS zoom */
-  .studio-sticky-bar{
-    display:flex;
-    position:fixed;
-    bottom:0;left:0;right:0;
-    z-index:40;
-    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
-    background:rgba(12,17,23,0.92);
-    backdrop-filter:blur(12px);
-    border-top:1px solid var(--line-strong);
-    gap:10px;
-    align-items:center;
-  }
-  .studio-sticky-bar .btn{flex:1;}
-  body.has-studio-sticky{padding-bottom:72px;}
   .tool-card--compact{min-height:148px;}
   .section__head{padding-left:16px;padding-right:16px;}
 }
