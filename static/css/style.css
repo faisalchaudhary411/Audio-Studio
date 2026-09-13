@@ -2360,33 +2360,29 @@ select.script-input:focus{
 
 /* Soften ad banners — less "ad-looking" */
 .ad-unit{
-  margin:28px auto;
-  max-width:760px;
-  background:var(--ink-panel);
-  border:1px solid var(--line);
-  border-radius:var(--radius);
-  overflow:hidden;
-  box-shadow:var(--shadow-soft);
+  margin:32px auto;
+  max-width:360px;
+  background:transparent;
+  border:none;
+  box-shadow:none;
 }
 .ad-unit__head{
   display:flex;
   align-items:center;
   justify-content:space-between;
-  gap:12px;
-  padding:8px 14px;
-  border-bottom:1px solid var(--line);
-  background:rgba(245,242,234,0.02);
+  gap:10px;
+  padding:0 2px 8px;
 }
 .ad-unit__badge{
   font-family:var(--mono);
-  font-size:0.68rem;
+  font-size:0.66rem;
   letter-spacing:0.1em;
   text-transform:uppercase;
   color:var(--text-dim);
 }
 .ad-unit__remove{
   font-family:var(--mono);
-  font-size:0.72rem;
+  font-size:0.7rem;
   color:var(--brass-hi);
   text-decoration:none;
   white-space:nowrap;
@@ -2396,28 +2392,24 @@ select.script-input:focus{
   display:flex;
   justify-content:center;
   align-items:center;
-  min-height:90px;
-  max-height:120px;
+  min-height:250px;
+  height:250px;
   overflow:hidden;
-  background:rgba(0,0,0,0.15);
-  padding:8px 12px;
+  background:var(--ink-panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
 }
 .ad-unit__iframe{
-  width:100%;
-  max-width:728px;
-  height:90px;
+  width:300px;
+  height:250px;
   border:0;
   display:block;
-  border-radius:6px;
 }
-@media (max-width:520px){
-  .ad-unit{margin:20px 0;}
-  .ad-unit__frame{padding:6px 8px;min-height:80px;}
-  .ad-unit__iframe{height:80px;}
-  .ad-unit__head{padding:7px 12px;}
+@media (max-width:360px){
+  .ad-unit{max-width:100%;}
+  .ad-unit__frame{min-height:250px;height:250px;}
 }
 
-/* Drop zone for tools */
 .dropzone{
   position:relative;
   border:1.5px dashed var(--line-strong);
