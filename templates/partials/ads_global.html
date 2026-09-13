@@ -1,48 +1,71 @@
-{# Mobile sticky sponsored bar.
-   Hidden on Studio because the Generate bar already owns the bottom edge. #}
+{# Mobile sticky sponsored bar. Shown on every free-tier page, including
+   Studio now that the mobile Generate bar no longer competes for the
+   bottom edge. #}
 <style>
 .ad-sticky {
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 28;
   display: none;
-  height: 50px;
+  height: 78px;
   overflow: hidden;
-  background: rgba(12, 17, 23, 0.97);
-  border-top: 1px solid rgba(245, 242, 234, 0.1);
+  background: linear-gradient(180deg, rgba(18, 24, 32, 0.98), rgba(10, 14, 19, 0.99));
+  border-top: 1px solid transparent;
+  border-image: linear-gradient(90deg, rgba(232,169,60,0.55), rgba(79,166,156,0.55)) 1;
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.35);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .ad-sticky__label {
   position: absolute;
-  top: 3px; left: 10px;
+  top: 6px; left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
+  font-size: 0.6rem;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: rgba(245, 242, 234, 0.35);
+  color: rgba(245, 242, 234, 0.4);
   pointer-events: none;
   z-index: 1;
 }
+.ad-sticky__label::before {
+  content: "";
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #E8A93C, #4FA69C);
+}
+.ad-sticky__remove {
+  position: absolute;
+  top: 5px; right: 12px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  color: var(--brass-hi, #F5C670);
+  text-decoration: none;
+  z-index: 2;
+  letter-spacing: 0.02em;
+}
+.ad-sticky__remove:hover { text-decoration: underline; }
 .ad-sticky iframe {
   width: 100%;
-  height: 50px;
+  height: 60px;
   border: 0;
   display: block;
+  margin-top: 18px;
 }
 @media (max-width: 768px) {
-  body.has-sticky-ad:not(.has-studio-sticky) .ad-sticky { display: block; }
-  body.has-sticky-ad:not(.has-studio-sticky) {
-    padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px)) !important;
+  body.has-sticky-ad .ad-sticky { display: block; }
+  body.has-sticky-ad {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)) !important;
   }
-  body.has-sticky-ad:not(.has-studio-sticky) .footer {
-    padding-bottom: calc(40px + 50px + env(safe-area-inset-bottom, 0px));
-  }
-  body.has-sticky-ad:not(.has-studio-sticky) .sticky-cta {
-    bottom: calc(50px + env(safe-area-inset-bottom, 0px));
+  body.has-sticky-ad .footer {
+    padding-bottom: calc(40px + 78px + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>
 <div class="ad-sticky" id="ad-sticky" aria-label="Sponsored">
   <span class="ad-sticky__label">Sponsored</span>
+  <a href="{{ url_for('upgrade') }}" class="ad-sticky__remove">Remove with Pro</a>
   <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no" title="Sponsored content" loading="lazy"></iframe>
 </div>
 <script>
