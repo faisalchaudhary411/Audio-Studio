@@ -875,9 +875,31 @@ def landing():
 
 @app.route("/voices")
 def voices_page():
-    """Nav and external links sometimes hit /voices. Redirect to the
-    homepage voice-library section so visitors never see a 404."""
-    return redirect(url_for("landing") + "#voices", code=302)
+    """Full voice catalogue — filterable by language. Replaces the old
+    redirect to landing#voices so the page is indexable and useful on its own."""
+    all_voices = []
+    for lang, voices in VOICES.items():
+        for name, voice_id in voices.items():
+            parts = name.split(" — ")
+            display = parts[0].strip()
+            gender = parts[1].strip() if len(parts) > 1 else ""
+            all_voices.append({
+                "name": display,
+                "gender": gender,
+                "language": lang,
+                "voice_id": voice_id,
+                "audio_slug": voice_id.lower(),
+            })
+    languages = list(VOICES.keys())
+    voice_count = len(all_voices)
+    language_count = len(languages)
+    return render_template(
+        "voices.html",
+        all_voices=all_voices,
+        languages=languages,
+        voice_count=voice_count,
+        language_count=language_count,
+    )
 
 
 def usage_summary() -> dict:
