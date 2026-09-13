@@ -41,6 +41,7 @@ import music_engine
 import audio_tools
 import persistence
 import tool_pages
+import seo_pages
 import licensing
 import usage_tracking
 import api_keys
@@ -253,6 +254,17 @@ def log_site_issue(category: str, action: str, message: str, status: int = 0, de
 # site regardless of which hostname (www, app.voxcraft.site, etc.) a given
 # request actually arrived on. Change here only.
 CANONICAL_HOST = "https://voxcraft.site"
+
+# Footer nav data for the SEO landing pages (see seo_landing_page() route
+# below) — computed once at import time, not per-request, since
+# seo_pages.SEO_PAGES doesn't change during the process's lifetime (admin
+# edits land in the DB and get merged in at the next deploy's import, not
+# live into this dict). Uses each page's short "eyebrow" field rather than
+# its longer h1, since this renders as a compact footer link list.
+_SEO_FOOTER_LINKS = [
+    {"label": data.get("eyebrow") or slug, "slug": slug}
+    for slug, data in seo_pages.SEO_PAGES.items()
+]
 
 # Grace-period auto-approvals (manual bank-transfer flow, see pro_requests.py)
 # had no automated path back to admin's attention before they silently
@@ -690,6 +702,7 @@ def inject_globals():
         "enable_interstitial_ctx": os.environ.get("ENABLE_INTERSTITIAL", "") == "1",
         "csrf_token": session.get("csrf_token", ""),
         "voice_count_ctx": sum(len(v) for v in VOICES.values()),
+        "seo_footer_links_ctx": _SEO_FOOTER_LINKS,
     }
 
 
@@ -834,12 +847,29 @@ def landing():
     voice_count = sum(len(v) for v in VOICES.values())
     language_count = len(VOICES)
 
+    # Real prices only, for the SoftwareApplication JSON-LD below — pulled
+    # from the same admin-editable limits pricing.html itself uses, so
+    # schema can never drift out of sync with what's actually charged.
+    # Deliberately NOT adding aggregateRating: no verified review data
+    # exists yet, and a fabricated rating is exactly the kind of structured
+    # -data spam Google penalizes. Add it later only from a real source
+    # (e.g. verified Product Hunt/G2 reviews), never a made-up number.
+    _limits = persistence.load_limits()
+    def _price_num(label, fallback):
+        return re.sub(r"[^\d.]", "", str(label or fallback)) or "0"
+    software_schema_offers = [
+        {"name": "Free", "price": _price_num(_limits.get("FREE_PRICE_LABEL"), "$0")},
+        {"name": "Pro", "price": _price_num(_limits.get("PRO_PRICE_USD_LABEL"), "$3")},
+        {"name": "Pro+", "price": _price_num(_limits.get("PRO_PLUS_PRICE_USD_LABEL"), "$6")},
+    ]
+
     return render_template(
         "landing.html",
         featured_voices=featured_voices,
         recent_posts=recent_posts,
         voice_count=voice_count,
         language_count=language_count,
+        software_schema_offers=software_schema_offers,
     )
 
 
@@ -1370,8 +1400,15 @@ BLOG_TOOL_LINKS = {
     "tts": ("studio", {}, "Open Voice Studio"),
     "text-to-speech": ("studio", {}, "Open Voice Studio"),
     "voice": ("studio", {}, "Explore Voices"),
-    "urdu-tts": ("studio", {}, "Try Urdu TTS"),
-    "hindi-tts": ("studio", {}, "Try Hindi TTS"),
+    # Route language-specific posts through their matching SEO landing page
+    # (added once those pages got a real route — see seo_landing_page())
+    # rather than straight to Studio, so the post reinforces that page's
+    # topical authority instead of skipping past it.
+    "urdu-tts": ("seo_landing_page", {"slug": "urdu-text-to-speech"}, "Try Urdu TTS"),
+    "hindi-tts": ("seo_landing_page", {"slug": "hindi-text-to-speech"}, "Try Hindi TTS"),
+    "punjabi-tts": ("seo_landing_page", {"slug": "punjabi-text-to-speech"}, "Try Punjabi TTS"),
+    "bengali-tts": ("seo_landing_page", {"slug": "bengali-text-to-speech"}, "Try Bengali TTS"),
+    "multilingual-voiceover": ("seo_landing_page", {"slug": "text-to-speech-for-youtube"}, "See the YouTube voiceover guide"),
     "arabic-tts": ("studio", {}, "Try Arabic TTS"),
     "voice cloning": ("voice_cloning", {}, "Try Voice Cloning"),
     "voice-cloning": ("voice_cloning", {}, "Try Voice Cloning"),
@@ -1480,6 +1517,7 @@ def sitemap():
         ("/voice-cloning", "0.85", "monthly"),
         ("/tools", "0.9", "weekly"),
         *[(f"/tools/{slug}", "0.75", "monthly") for slug in tool_pages.TOOL_PAGES],
+        *[(f"/{slug}", "0.75", "monthly") for slug in seo_pages.SEO_PAGES],
         ("/pricing", "0.8", "monthly"),
         ("/developers", "0.7", "monthly"),
         ("/blog", "0.7", "weekly"),
@@ -3307,6 +3345,77 @@ def tool_page(slug):
 
     return render_template("tool_page.html", tool=tool, related_tools=related_tools, related_posts=related_posts,
                             lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
+
+
+# Slugs that already belong to another route (so the catch-all below can
+# never shadow them) plus a couple of reserved path segments Flask/the
+# browser request automatically. Werkzeug matches static rules like
+# "/about" before variable rules like "/<slug>" regardless of registration
+# order, so this isn't strictly required for correctness — it's a second,
+# explicit guard so a typo'd SEO_PAGES slug can never silently swallow a
+# real route instead of showing "unknown page" in testing.
+#
+# Cross-checked against every single-segment @app.route(...) actually
+# registered in this file (grep -oP '(?<=@app\.route\(")[^"]+' app.py) —
+# the first pass at this list was hand-written and missed a few
+# (ads.txt, fs-callback, healthz, request-status, resend-key,
+# forgot-password, voices). Re-run that grep and diff against this set
+# whenever a new top-level route is added.
+_RESERVED_ROOT_SLUGS = {
+    "about", "account", "activate", "admin", "ads.txt", "blog", "contact",
+    "developers", "favicon.ico", "forgot-password", "fs-callback",
+    "healthz", "how-we-test", "login", "logout", "pricing", "privacy",
+    "redeem", "request-status", "resend-key", "robots.txt", "sitemap.xml",
+    "static", "studio", "terms", "tools", "unlock-device", "upgrade",
+    "voice-cloning", "voices",
+    # not actual @app.route paths, but reserve them anyway since a slug
+    # here would be confusing/wrong even though Werkzeug wouldn't collide:
+    "api",
+}
+
+
+@app.route("/<slug>")
+def seo_landing_page(slug):
+    """Public route for the standalone SEO landing pages in seo_pages.py
+    (Urdu/Hindi/Punjabi/Bengali TTS, YouTube-voiceover guides, etc).
+
+    These existed as data + a finished template (seo_page.html) with no
+    route ever wired to them — every one of these pages was unreachable
+    and unindexable until this route existed. Lives at the domain root
+    (not /guides/<slug> or similar) so each page's URL is the exact
+    keyword phrase it targets, e.g. voxcraft.site/urdu-text-to-speech.
+    """
+    if slug in _RESERVED_ROOT_SLUGS:
+        return render_template("404.html") if os.path.exists(os.path.join(app.root_path, "templates", "404.html")) \
+            else (f"Page '{slug}' not found.", 404)
+
+    page = seo_pages.get_seo_page(slug)
+    if not page:
+        return render_template("404.html") if os.path.exists(os.path.join(app.root_path, "templates", "404.html")) \
+            else (f"Page '{slug}' not found.", 404)
+
+    # Same reasoning as tool_page() above: page content may include
+    # admin-edited text from /admin/seo, so any {placeholder} substitution
+    # has to tolerate stray braces rather than crash on them.
+    url_map = {
+        "studio_url": url_for("studio"),
+        "tools_url": url_for("tools_hub"),
+        "privacy_url": url_for("privacy"),
+        "upgrade_url": url_for("upgrade"),
+        "voiceclone_url": url_for("voice_cloning"),
+    }
+    page = dict(page)
+    page["intro"] = [_fill_placeholders(p, url_map) for p in page.get("intro", [])]
+    page["steps"] = [_fill_placeholders(s, url_map) for s in page.get("steps", [])]
+    page["use_cases"] = [(n, _fill_placeholders(d, url_map)) for n, d in page.get("use_cases", [])]
+    page["faq"] = [(q, _fill_placeholders(a, url_map)) for q, a in page.get("faq", [])]
+
+    # Every page's cta_label currently talks about Voice Studio except the
+    # tools round-up page, which talks about the tools hub — route each
+    # accordingly rather than sending every CTA to the same place.
+    cta_url = url_for("tools_hub") if slug == "audio-tools-for-youtubers" else url_for("studio")
+
+    return render_template("seo_page.html", page=page, cta_url=cta_url)
 
 
 @app.route("/api/tools/transcribe", methods=["POST"])
