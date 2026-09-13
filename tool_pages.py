@@ -17,6 +17,9 @@ templates/partials/tool_widgets/, and it's automatically routed, sitemapped,
 and cross-linked — nothing else to touch.
 """
 
+import json
+import os
+
 TOOL_PAGES = {
     "transcribe-audio-to-text": {
         "widget": "transcribe",
@@ -553,6 +556,40 @@ EDITABLE_TOOL_FIELDS = (
     "title", "meta_description", "eyebrow", "h1", "sub",
     "intro", "how_it_works", "use_cases", "tips", "faq",
 )
+
+
+def _load_synced_overrides() -> dict:
+    """Load data/page_content_overrides.json, written by the admin panel's
+    manual "Push all changes to repo" button (see github_sync.py). Returns
+    {} if it doesn't exist yet (nothing has ever been synced) or is
+    malformed — either way, TOOL_PAGES below just keeps its hardcoded
+    values, same as before this existed."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "page_content_overrides.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+# Bake the last-synced admin content into TOOL_PAGES itself at import time.
+# Why: get_tool_page() below merges live DB overrides on top of TOOL_PAGES
+# at request time, which is instant but only as durable as the DB. This
+# merge instead updates the *code-level baseline* once, at process start,
+# so a fresh deploy — even one pointed at a brand new, empty database —
+# already shows the last-pushed content instead of silently reverting to
+# whatever prose was hardcoded here months ago. The DB (and its own
+# overrides) still always wins for anything edited since the last sync.
+for _slug, _override in _load_synced_overrides().items():
+    if not _slug.startswith("tool:"):
+        continue
+    _tool_slug = _slug[len("tool:"):]
+    _base = TOOL_PAGES.get(_tool_slug)
+    if not _base:
+        continue
+    for _key in EDITABLE_TOOL_FIELDS:
+        if _key in _override and _override[_key] is not None:
+            _base[_key] = _override[_key]
 
 
 def get_tool_page(slug: str):

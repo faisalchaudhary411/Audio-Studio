@@ -4,6 +4,10 @@ These pages are informational entry points only. They reuse existing public
 routes and tools, so adding or editing a page here cannot change audio, TTS,
 payments, accounts, or usage-limit behaviour.
 """
+
+import json
+import os
+
 SEO_PAGES = {
     "urdu-text-to-speech": {
         "title": "Urdu Text to Speech — Create Urdu AI Voice Online | VoxCraft",
@@ -98,3 +102,67 @@ SEO_PAGES = {
         ],
     },
 }
+
+
+# Fields the admin form (/admin/seo) is allowed to override — matches the
+# unified field set admin_seo() saves for both "tool" and "seo" page kinds.
+# related_links stays code-only: it's not in admin_seo's save/form-field
+# list, so an override would never have it, but we exclude it explicitly
+# here too rather than relying on that by omission.
+EDITABLE_SEO_FIELDS = (
+    "title", "meta_description", "eyebrow", "h1", "sub", "cta_label",
+    "intro", "how_it_works", "steps", "tips", "use_cases", "faq",
+)
+
+
+def _load_synced_overrides() -> dict:
+    """Load data/page_content_overrides.json, written by the admin panel's
+    manual "Push all changes to repo" button (see github_sync.py). Returns
+    {} if it doesn't exist yet or is malformed — SEO_PAGES below just keeps
+    its hardcoded values in that case, same as before this existed."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "page_content_overrides.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+# Bake the last-synced admin content into SEO_PAGES itself at import time —
+# same reasoning as the identical block in tool_pages.py: get_seo_page()
+# below merges live DB overrides on top of SEO_PAGES at request time (fast,
+# but only as durable as the DB); this merge instead updates the
+# code-level baseline once, at process start, so a fresh deploy — even
+# with a brand new, empty database — already reflects the last-pushed
+# content rather than the original hardcoded copy above.
+for _slug, _override in _load_synced_overrides().items():
+    if not _slug.startswith("seo:"):
+        continue
+    _seo_slug = _slug[len("seo:"):]
+    _base = SEO_PAGES.get(_seo_slug)
+    if not _base:
+        continue
+    for _key in EDITABLE_SEO_FIELDS:
+        if _key in _override and _override[_key] is not None:
+            _base[_key] = _override[_key]
+
+
+def get_seo_page(slug: str):
+    """Return the effective SEO landing page dict: code defaults merged
+    with any admin override stored in page_content. Returns None if slug
+    is unknown. Mirrors tool_pages.get_tool_page() — added for parity and
+    so whatever route eventually serves these pages publicly can pull
+    live-edited content the same way tool pages already do."""
+    base = SEO_PAGES.get(slug)
+    if not base:
+        return None
+    try:
+        import persistence
+        override = persistence.load_page_content(f"seo:{slug}") or {}
+    except Exception:
+        override = {}
+    out = dict(base)
+    for key in EDITABLE_SEO_FIELDS:
+        if key in override and override[key] is not None:
+            out[key] = override[key]
+    return out

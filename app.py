@@ -2213,6 +2213,16 @@ def admin_seo():
                 override = {}
             else:
                 error = f"Reset failed: {msg}"
+        elif action == "sync_repo":
+            # Batched, manual by design (see github_sync.py docstring) —
+            # pushes everything in page_content at once, only when Faisal
+            # clicks the button, rather than committing on every save.
+            import github_sync
+            ok, msg = github_sync.push_overrides_to_repo(persistence.load_all_page_content())
+            if ok:
+                message = msg
+            else:
+                error = f"Sync to repo failed: {msg}"
 
     form = {}
     if selected:
