@@ -277,6 +277,10 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
       <a href="{{ url_for('privacy') }}">Privacy</a>
       <a href="{{ url_for('terms') }}">Terms</a>
     </div>
+    <div class="footer__col">
+      <span class="footer__col-title">Guides &amp; Languages</span>
+      {% for link in seo_footer_links_ctx %}<a href="{{ url_for('seo_landing_page', slug=link.slug) }}">{{ link.label }}</a>{% endfor %}
+    </div>
   </div>
   <div class="footer__bottom">
     <span class="footer__copy">&copy; 2026 VoxCraft — text to voice, crafted.</span>

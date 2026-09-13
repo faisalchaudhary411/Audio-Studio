@@ -372,4 +372,47 @@
   </div>
 </section>
 
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "VoxCraft",
+  "url": "https://voxcraft.site/",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Web",
+  "description": "Neural text-to-speech and practical online audio tools for creators, with dedicated Urdu, Hindi and 25+ other language voices.",
+  "image": "https://voxcraft.site/static/img/screenshots/step-render.png",
+  "offers": [
+    {% for o in software_schema_offers %}
+    {
+      "@type": "Offer",
+      "name": {{ o.name|tojson }},
+      "price": {{ o.price|tojson }},
+      "priceCurrency": "USD"
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "VoxCraft",
+  "url": "https://voxcraft.site/",
+  "logo": "https://voxcraft.site/static/favicons/android-chrome-512x512.png"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Does it actually sound natural, or robotic?", "acceptedAnswer": {"@type": "Answer", "text": "VoxCraft uses neural TTS voices, not the older robotic synthesis style \u2014 the same underlying voice technology used by major platforms. The best way to judge is to listen: try the samples above, or generate your own script free."}},
+    {"@type": "Question", "name": "Can I use the audio commercially \u2014 YouTube, ads, client work?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Audio you generate is yours to use, including monetized YouTube videos, client projects, and commercial work."}},
+    {"@type": "Question", "name": "Do you store or read the scripts I paste in?", "acceptedAnswer": {"@type": "Answer", "text": "Scripts are processed to generate your audio and aren't used for anything beyond that. See the privacy page for the full details."}},
+    {"@type": "Question", "name": "Do I need to create an account to try it?", "acceptedAnswer": {"@type": "Answer", "text": "No. The free tier works immediately \u2014 no signup, no email, no card required to generate your first voiceover."}}
+  ]
+}
+</script>
 {% endblock %}
