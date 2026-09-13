@@ -1,23 +1,21 @@
-{# Mobile sticky sponsored bar — reserved height so it never covers the
-   Generate button or footer. Free tier only (parent checks is_pro_ctx). #}
+{# Mobile sticky sponsored bar.
+   Hidden on Studio because the Generate bar already owns the bottom edge. #}
 <style>
 .ad-sticky {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  z-index: 28; /* below nav dropdowns & modals, above page */
+  z-index: 28;
   display: none;
-  height: 64px;
+  height: 50px;
   overflow: hidden;
   background: rgba(12, 17, 23, 0.97);
   border-top: 1px solid rgba(245, 242, 234, 0.1);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 .ad-sticky__label {
   position: absolute;
-  top: 4px; left: 10px;
+  top: 3px; left: 10px;
   font-family: var(--mono, ui-monospace, monospace);
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(245, 242, 234, 0.35);
@@ -26,23 +24,20 @@
 }
 .ad-sticky iframe {
   width: 100%;
-  height: 64px;
+  height: 50px;
   border: 0;
   display: block;
 }
 @media (max-width: 768px) {
-  .ad-sticky { display: block; }
-  body.has-sticky-ad {
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  body.has-sticky-ad:not(.has-studio-sticky) .ad-sticky { display: block; }
+  body.has-sticky-ad:not(.has-studio-sticky) {
+    padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px)) !important;
   }
-  body.has-sticky-ad .footer {
-    padding-bottom: calc(40px + 64px + env(safe-area-inset-bottom, 0px));
+  body.has-sticky-ad:not(.has-studio-sticky) .footer {
+    padding-bottom: calc(40px + 50px + env(safe-area-inset-bottom, 0px));
   }
-  body.has-sticky-ad .studio-sticky-bar {
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-  }
-  body.has-sticky-ad .sticky-cta {
-    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  body.has-sticky-ad:not(.has-studio-sticky) .sticky-cta {
+    bottom: calc(50px + env(safe-area-inset-bottom, 0px));
   }
 }
 </style>
