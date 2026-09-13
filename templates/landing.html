@@ -199,6 +199,35 @@
   </div>
 </section>
 
+<section class="section reveal-on-scroll" id="demo">
+  <div class="section__head">
+    <span class="section__eyebrow">See the difference</span>
+    <h2 class="section__title">Mixed scripts, spoken the way people actually talk.</h2>
+    <p class="section__sub">Most TTS tools stumble on everyday code-switching. Here’s the kind of script South Asian creators write every day — and how a neural voice handles it.</p>
+  </div>
+
+  <div class="demo-card">
+    <div class="demo-card__script">
+      <span class="demo-card__label">Example script</span>
+      <p class="demo-card__text" dir="auto">
+        Assalam o alaikum everyone. Aaj main aap ko batata hoon ke Stripe API mein retry count 10 set hai, is liye Sentry mein 3,400 errors aa rahe hain daily. Fix simple hai — retry count ko 3 kar do aur rate limiter add kar do. PR by 5 PM Wednesday.
+      </p>
+    </div>
+    <div class="demo-card__play">
+      <button type="button" class="listen-card voice-card__play demo-play-btn" data-audio="/static/audio/previews/ur-pk-uzmaneural.mp3" aria-label="Play natural Urdu neural sample">
+        <span class="listen-card__play">▶</span>
+        <span class="listen-card__body">
+          <span class="listen-card__name">Hear a natural sample</span>
+          <span class="listen-card__meta">Uzma · Urdu · Neural</span>
+        </span>
+        <span class="listen-card__hint">Listen</span>
+      </button>
+      <p class="demo-card__note">This is a high-quality Urdu neural voice. Paste the script above (or your own mixed text) in Studio to hear the full code-switching result in seconds — no signup required.</p>
+      <a href="{{ url_for('studio') }}" class="btn btn--brass btn--sm">Try this in Studio — free</a>
+    </div>
+  </div>
+</section>
+
 <section class="section reveal-on-scroll" id="voices">
   <div class="section__head">
     <span class="section__eyebrow">Voice library</span>
