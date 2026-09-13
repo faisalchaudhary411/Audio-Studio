@@ -1262,6 +1262,57 @@ input.admin-input{
 .feature-card h3{font-size:1.1rem;margin-bottom:8px;}
 .feature-card p{color:var(--text-mid);font-size:0.92rem;line-height:1.6;}
 
+/* ===== Code-switching demo card ===== */
+.demo-card{
+  display:grid;
+  grid-template-columns:1.4fr 1fr;
+  gap:20px;
+  background:var(--ink-panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:28px;
+  align-items:start;
+}
+@media (max-width:800px){
+  .demo-card{grid-template-columns:1fr;}
+}
+.demo-card__label{
+  font-family:var(--mono);
+  font-size:0.72rem;
+  color:var(--jade-hi);
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  display:block;
+  margin-bottom:12px;
+}
+.demo-card__text{
+  font-size:1.05rem;
+  line-height:1.7;
+  color:var(--text-hi);
+  margin:0;
+  background:var(--ink);
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  padding:18px 20px;
+}
+.demo-card__play{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.demo-card__play .listen-card{
+  width:100%;
+}
+.demo-card__note{
+  font-size:0.88rem;
+  color:var(--text-mid);
+  line-height:1.55;
+  margin:0;
+}
+.demo-card__play .btn{
+  align-self:flex-start;
+}
+
 /* ===== Sticky mobile CTA ===== */
 .sticky-cta{
   display:none;
