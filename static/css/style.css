@@ -1965,7 +1965,29 @@ main{min-height:50vh;}
   border-color:var(--jade);
   box-shadow:0 0 0 1px rgba(79,166,156,0.3), var(--shadow-soft);
 }
-.voices-cta{margin-top:28px;text-align:center;}
+.voices-cta{margin-top:28px;text-align:center;display:flex;flex-wrap:wrap;gap:12px;justify-content:center;}
+
+/* ===== Voices page filters ===== */
+.voices-filters{margin-bottom:28px;}
+.voices-filters__row{
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin-bottom:12px;
+}
+.filter-chip{
+  font-family:var(--mono);font-size:0.75rem;letter-spacing:0.02em;
+  padding:8px 14px;border-radius:999px;cursor:pointer;
+  background:var(--ink-panel);border:1px solid var(--line);
+  color:var(--text-mid);transition:border-color .15s ease, background .15s ease, color .15s ease;
+}
+.filter-chip:hover{border-color:var(--line-strong);color:var(--text-hi);}
+.filter-chip.is-active{
+  background:rgba(232,169,60,0.12);
+  border-color:rgba(232,169,60,0.45);
+  color:var(--brass-hi);
+}
+.voices-filters__count{
+  font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:0;
+}
 
 /* ===== News / discount ticker ===== */
 .announce-banner{
@@ -2835,3 +2857,146 @@ body:not(.has-sticky-ad) .section{padding-bottom:4px;}
 .studio-main #tab-batch.section{padding:0;max-width:none;}
 .studio-main #tab-single .panel,
 .studio-main #tab-batch .panel{margin:0;}
+
+/* ===== SEO landing pages (Urdu/Hindi TTS etc.) ===== */
+.hero--compact{
+  padding-top:48px;
+  padding-bottom:40px;
+  text-align:left;
+  max-width:720px;
+  margin:0 auto;
+  padding-left:24px;
+  padding-right:24px;
+}
+.hero--compact .hero__title{
+  font-size:clamp(1.85rem,4.5vw,2.6rem);
+}
+.hero--compact .hero__sub{
+  max-width:54ch;
+}
+.hero--compact .hero__actions{
+  margin-top:20px;
+}
+.hero--compact .hero__actions .btn{
+  white-space:normal;
+  text-align:center;
+  line-height:1.35;
+  max-width:100%;
+}
+
+.seo-prose{
+  max-width:720px;
+  margin:0 auto;
+}
+.seo-prose h2{
+  font-family:var(--display);
+  font-size:1.45rem;
+  margin:36px 0 14px;
+  color:var(--text-hi);
+}
+.seo-prose h2:first-child{margin-top:0;}
+.seo-steps{
+  margin:0 0 8px 1.2em;
+  padding:0;
+  color:var(--text-mid);
+  line-height:1.7;
+}
+.seo-steps li{margin-bottom:8px;}
+
+.use-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:14px;
+  margin-top:8px;
+}
+.use-card{
+  background:var(--ink-panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:20px 18px;
+}
+.use-card h3{
+  font-size:1.05rem;
+  margin:0 0 8px;
+  color:var(--text-hi);
+}
+.use-card p{
+  margin:0;
+  color:var(--text-mid);
+  font-size:0.92rem;
+  line-height:1.55;
+}
+
+.seo-faq{margin-top:8px;}
+.faq-item{
+  background:var(--ink-panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  margin-bottom:8px;
+  padding:0;
+}
+.faq-item summary{
+  cursor:pointer;
+  padding:14px 16px;
+  font-weight:500;
+  color:var(--text-hi);
+  list-style:none;
+}
+.faq-item summary::-webkit-details-marker{display:none;}
+.faq-item summary::before{
+  content:"▸";
+  display:inline-block;
+  margin-right:10px;
+  color:var(--brass);
+  transition:transform .15s ease;
+}
+.faq-item[open] summary::before{transform:rotate(90deg);}
+.faq-item p{
+  margin:0;
+  padding:0 16px 16px 32px;
+  color:var(--text-mid);
+  font-size:0.95rem;
+  line-height:1.6;
+}
+
+.seo-related{
+  margin:8px 0 0;
+  padding-left:1.2em;
+  color:var(--text-mid);
+  line-height:1.8;
+}
+.seo-related a{color:var(--brass-hi);}
+
+/* Bottom CTA on SEO pages — keep button fully visible on narrow screens */
+.final-cta--seo{
+  margin-top:12px;
+}
+.final-cta--seo .final-cta__title{
+  font-size:clamp(1.5rem,3.5vw,2.1rem);
+}
+.final-cta--seo .final-cta__actions{
+  width:100%;
+  max-width:100%;
+  display:flex;
+  justify-content:center;
+  padding:0 8px;
+  box-sizing:border-box;
+}
+.final-cta--seo .final-cta__actions .btn{
+  white-space:normal;
+  text-align:center;
+  line-height:1.35;
+  max-width:100%;
+  width:auto;
+  box-sizing:border-box;
+  overflow:visible;
+  text-overflow:unset;
+}
+@media (max-width:480px){
+  .final-cta--seo .final-cta__actions .btn,
+  .hero--compact .hero__actions .btn{
+    width:100%;
+    padding-left:16px;
+    padding-right:16px;
+  }
+}
