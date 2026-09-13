@@ -46,7 +46,15 @@
     <a href="{{ url_for('admin_seo', export=1) }}" class="btn btn--ghost btn--sm">
       Export all overrides (JSON){% if all_override_count %} — {{ all_override_count }} page{{ 's' if all_override_count != 1 else '' }}{% endif %}
     </a>
-    <span style="font-size:0.8rem;color:var(--text-dim);">Optional snapshot you can commit to the repo if you want a versioned copy.</span>
+    <form method="post" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="sync_repo">
+      {% if selected %}<input type="hidden" name="page_id" value="{{ selected.id }}">{% endif %}
+      <button type="submit" class="btn btn--ghost btn--sm">
+        Push all changes to repo{% if all_override_count %} ({{ all_override_count }} page{{ 's' if all_override_count != 1 else '' }}){% endif %}
+      </button>
+    </form>
+    <span style="font-size:0.8rem;color:var(--text-dim);">Commits current DB overrides to the repo as data/page_content_overrides.json — code and DB stay in sync, and a fresh deploy won't lose them.</span>
   </div>
 
   <div class="admin-seo-grid">
