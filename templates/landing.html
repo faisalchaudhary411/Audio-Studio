@@ -173,6 +173,10 @@
   </div>
 </section>
 
+{% if not is_pro_ctx %}
+{% include "partials/ads_banner.html" %}
+{% endif %}
+
 <section class="section reveal-on-scroll">
   <div class="section__head">
     <span class="section__eyebrow">Why creators switch</span>

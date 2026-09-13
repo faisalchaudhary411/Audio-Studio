@@ -158,11 +158,6 @@
   </div>
 </div>
 
-<!-- Mobile sticky generate -->
-<div class="studio-sticky-bar" id="studio-sticky-bar" aria-hidden="true">
-  <button type="button" class="btn btn--brass" id="generate-single-sticky">Generate speech</button>
-</div>
-
 <!-- ===== Batch tab ===== -->
 <div class="section" id="tab-batch" style="padding-top:0;display:none;">
   <div class="panel">
@@ -301,7 +296,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script>document.body.classList.add('has-studio-sticky');</script>
 <script>
   window.VOXCRAFT_VOICES = {{ voices|tojson }};
 </script>
