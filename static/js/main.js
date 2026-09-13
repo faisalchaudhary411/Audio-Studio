@@ -252,21 +252,6 @@ function initNavMore(){
   });
 }
 
-// ---- Sticky mobile CTA after scrolling past hero ----
-function initStickyCta(){
-  const bar = document.getElementById('sticky-cta');
-  if(!bar) return;
-  if(!document.querySelector('.hero')) return;
-  bar.hidden = false;
-  const onScroll = () => {
-    const show = window.scrollY > 420;
-    bar.classList.toggle('is-visible', show);
-    document.body.classList.toggle('has-sticky-cta', show);
-  };
-  window.addEventListener('scroll', onScroll, {passive: true});
-  onScroll();
-}
-
 // ---- Pricing monthly / annual display toggle ----
 function initBillingToggle(){
   const monthBtn = document.getElementById('bill-month');
@@ -1053,7 +1038,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavToggle();
   initNavMore();
   initVoicePreviews();
-  initStickyCta();
   initBillingToggle();
   initPermissionsSheet();
   initRevealOnScroll();

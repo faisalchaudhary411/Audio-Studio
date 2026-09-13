@@ -323,8 +323,6 @@
   }
   renderHistory();
 
-  const stickyGen = document.getElementById('generate-single-sticky');
-  if (stickyGen) stickyGen.addEventListener('click', () => generateSingleBtn && generateSingleBtn.click());
   generateSingleBtn.addEventListener('click', () => {
     if (!singleText.value.trim()) {
       singleStatus.textContent = 'Please enter some text first.';
