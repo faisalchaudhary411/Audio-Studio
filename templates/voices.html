@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ voice_count }} Neural Voices — Urdu, Hindi & {{ language_count - 2 }} more · VoxCraft{% endblock %}
+{% block meta_description %}Browse all {{ voice_count }} neural TTS voices on VoxCraft. Filter by language — Urdu, Hindi, Bengali, Punjabi, Tamil, Telugu, English and 20 more. Free to preview and generate.{% endblock %}
+
+{% block content %}
+
+<section class="section section--tight" style="padding-bottom:12px;">
+  <div class="section__head" style="margin-bottom:28px;">
+    <span class="section__eyebrow">Voice library</span>
+    <h1 class="section__title">{{ voice_count }} neural voices. South Asian languages first-class.</h1>
+    <p class="section__sub">Every voice available in Studio — filter by language, preview the ones we have samples for, then generate with any of them. No signup required to start.</p>
+  </div>
+
+  {# ---- Filters ---- #}
+  <div class="voices-filters" id="voices-filters">
+    <div class="voices-filters__row">
+      <button type="button" class="filter-chip is-active" data-lang="all">All languages</button>
+      {% for lang in languages %}
+      <button type="button" class="filter-chip" data-lang="{{ lang }}">{{ lang }}</button>
+      {% endfor %}
+    </div>
+    <p class="voices-filters__count" id="voices-count">Showing {{ voice_count }} voices</p>
+  </div>
+
+  {# ---- Voice grid ---- #}
+  <div class="voice-grid" id="voices-grid">
+    {% for v in all_voices %}
+    <div class="voice-card voice-card--premium" data-lang="{{ v.language }}">
+      <div class="voice-card__top">
+        <span class="voice-card__name">{{ v.name }}</span>
+        <span class="voice-card__tag">{{ v.gender }}</span>
+      </div>
+      <div class="voice-card__meta">{{ v.language }} · Neural</div>
+      <button type="button" class="voice-card__play" data-audio="/static/audio/previews/{{ v.audio_slug }}.mp3" aria-label="Preview {{ v.name }}, {{ v.language }}">▶</button>
+      <span class="voice-card__hint">Tap to preview</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="voices-cta" style="margin-top:36px;">
+    <a href="{{ url_for('studio') }}" class="btn btn--brass">Try any voice in Studio — free</a>
+  </div>
+</section>
+
+<section class="section reveal-on-scroll" style="padding-top:20px;">
+  <div class="section__head">
+    <span class="section__eyebrow">Tips</span>
+    <h2 class="section__title">Get the best results</h2>
+  </div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <h3>Native script when possible</h3>
+      <p>For Urdu and Hindi, write in Nastaliq or Devanagari instead of pure Roman letters — pronunciation is noticeably clearer.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Match the primary language</h3>
+      <p>Pick a voice whose language matches the dominant language of your script. Mixed English terms still work fine inside an Urdu or Hindi sentence.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Preview before long scripts</h3>
+      <p>Use the short preview line in Studio to check pacing and tone, then generate the full script.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Only a few samples on this page</h3>
+      <p>We host a small set of preview clips here. Every voice still works in Studio — generate a few seconds free to hear it.</p>
+    </div>
+  </div>
+</section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "VoxCraft Voice Library",
+  "description": "{{ voice_count }} neural text-to-speech voices across {{ language_count }} languages, with first-class Urdu and Hindi support.",
+  "url": "https://voxcraft.site/voices"
+}
+</script>
+
+<script>
+(function(){
+  const chips = document.querySelectorAll('.filter-chip');
+  const cards = document.querySelectorAll('#voices-grid .voice-card');
+  const countEl = document.getElementById('voices-count');
+  if(!chips.length || !cards.length) return;
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('is-active'));
+      chip.classList.add('is-active');
+      const lang = chip.getAttribute('data-lang');
+      let visible = 0;
+      cards.forEach(card => {
+        const match = lang === 'all' || card.getAttribute('data-lang') === lang;
+        card.style.display = match ? '' : 'none';
+        if(match) visible++;
+      });
+      if(countEl){
+        countEl.textContent = lang === 'all'
+          ? 'Showing ' + visible + ' voices'
+          : 'Showing ' + visible + ' voice' + (visible === 1 ? '' : 's') + ' · ' + lang;
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

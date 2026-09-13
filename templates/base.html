@@ -85,7 +85,7 @@
     <div class="nav__more" id="nav-more">
       <button type="button" class="nav__more-btn" id="nav-more-btn" aria-expanded="false" aria-haspopup="true">More ▾</button>
       <div class="nav__more-menu" id="nav-more-menu" role="menu">
-        <a href="{{ url_for('landing') }}#voices" role="menuitem">Voices</a>
+        <a href="{{ url_for('voices_page') }}" role="menuitem">Voices</a>
         <a href="{{ url_for('blog_list') }}" role="menuitem">Blog</a>
         <a href="{{ url_for('developers') }}" role="menuitem">Developer API</a>
         <a href="{{ url_for('voice_cloning') }}" role="menuitem">Voice Cloning</a>
@@ -267,7 +267,7 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
       <span class="footer__col-title">Resources</span>
       <a href="{{ url_for('blog_list') }}">Blog &amp; guides</a>
       <a href="{{ url_for('developers') }}">Developer API</a>
-      <a href="{{ url_for('landing') }}#voices">Voice library</a>
+      <a href="{{ url_for('voices_page') }}">Voice library</a>
       <a href="{{ url_for('how_we_test') }}">How we test</a>
     </div>
     <div class="footer__col">
