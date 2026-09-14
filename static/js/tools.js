@@ -1291,4 +1291,182 @@
   if (!window.VoxCraftAds) {
     window.VoxCraftAds = { showInterstitial: function (cb) { if (typeof cb === 'function') cb(); } };
   }
+
+  // ---- Video audio redub (Pro) ----
+  (function initRedub() {
+    const fileInput = document.getElementById('redub-file');
+    const btn = document.getElementById('redub-btn');
+    const status = document.querySelector('[data-redub-status]');
+    const result = document.getElementById('redub-result');
+    const progress = document.getElementById('redub-progress');
+    const sourceLang = document.getElementById('redub-source-lang');
+    const targetLang = document.getElementById('redub-target-lang');
+    const voiceSelect = document.getElementById('redub-voice');
+    const speed = document.getElementById('redub-speed');
+    const speedLabel = document.getElementById('redub-speed-label');
+    if (!btn || !fileInput) return;
+
+    const VOICES = window.VOXCRAFT_VOICES || {};
+
+    function populateVoices() {
+      if (!voiceSelect || !targetLang) return;
+      const lang = targetLang.value;
+      const voices = VOICES[lang] || {};
+      voiceSelect.innerHTML = '';
+      Object.entries(voices).forEach(([name, id]) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        voiceSelect.appendChild(opt);
+      });
+    }
+    if (targetLang) {
+      targetLang.addEventListener('change', populateVoices);
+      populateVoices();
+    }
+    if (speed && speedLabel) {
+      speed.addEventListener('input', () => { speedLabel.textContent = speed.value + '%'; });
+    }
+
+    function setBusy(on) {
+      btn.disabled = !!on;
+      if (typeof voxSetBusy === 'function') voxSetBusy(btn, on);
+      else btn.classList.toggle('is-loading', !!on);
+      if (progress) {
+        progress.classList.toggle('is-active', !!on);
+        progress.setAttribute('aria-hidden', on ? 'false' : 'true');
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    btn.addEventListener('click', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        if (status) status.textContent = 'Choose a video file first.';
+        return;
+      }
+      if (!voiceSelect || !voiceSelect.value) {
+        if (status) status.textContent = 'Pick a target voice.';
+        return;
+      }
+
+      setBusy(true);
+      if (result) result.innerHTML = '';
+      if (status) status.textContent = 'Extracting · transcribing · translating · re-voicing… this can take a minute.';
+
+      const form = new FormData();
+      form.append('file', file);
+      form.append('source_lang', sourceLang ? sourceLang.value : 'auto');
+      form.append('target_lang', targetLang ? targetLang.value : 'US English');
+      form.append('voice_id', voiceSelect.value);
+      form.append('speed_pct', speed ? speed.value : '100');
+
+      try {
+        const res = await fetch('/api/tools/redub', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data.error || 'Redub failed.';
+          if (status) status.textContent = msg;
+          if (result && data.upgrade_url) {
+            result.innerHTML = '<div class="limit-toast">' + msg +
+              ' <a href="' + data.upgrade_url + '" style="color:var(--brass-hi);margin-left:6px;">See plans →</a></div>';
+          }
+          return;
+        }
+
+        if (status) {
+          status.textContent = data.skipped_translation
+            ? ('Done · same language, voice replaced · ' + (data.size_kb || '') + ' KB')
+            : ('Done · ' + (data.char_count || 0) + ' chars · ' + (data.size_kb || '') + ' KB');
+          status.classList.add('studio-status-ready');
+        }
+        if (typeof voxButtonSuccess === 'function') voxButtonSuccess(btn);
+
+        const videoName = data.filename || 'VoxCraft-Redub.mp4';
+        const audioName = data.audio_filename || 'VoxCraft-Redub-Audio.mp3';
+        if (result) {
+          result.innerHTML =
+            '<div class="result-panel">' +
+              '<div class="result-panel__label">Dubbed video</div>' +
+              '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 10px;">' +
+                (data.skipped_translation ? 'Translation skipped (same language). ' : '') +
+                'New voice: <strong style="color:var(--text-hi);">' + (data.target_lang || '') + '</strong>' +
+                ' · ' + (data.char_count || 0) + ' characters billed to your TTS quota' +
+              '</p>' +
+              '<div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">' +
+                '<button type="button" class="btn btn--brass btn--sm" data-redub-dl-video disabled>Preparing video…</button>' +
+                '<button type="button" class="btn btn--ghost btn--sm" data-redub-dl-audio disabled>Preparing audio…</button>' +
+              '</div>' +
+              '<details style="margin-top:12px;">' +
+                '<summary style="cursor:pointer;color:var(--text-mid);font-size:0.85rem;">Show transcript &amp; translation</summary>' +
+                '<div style="margin-top:8px;display:grid;gap:10px;">' +
+                  '<div><div style="font-family:var(--mono);font-size:0.72rem;color:var(--brass);margin-bottom:4px;">ORIGINAL</div>' +
+                  '<pre style="white-space:pre-wrap;font-size:0.85rem;color:var(--text-mid);background:var(--ink);padding:10px;border-radius:8px;margin:0;max-height:160px;overflow:auto;">' +
+                  escapeHtml(data.transcript || '') + '</pre></div>' +
+                  '<div><div style="font-family:var(--mono);font-size:0.72rem;color:var(--brass);margin-bottom:4px;">TRANSLATED / RE-VOICED</div>' +
+                  '<pre style="white-space:pre-wrap;font-size:0.85rem;color:var(--text-mid);background:var(--ink);padding:10px;border-radius:8px;margin:0;max-height:160px;overflow:auto;">' +
+                  escapeHtml(data.translated || '') + '</pre></div>' +
+                '</div>' +
+              '</details>' +
+            '</div>';
+
+          const toUrl = typeof voxB64ToObjectURL === 'function'
+            ? voxB64ToObjectURL
+            : async function (b64, mime) {
+                const bin = atob(b64.replace(/^data:[^;]+;base64,/, ''));
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return URL.createObjectURL(new Blob([bytes], { type: mime }));
+              };
+
+          (async function () {
+            try {
+              if (data.video_b64) {
+                const url = await toUrl(data.video_b64, 'video/mp4');
+                const b = result.querySelector('[data-redub-dl-video]');
+                if (b) {
+                  b.disabled = false;
+                  b.textContent = 'Download dubbed MP4';
+                  b.onclick = function () {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = videoName;
+                    a.click();
+                  };
+                }
+              }
+              if (data.audio_b64) {
+                const url = await toUrl(data.audio_b64, 'audio/mpeg');
+                const b = result.querySelector('[data-redub-dl-audio]');
+                if (b) {
+                  b.disabled = false;
+                  b.textContent = 'Download audio only';
+                  b.onclick = function () {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = audioName;
+                    a.click();
+                  };
+                }
+              }
+            } catch (e) {
+              console.warn('[voxcraft] redub download hydrate failed', e);
+              if (status) status.textContent = 'Ready — download may be slow on this device.';
+            }
+          })();
+        }
+      } catch (e) {
+        if (status) status.textContent = 'Network error — check your connection and try again.';
+      } finally {
+        setBusy(false);
+      }
+    });
+  })();
 })();
