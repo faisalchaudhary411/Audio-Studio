@@ -1,27 +1,33 @@
-{# Video audio redub — Pro only. Voice/language picker mirrors Studio. #}
-<div class="panel" id="panel-redub" data-tool="redub">
+{# Video audio redub widget — used on dedicated /video-redub page and /tools/video-audio-redub #}
+<div class="panel redub-panel" id="panel-redub" data-tool="redub">
   <span class="panel__label">Video audio redub</span>
-  <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
+  <p class="redub-lead">
     Extract → transcribe → translate → re-voice with a stock neural voice → mux back onto the video.
-    Up to 50MB / ~10 minutes. <strong style="color:var(--brass-hi);">Pro plan</strong> — uses the same 88 voices as Studio (no cloning).
+    Up to <strong>50&nbsp;MB</strong> / ~10 minutes.
+    <strong class="redub-pro-tag">Pro plan</strong> — same 88 voices as Studio (no cloning).
   </p>
 
   {% if not is_pro_ctx %}
-  <div class="limit-toast" style="margin-bottom:14px;">
+  <div class="limit-toast" style="margin-bottom:16px;">
     Video redub is included with Pro.
     <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);margin-left:6px;">See plans →</a>
   </div>
   {% endif %}
 
-  <input type="file" class="file-input" id="redub-file"
-         accept="video/*,.mp4,.mov,.mkv,.webm,.m4v,.avi"
-         style="margin-bottom:12px;"
-         {% if not is_pro_ctx %}disabled{% endif %}>
+  <div class="dropzone redub-dropzone" data-redub-drop>
+    <div class="dropzone__title">Drop a video here</div>
+    <div class="dropzone__hint">or tap to choose · MP4, MOV, MKV, WebM · up to 50&nbsp;MB</div>
+    <div class="dropzone__name" data-redub-filename></div>
+    <input type="file" class="file-input" id="redub-file"
+           accept="video/*,.mp4,.mov,.mkv,.webm,.m4v,.avi"
+           {% if not is_pro_ctx %}disabled{% endif %}>
+  </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-    <div>
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Source language (for transcription)</label>
-      <select id="redub-source-lang" class="studio-select" style="width:100%;" {% if not is_pro_ctx %}disabled{% endif %}>
+  <div class="redub-grid">
+    <div class="redub-field">
+      <label class="redub-label" for="redub-source-lang">Source language</label>
+      <span class="redub-label-hint">for transcription</span>
+      <select id="redub-source-lang" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
         <option value="auto">Auto-detect</option>
         <option value="en-US">English (US)</option>
         <option value="en-GB">English (UK)</option>
@@ -31,6 +37,7 @@
         <option value="bn-IN">Bengali</option>
         <option value="ta-IN">Tamil</option>
         <option value="te-IN">Telugu</option>
+        <option value="pa-IN">Punjabi</option>
         <option value="ar-SA">Arabic</option>
         <option value="es-ES">Spanish</option>
         <option value="fr-FR">French</option>
@@ -44,20 +51,19 @@
         <option value="ru-RU">Russian</option>
       </select>
     </div>
-    <div>
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Speech rate</label>
-      <div style="display:flex;align-items:center;gap:10px;">
+
+    <div class="redub-field">
+      <label class="redub-label" for="redub-speed">Speech rate</label>
+      <div class="redub-speed-row">
         <input type="range" class="studio-range" id="redub-speed" min="50" max="150" step="5" value="100"
-               style="flex:1;" {% if not is_pro_ctx %}disabled{% endif %}>
-        <span id="redub-speed-label" style="font-family:var(--mono);font-size:0.82rem;color:var(--text-mid);min-width:3.2em;">100%</span>
+               {% if not is_pro_ctx %}disabled{% endif %}>
+        <span id="redub-speed-label" class="redub-speed-val">100%</span>
       </div>
     </div>
-  </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-    <div>
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Target language</label>
-      <select id="redub-target-lang" class="studio-select" style="width:100%;" {% if not is_pro_ctx %}disabled{% endif %}>
+    <div class="redub-field">
+      <label class="redub-label" for="redub-target-lang">Target language</label>
+      <select id="redub-target-lang" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
         {% if voices %}
           {% for lang in voices.keys() %}
           <option value="{{ lang }}" {% if lang == 'US English' %}selected{% endif %}>{{ lang }}</option>
@@ -67,26 +73,25 @@
         {% endif %}
       </select>
     </div>
-    <div>
-      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Target voice</label>
-      <select id="redub-voice" class="studio-select" style="width:100%;" {% if not is_pro_ctx %}disabled{% endif %}>
-        {# Populated by JS from window.VOXCRAFT_VOICES #}
+
+    <div class="redub-field">
+      <label class="redub-label" for="redub-voice">Target voice</label>
+      <select id="redub-voice" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
       </select>
     </div>
   </div>
 
-  <div class="render-bar">
+  <div class="render-bar redub-actions">
     <button class="btn btn--brass" id="redub-btn" {% if not is_pro_ctx %}disabled{% endif %}>Redub video</button>
     <span class="render-status" data-redub-status></span>
   </div>
-  <div class="progress-bar" id="redub-progress" aria-hidden="true" style="margin-top:10px;">
+  <div class="progress-bar" id="redub-progress" aria-hidden="true">
     <div class="progress-bar__fill"></div>
   </div>
 
-  <div id="redub-result" style="margin-top:14px;"></div>
+  <div id="redub-result" class="redub-result"></div>
 </div>
 
 <script>
-  // Expose the same voice catalogue Studio uses so the target voice dropdown stays in sync.
   window.VOXCRAFT_VOICES = window.VOXCRAFT_VOICES || {{ (voices or {})|tojson }};
 </script>
