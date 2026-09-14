@@ -1328,6 +1328,19 @@
       speed.addEventListener('input', () => { speedLabel.textContent = speed.value + '%'; });
     }
 
+    const nameEl = document.querySelector('[data-redub-filename]');
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (nameEl) {
+        if (f) {
+          const mb = (f.size / (1024 * 1024)).toFixed(1);
+          nameEl.textContent = f.name + ' · ' + mb + ' MB';
+        } else {
+          nameEl.textContent = '';
+        }
+      }
+    });
+
     function setBusy(on) {
       btn.disabled = !!on;
       if (typeof voxSetBusy === 'function') voxSetBusy(btn, on);
