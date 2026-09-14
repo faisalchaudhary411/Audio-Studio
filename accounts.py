@@ -48,16 +48,19 @@ def find_by_login(identifier: str) -> dict:
     # Prefer email shape
     if "@" in ident:
         return find_user(ident.lower())
-    # Username lookup (case-insensitive)
+    # Username lookup (case-insensitive) — indexed, O(1) via the
+    # usernames table rather than scanning every account.
     uname = ident.lstrip("@").lower()
+    owner_email = persistence.get_username_owner(uname)
+    if owner_email:
+        return find_user(owner_email)
+    # Fallback: local-part of email if no username was ever set. Rare path
+    # (only accounts with no username), so a bounded scan is fine here.
     try:
         users = persistence.list_users() if hasattr(persistence, "list_users") else []
     except Exception:
         users = []
     for u in users:
-        if (u.get("username") or "").strip().lower() == uname:
-            return u
-        # also allow login with local-part of email if no username set
         email = (u.get("email") or "").lower()
         if email.split("@")[0] == uname and not (u.get("username") or "").strip():
             return u
@@ -152,29 +155,50 @@ def consume_token(token: str) -> dict:
 
 
 def update_profile(email: str, *, name: str = None, username: str = None,
-                   phone: str = None, avatar_url: str = None) -> dict:
-    """Update profile fields on the user JSON record. Returns updated record or {}."""
+                   phone: str = None, avatar_url: str = None) -> tuple:
+    """Update profile fields on the user JSON record.
+    Returns (record, username_error) — record is {} if no such account,
+    username_error is '' on success or if username wasn't touched, else a
+    message to show the user (name/phone/avatar still save either way).
+
+    Username uniqueness is enforced by persistence.reserve_username(),
+    which claims the handle in one atomic DB transaction — so even if two
+    people submit the same new username in the same instant, only one of
+    these calls succeeds and the other gets username_error back.
+    """
     email = (email or "").strip().lower()
     record = find_user(email)
     if not record:
-        return {}
+        return {}, ""
     if name is not None:
         record["name"] = (name or "").strip()[:80] or record.get("name") or "Customer"
+    username_error = ""
     if username is not None:
         import re
         u = (username or "").strip().lstrip("@")[:32]
         u = re.sub(r"[^a-zA-Z0-9._]", "", u)
-        if u and (len(u) < 3 or not re.match(r"^[a-zA-Z]", u)):
-            # invalid — leave unchanged; caller should validate first
-            pass
+        if not u:
+            # Clearing the username is always allowed.
+            old = (record.get("username") or "").strip().lower()
+            if old:
+                persistence.release_username(old, email)
+            record["username"] = ""
+        elif len(u) < 3 or not re.match(r"^[a-zA-Z]", u):
+            username_error = "Username must start with a letter and be at least 3 characters."
         else:
-            record["username"] = u
+            old = (record.get("username") or "")
+            if u.lower() == old.lower():
+                pass  # unchanged, nothing to reserve
+            elif persistence.reserve_username(u, email, old_username=old):
+                record["username"] = u
+            else:
+                username_error = f'"{u}" is already taken — pick another username.'
     if phone is not None:
         record["phone"] = (phone or "").strip()[:24]
     if avatar_url is not None:
         record["avatar_url"] = (avatar_url or "").strip()[:500]
     persistence.set_user(email, record)
-    return record
+    return record, username_error
 
 
 def change_password(email: str, current_password: str, new_password: str) -> tuple:
@@ -195,18 +219,15 @@ def change_password(email: str, current_password: str, new_password: str) -> tup
 
 
 def username_taken(username: str, except_email: str = "") -> bool:
-    """Best-effort uniqueness check across users table."""
+    """Fast pre-check for the profile form (e.g. live-typing feedback) —
+    O(1) lookup against the `usernames` table. This is a convenience check
+    only; the actual save in update_profile() re-checks atomically via
+    persistence.reserve_username() so a race between two people typing the
+    same name at once still can't produce a duplicate."""
     username = (username or "").strip().lstrip("@").lower()
     if not username:
         return False
-    try:
-        users = persistence.list_users() if hasattr(persistence, "list_users") else []
-    except Exception:
-        users = []
-    except_email = (except_email or "").strip().lower()
-    for u in users:
-        if (u.get("email") or "").lower() == except_email:
-            continue
-        if (u.get("username") or "").lower() == username:
-            return True
-    return False
+    owner = persistence.get_username_owner(username)
+    if not owner:
+        return False
+    return owner != (except_email or "").strip().lower()

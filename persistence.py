@@ -182,6 +182,10 @@ def init_db():
                     email TEXT PRIMARY KEY,
                     data  TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS usernames (
+                    username TEXT PRIMARY KEY,
+                    email    TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS password_tokens (
                     token TEXT PRIMARY KEY,
                     data  TEXT NOT NULL
@@ -920,6 +924,76 @@ def list_users(limit: int = 500) -> list:
         return out
     finally:
         conn.close()
+
+
+def get_username_owner(username: str) -> str:
+    """Email that currently holds this username, or '' if free. O(1) index
+    lookup against the `usernames` table — used for the live-typing check
+    on the profile form, NOT the source of truth for the actual save (see
+    reserve_username below), since a plain SELECT can still race."""
+    username = (username or "").strip().lower()
+    if not username:
+        return ""
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT email FROM usernames WHERE username = ?", (username,)).fetchone()
+        return row[0] if row else ""
+    finally:
+        conn.close()
+
+
+def reserve_username(username: str, email: str, old_username: str = "") -> bool:
+    """Atomically claim `username` for `email`, releasing `old_username`
+    (their previous handle, if any) in the same transaction. Returns True
+    on success, False if the username is already taken by someone else.
+    BEGIN IMMEDIATE + the table's PRIMARY KEY constraint is what actually
+    closes the race — two requests claiming the same username at nearly
+    the same instant will have one block until the other commits, then
+    fail cleanly instead of both "succeeding"."""
+    username = (username or "").strip().lower()
+    email = (email or "").strip().lower()
+    old_username = (old_username or "").strip().lower()
+    if not username or not email:
+        return False
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT email FROM usernames WHERE username = ?", (username,)).fetchone()
+            if row and row[0] != email:
+                conn.rollback()
+                return False
+            if old_username and old_username != username:
+                conn.execute("DELETE FROM usernames WHERE username = ? AND email = ?", (old_username, email))
+            conn.execute(
+                "INSERT INTO usernames(username, email) VALUES (?, ?) "
+                "ON CONFLICT(username) DO UPDATE SET email = excluded.email",
+                (username, email),
+            )
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+def release_username(username: str, email: str):
+    """Free up a username the given email currently owns (e.g. they cleared
+    the field). Scoped to (username, email) so it can't accidentally free
+    someone else's handle."""
+    username = (username or "").strip().lower()
+    email = (email or "").strip().lower()
+    if not username or not email:
+        return
+    with _write_lock:
+        conn = _connect()
+        try:
+            conn.execute("DELETE FROM usernames WHERE username = ? AND email = ?", (username, email))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def get_password_token(token: str) -> dict:

@@ -3270,6 +3270,82 @@ def account_dashboard():
                             plan_usage=plan_usage, usage_near=usage_near, usage_full=usage_full)
 
 
+def _save_account_avatar(file_storage):
+    """Save an uploaded profile photo into static/avatars/ and return the
+    public URL path, or None if missing/invalid. Same pattern as
+    _save_blog_image in admin_blog, capped at 1 MB per the account.html
+    hint text (vs. blog's 4 MB)."""
+    if not file_storage or not getattr(file_storage, "filename", None):
+        return None
+    filename = secure_filename(file_storage.filename)
+    if not filename:
+        return None
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        return None
+    data = file_storage.read()
+    if not data or len(data) > 1 * 1024 * 1024:
+        return None
+    avatar_dir = os.path.join(app.static_folder or "static", "avatars")
+    os.makedirs(avatar_dir, exist_ok=True)
+    unique = f"{int(time.time())}_{secrets.token_hex(4)}{ext}"
+    dest = os.path.join(avatar_dir, unique)
+    with open(dest, "wb") as f:
+        f.write(data)
+    return f"/static/avatars/{unique}"
+
+
+@app.route("/account/profile", methods=["POST"])
+@account_required
+def account_profile():
+    """Saves the profile panel on /account (display name, username, phone,
+    avatar). Username uniqueness is enforced atomically in
+    accounts.update_profile() -> persistence.reserve_username(), so this
+    route just surfaces whatever error (if any) that call returns."""
+    email = session["account_email"]
+
+    avatar_url = None
+    uploaded_url = _save_account_avatar(request.files.get("avatar"))
+    if uploaded_url:
+        avatar_url = uploaded_url
+    else:
+        typed_url = (request.form.get("avatar_url") or "").strip()
+        if typed_url:
+            avatar_url = typed_url
+
+    record, username_error = accounts.update_profile(
+        email,
+        name=request.form.get("name"),
+        username=request.form.get("username"),
+        phone=request.form.get("phone"),
+        avatar_url=avatar_url,
+    )
+    if not record:
+        flash("Account not found.", "error")
+    elif username_error:
+        flash(username_error, "error")
+    else:
+        flash("Profile updated.", "ok")
+    return redirect(url_for("account_dashboard"))
+
+
+@app.route("/account/password", methods=["POST"])
+@account_required
+def account_password():
+    """Saves the password panel on /account."""
+    email = session["account_email"]
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    new_password2 = request.form.get("new_password2", "")
+    if new_password != new_password2:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("account_dashboard"))
+    ok, error = accounts.change_password(email, current_password, new_password)
+    flash("Password updated." if ok else (error or "Could not update password."),
+          "ok" if ok else "error")
+    return redirect(url_for("account_dashboard"))
+
+
 @app.route("/account/rotate-api-key", methods=["POST"])
 @account_required
 def account_rotate_api_key():
