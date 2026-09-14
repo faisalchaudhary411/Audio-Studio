@@ -565,19 +565,20 @@ def _security_headers(response):
 
 @app.before_request
 def _auto_restore_pro_session():
-    """If this browser has no license_key in session (cookies cleared,
-    incognito, or a different browser than where they activated), silently
-    check whether this device's IP or fingerprint matches an already-active
-    key's history and restore it — see licensing.find_key_for_device() for
-    the deliberate convenience-vs-shared-network trade-off this makes.
-    Skipped for static assets and webhook/health endpoints, which never
-    need Pro status and would otherwise trigger a needless DB scan on
-    every single request (image, CSS, JS file, etc.)."""
+    """Restore Pro session when license_key is missing:
+    1) Logged-in account email → key bound at purchase (preferred, cross-browser)
+    2) Device IP/fingerprint match (key-only activation path)
+    Skipped for static/webhook paths."""
     if session.get("license_key"):
         return
     skip_prefixes = ("/static/", "/webhook/", "/ads.txt")
     if request.path.startswith(skip_prefixes):
         return
+    # Account login path — works on any browser after email/password login
+    acct = (session.get("account_email") or "").strip().lower()
+    if acct:
+        if bind_account_license(acct):
+            return
     restored_key = licensing.find_key_for_device(request)
     if restored_key:
         session["license_key"] = restored_key
@@ -733,6 +734,25 @@ def _license_context() -> dict:
             }
     g.license_ctx = ctx
     return ctx
+
+
+
+def bind_account_license(email: str) -> str:
+    """Attach the customer's Pro/Pro+ key to this session when they log in.
+    Returns the bound key (or empty). License remains the source of truth;
+    account is just the login wrapper. Device fingerprint/IP still used for
+    free-tier limits and auto-restore on key-only activation."""
+    email = (email or "").strip().lower()
+    if not email:
+        return ""
+    key = licensing.find_key_by_email(email)
+    if not key:
+        return ""
+    result = licensing.check_vox_license(key)
+    if result.get("valid"):
+        session["license_key"] = key
+        return key
+    return ""
 
 
 def is_pro() -> bool:
@@ -3276,13 +3296,15 @@ def account_login():
             return render_template("account_login.html",
                                     error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
 
-    email = request.form.get("email", "").strip().lower()
+    identifier = (request.form.get("email") or request.form.get("login") or "").strip()
     password = request.form.get("password", "")
-    user = accounts.verify_login(email, password)
+    user = accounts.verify_login_identifier(identifier, password)
 
     if user:
         persistence.clear_login_attempts(ip_hash)
         session["account_email"] = user["email"]
+        # Sync Pro/Pro+ key to this browser session
+        bind_account_license(user["email"])
         next_url = request.args.get("next") or url_for("account_dashboard")
         return redirect(next_url)
 
@@ -3309,6 +3331,9 @@ def account_login():
 @app.route("/logout")
 def account_logout():
     session.pop("account_email", None)
+    # Drop session license; device fingerprint may still restore a key that
+    # was activated on this browser via /activate.
+    session.pop("license_key", None)
     return redirect(url_for("landing"))
 
 
@@ -3337,6 +3362,23 @@ def account_dashboard():
                             plan_usage=plan_usage, usage_near=usage_near, usage_full=usage_full)
 
 
+
+@app.route("/account/check-username")
+@account_required
+def account_check_username():
+    """JSON: {available: bool, reason?: str} for profile form."""
+    u = (request.args.get("u") or "").strip().lstrip("@")
+    import re
+    if len(u) < 3:
+        return jsonify({"available": False, "reason": "too_short"})
+    if not re.match(r"^[A-Za-z][A-Za-z0-9._]{2,31}$", u):
+        return jsonify({"available": False, "reason": "invalid"})
+    email = session.get("account_email", "")
+    if accounts.username_taken(u, except_email=email):
+        return jsonify({"available": False, "reason": "taken"})
+    return jsonify({"available": True})
+
+
 @app.route("/account/profile", methods=["POST"])
 @account_required
 def account_profile():
@@ -3346,9 +3388,19 @@ def account_profile():
     phone = request.form.get("phone", "")
     avatar_url = (request.form.get("avatar_url") or "").strip()
 
-    if username and accounts.username_taken(username, except_email=email):
-        flash("That username is already taken.", "error")
-        return redirect(url_for("account_dashboard"))
+    if username:
+        import re as _re
+        u_clean = username.strip().lstrip("@")
+        if len(u_clean) < 3:
+            flash("Username must be at least 3 characters.", "error")
+            return redirect(url_for("account_dashboard"))
+        if not _re.match(r"^[A-Za-z][A-Za-z0-9._]{2,31}$", u_clean):
+            flash("Username must start with a letter and use only letters, numbers, . or _", "error")
+            return redirect(url_for("account_dashboard"))
+        if accounts.username_taken(u_clean, except_email=email):
+            flash("That username is already taken.", "error")
+            return redirect(url_for("account_dashboard"))
+        username = u_clean
 
     # Optional avatar upload (stored under static/uploads/avatars)
     avatar_file = request.files.get("avatar")
@@ -3451,6 +3503,7 @@ def set_password(token):
                                 error="Password must be at least 8 characters.")
     accounts.set_password(token_info["email"], password)
     session["account_email"] = token_info["email"]
+    bind_account_license(token_info["email"])
     return redirect(url_for("account_dashboard"))
 
 
@@ -3492,6 +3545,7 @@ def reset_password(token):
                                 error="Password must be at least 8 characters.")
     accounts.set_password(token_info["email"], password)
     session["account_email"] = token_info["email"]
+    bind_account_license(token_info["email"])
     return redirect(url_for("account_dashboard"))
 
 

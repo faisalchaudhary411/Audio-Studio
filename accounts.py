@@ -39,6 +39,40 @@ def find_user(email: str) -> dict:
     return persistence.get_user(email)
 
 
+
+def find_by_login(identifier: str) -> dict:
+    """Resolve email OR username to a user record. Empty dict if not found."""
+    ident = (identifier or "").strip()
+    if not ident:
+        return {}
+    # Prefer email shape
+    if "@" in ident:
+        return find_user(ident.lower())
+    # Username lookup (case-insensitive)
+    uname = ident.lstrip("@").lower()
+    try:
+        users = persistence.list_users() if hasattr(persistence, "list_users") else []
+    except Exception:
+        users = []
+    for u in users:
+        if (u.get("username") or "").strip().lower() == uname:
+            return u
+        # also allow login with local-part of email if no username set
+        email = (u.get("email") or "").lower()
+        if email.split("@")[0] == uname and not (u.get("username") or "").strip():
+            return u
+    return {}
+
+
+def verify_login_identifier(identifier: str, raw_password: str) -> dict:
+    """Login with email or username + password. Same empty-dict failure shape as verify_login."""
+    record = find_by_login(identifier)
+    if not record or not record.get("password_hash"):
+        return {}
+    if not check_password_hash(record["password_hash"], raw_password or ""):
+        return {}
+    return record
+
 def find_or_create_user(email: str, name: str) -> tuple:
     """Called at the moment of payment (fs_callback, fs_callback_api, or
     the admin manual-approval action) — never from a self-serve signup
@@ -127,11 +161,14 @@ def update_profile(email: str, *, name: str = None, username: str = None,
     if name is not None:
         record["name"] = (name or "").strip()[:80] or record.get("name") or "Customer"
     if username is not None:
-        u = (username or "").strip().lstrip("@")[:32]
-        # allow letters, numbers, underscore, dot
         import re
+        u = (username or "").strip().lstrip("@")[:32]
         u = re.sub(r"[^a-zA-Z0-9._]", "", u)
-        record["username"] = u
+        if u and (len(u) < 3 or not re.match(r"^[a-zA-Z]", u)):
+            # invalid — leave unchanged; caller should validate first
+            pass
+        else:
+            record["username"] = u
     if phone is not None:
         record["phone"] = (phone or "").strip()[:24]
     if avatar_url is not None:
