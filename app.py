@@ -3933,6 +3933,7 @@ def api_redub():
         speed_pct = int(request.form.get("speed_pct") or 100)
     except (TypeError, ValueError):
         speed_pct = 100
+    match_length = (request.form.get("match_length") or "1").strip().lower() not in ("0", "false", "off", "no")
 
     if not voice_id:
         return jsonify({"error": "Pick a target voice."}), 400
@@ -3962,11 +3963,12 @@ def api_redub():
             target_studio_lang=target_lang,
             voice_id=voice_id,
             speed_pct=speed_pct,
+            match_length=match_length,
         )
     except Exception as e:
         return api_error(e, "redub this video")
 
-        _bump_counter("usage_redub")
+    _bump_counter("usage_redub")
     lk = session.get("license_key") or ""
     if lk:
         usage_tracking.bump_license_monthly_counter(lk, "usage_redub", 1)
@@ -3993,6 +3995,8 @@ def api_redub():
         "audio_filename": result["audio_filename"],
         "transcript": result["transcript"],
         "translated": result["translated"],
+        "length_matched": result.get("length_matched", False),
+        "original_duration_sec": result.get("original_duration_sec"),
         "char_count": char_count,
         "size_kb": result["size_kb"],
         "audio_size_kb": result["audio_size_kb"],

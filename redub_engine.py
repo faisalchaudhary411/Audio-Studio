@@ -245,9 +245,106 @@ def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[
     )
 
 
+
+def _probe_duration_sec(path: str) -> float:
+    """Return media duration in seconds via ffprobe. 0 on failure."""
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            capture_output=True, timeout=30,
+        )
+        if proc.returncode != 0:
+            return 0.0
+        return float((proc.stdout or b"").decode("utf-8", errors="replace").strip() or 0)
+    except Exception:
+        return 0.0
+
+
+def _atempo_chain(ratio: float) -> str:
+    """Build an atempo filter chain. Each atempo stage must be in [0.5, 2.0]."""
+    if ratio <= 0:
+        return "atempo=1.0"
+    stages = []
+    r = float(ratio)
+    # Speed up: ratio > 1 means play faster (shorter output). atempo = ratio.
+    # We receive stretch_factor = target/tts so atempo = tts/target = 1/stretch when matching length.
+    # Caller passes the atempo value directly (playback speed).
+    while r > 2.0 + 1e-6:
+        stages.append(2.0)
+        r /= 2.0
+    while r < 0.5 - 1e-6:
+        stages.append(0.5)
+        r /= 0.5
+    stages.append(max(0.5, min(2.0, r)))
+    return ",".join(f"atempo={s:.6f}" for s in stages)
+
+
+def stretch_audio_to_duration(audio_bytes: bytes, target_sec: float, audio_ext: str = "mp3") -> bytes:
+    """
+    Pitch-preserving time-stretch so output duration ≈ target_sec.
+    Uses ffmpeg atempo. If durations are already close (<3% diff), returns input unchanged.
+    Extreme ratios are clamped to keep speech intelligible (~0.5x–2x effective after chaining).
+    """
+    if not audio_bytes or target_sec <= 0.05:
+        return audio_bytes
+
+    in_path = out_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_ext}") as f:
+            f.write(audio_bytes)
+            in_path = f.name
+        src_dur = _probe_duration_sec(in_path)
+        if src_dur <= 0.05:
+            return audio_bytes
+
+        # atempo = src/target → output duration = src / atempo ≈ target
+        ratio = src_dur / target_sec
+        if abs(ratio - 1.0) < 0.03:
+            return audio_bytes  # already close enough
+
+        # Soft clamp: don't make speech unintelligible
+        ratio = max(0.5, min(2.0, ratio))
+        # Allow chaining beyond single-stage limits for moderate extremes already clamped
+        filt = _atempo_chain(ratio)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+            out_path = f.name
+
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-i", in_path,
+            "-filter:a", filt,
+            "-c:a", "libmp3lame", "-b:a", "192k",
+            out_path,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, timeout=120)
+        if proc.returncode != 0 or not os.path.exists(out_path) or os.path.getsize(out_path) < 100:
+            # Fall back to original rather than failing the whole job
+            return audio_bytes
+        with open(out_path, "rb") as f:
+            return f.read()
+    finally:
+        for path in (in_path, out_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+
+
 def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: bytes,
-                         audio_ext: str = "mp3") -> bytes:
-    """Replace the video's audio track with new audio. Video stream is stream-copied."""
+                         audio_ext: str = "mp3", *, match_video_length: bool = True) -> bytes:
+    """Replace the video's audio track with new audio. Video stream is stream-copied.
+
+    If match_video_length is True (default after Phase 1.5), audio is padded with silence
+    or trimmed so the output video keeps the original picture duration.
+    If False, uses -shortest (legacy behaviour).
+    """
     video_path = audio_path = out_path = None
     try:
         raw_ext = (video_filename or "video.mp4").rsplit(".", 1)
@@ -264,9 +361,6 @@ def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: b
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as ot:
             out_path = ot.name
 
-        # -c:v copy keeps the original video; -c:a aac for broad player compatibility.
-        # -shortest ends when the shorter stream ends (usually the new TTS track).
-        # -map 0:v:0 -map 1:a:0 picks video from original, audio from new track.
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
             "-i", video_path,
@@ -276,10 +370,15 @@ def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: b
             "-c:v", "copy",
             "-c:a", "aac",
             "-b:a", "192k",
-            "-shortest",
             "-movflags", "+faststart",
-            out_path,
         ]
+        if match_video_length:
+            # Keep full video length; pad audio with silence if short, trim if long
+            cmd += ["-af", "apad", "-shortest"]
+        else:
+            cmd += ["-shortest"]
+        cmd.append(out_path)
+
         proc = subprocess.run(cmd, capture_output=True, timeout=180)
         if proc.returncode != 0 or not os.path.exists(out_path) or os.path.getsize(out_path) < 100:
             err = (proc.stderr or b"").decode("utf-8", errors="replace")[:300]
@@ -304,6 +403,7 @@ def redub_video(
     target_studio_lang: str = "US English",
     voice_id: str = "en-US-JennyNeural",
     speed_pct: int = 100,
+    match_length: bool = True,
 ) -> dict:
     """
     Full redub pipeline. Returns dict with:
@@ -363,8 +463,51 @@ def redub_video(
     if not tts_audio:
         raise UserFacingError("Could not generate the dubbed voice track. Try another voice.")
 
+    # ---- 4b. Match length to original video (Phase 1.5) ----
+    original_dur = float(duration or 0)
+    stretched = False
+    stretch_ratio = 1.0
+    if match_length:
+        # Prefer accurate duration from the extracted audio file
+        tmp_a = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+                f.write(audio_bytes)
+                tmp_a = f.name
+            probed = _probe_duration_sec(tmp_a)
+            if probed > 0.05:
+                original_dur = probed
+        finally:
+            if tmp_a:
+                try:
+                    os.unlink(tmp_a)
+                except OSError:
+                    pass
+
+        if original_dur > 0.05:
+            before = tts_audio
+            tts_audio = stretch_audio_to_duration(tts_audio, original_dur, audio_ext="mp3")
+            stretched = tts_audio is not before and tts_audio != before
+            # Approximate ratio for the response payload
+            tmp_t = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+                    f.write(tts_audio)
+                    tmp_t = f.name
+                tts_dur = _probe_duration_sec(tmp_t)
+                if tts_dur > 0 and original_dur > 0:
+                    stretch_ratio = round(original_dur / tts_dur, 3) if tts_dur else 1.0
+            finally:
+                if tmp_t:
+                    try:
+                        os.unlink(tmp_t)
+                    except OSError:
+                        pass
+
     # ---- 5. Mux ----
-    dubbed_video = mux_audio_onto_video(video_bytes, filename, tts_audio, audio_ext="mp3")
+    dubbed_video = mux_audio_onto_video(
+        video_bytes, filename, tts_audio, audio_ext="mp3", match_video_length=bool(match_length),
+    )
 
     ts = __import__("time").time()
     out_name = f"VoxCraft-Redub-{int(ts)}.mp4"
@@ -383,4 +526,7 @@ def redub_video(
         "skipped_translation": same_lang,
         "target_lang": target_studio_lang,
         "voice_id": voice_id,
+        "match_length": bool(match_length),
+        "original_duration_sec": round(original_dur, 2) if original_dur else None,
+        "length_matched": bool(match_length and original_dur > 0.05),
     }
