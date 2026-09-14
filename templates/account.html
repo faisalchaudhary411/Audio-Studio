@@ -10,6 +10,89 @@
     <p class="section__sub">{{ user.email }}</p>
   </div>
 
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+      <div class="limit-toast" style="margin-bottom:14px;{% if cat == 'ok' or cat == 'success' %}border-color:var(--jade);{% endif %}">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {# ---- Profile ---- #}
+  <div class="panel profile-panel" style="margin-bottom:20px;">
+    <span class="panel__label">Profile</span>
+    <div class="profile-head">
+      <div class="profile-avatar" aria-hidden="true">
+        {% if user.avatar_url %}
+        <img src="{{ user.avatar_url }}" alt="" width="64" height="64">
+        {% else %}
+        <span class="profile-avatar__initials">{{ (user.name or user.email or '?')[0]|upper }}</span>
+        {% endif %}
+      </div>
+      <div class="profile-head__meta">
+        <p class="profile-head__name">{{ user.name or 'Customer' }}</p>
+        {% if user.username %}<p class="profile-head__user">@{{ user.username }}</p>{% endif %}
+        <p class="profile-head__email">{{ user.email }}</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('account_profile') }}" enctype="multipart/form-data" class="profile-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="profile-grid">
+        <div class="profile-field">
+          <label for="profile-name">Display name</label>
+          <input type="text" id="profile-name" name="name" value="{{ user.name or '' }}" maxlength="80" autocomplete="name" class="studio-select" style="width:100%;">
+        </div>
+        <div class="profile-field">
+          <label for="profile-username">Username</label>
+          <input type="text" id="profile-username" name="username" value="{{ user.username or '' }}" maxlength="32" pattern="[A-Za-z0-9._]*" placeholder="optional" class="studio-select" style="width:100%;">
+        </div>
+        <div class="profile-field">
+          <label for="profile-phone">Phone</label>
+          <input type="tel" id="profile-phone" name="phone" value="{{ user.phone or '' }}" maxlength="24" autocomplete="tel" placeholder="optional" class="studio-select" style="width:100%;">
+        </div>
+        <div class="profile-field">
+          <label for="profile-avatar">Profile photo</label>
+          <input type="file" id="profile-avatar" name="avatar" accept="image/jpeg,image/png,image/webp,image/gif" class="file-input">
+          <span class="profile-hint">JPG, PNG or WebP · max 1&nbsp;MB</span>
+        </div>
+      </div>
+      <div class="profile-field" style="margin-top:12px;">
+        <label for="profile-avatar-url">Or photo URL</label>
+        <input type="url" id="profile-avatar-url" name="avatar_url" value="{{ user.avatar_url or '' }}" placeholder="https://…" class="studio-select" style="width:100%;">
+      </div>
+      <div style="margin-top:16px;">
+        <button type="submit" class="btn btn--brass btn--sm">Save profile</button>
+      </div>
+    </form>
+  </div>
+
+  {# ---- Password ---- #}
+  <div class="panel" style="margin-bottom:20px;">
+    <span class="panel__label">Password</span>
+    <form method="post" action="{{ url_for('account_password') }}" class="profile-form" style="margin-top:12px;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="profile-grid">
+        <div class="profile-field">
+          <label for="cur-pass">Current password</label>
+          <input type="password" id="cur-pass" name="current_password" required autocomplete="current-password" class="studio-select" style="width:100%;">
+        </div>
+        <div class="profile-field">
+          <label for="new-pass">New password</label>
+          <input type="password" id="new-pass" name="new_password" required minlength="8" autocomplete="new-password" class="studio-select" style="width:100%;">
+        </div>
+        <div class="profile-field">
+          <label for="new-pass2">Confirm new password</label>
+          <input type="password" id="new-pass2" name="new_password2" required minlength="8" autocomplete="new-password" class="studio-select" style="width:100%;">
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+        <button type="submit" class="btn btn--ghost btn--sm">Change password</button>
+        <a href="{{ url_for('forgot_password') }}" style="color:var(--text-dim);font-size:0.85rem;">Forgot password?</a>
+      </div>
+    </form>
+  </div>
+
   <div class="panel" style="margin-bottom:20px;">
     <span class="panel__label">App license</span>
     {% if license_info.valid %}

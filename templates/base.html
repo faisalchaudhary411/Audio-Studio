@@ -79,31 +79,43 @@
     VoxCraft
   </a>
   <nav class="nav__links" id="nav-links">
-    <a href="{{ url_for('studio') }}" class="is-primary">Voice Studio</a>
+    <a href="{{ url_for('studio') }}" class="is-primary">Studio</a>
     <a href="{{ url_for('tools_hub') }}">Tools</a>
     <a href="{{ url_for('pricing') }}">Pricing</a>
+
+    <div class="nav__more" id="nav-create">
+      <button type="button" class="nav__more-btn" id="nav-create-btn" aria-expanded="false" aria-haspopup="true">Create ▾</button>
+      <div class="nav__more-menu" id="nav-create-menu" role="menu">
+        <span class="nav__more-label" role="presentation">AI features</span>
+        <a href="{{ url_for('video_redub') }}" role="menuitem">Video Redub</a>
+        <a href="{{ url_for('voice_cloning') }}" role="menuitem">Voice Cloning</a>
+        <a href="{{ url_for('studio') }}" role="menuitem">Voice Studio</a>
+      </div>
+    </div>
+
     <div class="nav__more" id="nav-more">
       <button type="button" class="nav__more-btn" id="nav-more-btn" aria-expanded="false" aria-haspopup="true">More ▾</button>
       <div class="nav__more-menu" id="nav-more-menu" role="menu">
+        <span class="nav__more-label" role="presentation">Resources</span>
         <a href="{{ url_for('voices_page') }}" role="menuitem">Voices</a>
         <a href="{{ url_for('blog_list') }}" role="menuitem">Blog</a>
         <a href="{{ url_for('developers') }}" role="menuitem">Developer API</a>
-        <a href="{{ url_for('voice_cloning') }}" role="menuitem">Voice Cloning</a>
-        <a href="{{ url_for('video_redub') }}" role="menuitem">Video Redub</a>
         <a href="{{ url_for('about') }}" role="menuitem">About</a>
+        <a href="{{ url_for('contact') }}" role="menuitem">Contact</a>
       </div>
     </div>
+
     {% if plan_ctx == 'pro_plus' %}
     <a href="{{ url_for('pricing') }}" class="nav-plan nav-plan--plus" title="{{ license_name_ctx or 'Pro+' }}">Pro+</a>
     {% elif plan_ctx == 'pro' %}
     <a href="{{ url_for('pricing') }}" class="nav-plan" title="{{ license_name_ctx or 'Pro' }}">Pro</a>
     {% else %}
-    <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">Get Pro</a>
+    <a href="{{ url_for('upgrade') }}" class="nav-plan nav-plan--cta">Get Pro</a>
     {% endif %}
     {% if account_email_ctx %}
-    <a href="{{ url_for('account_dashboard') }}" title="{{ account_email_ctx }}">Account</a>
+    <a href="{{ url_for('account_dashboard') }}" class="nav-account" title="{{ account_email_ctx }}">Account</a>
     {% else %}
-    <a href="{{ url_for('account_login') }}">Log In</a>
+    <a href="{{ url_for('account_login') }}">Log in</a>
     {% endif %}
   </nav>
   <div class="nav__actions">
@@ -259,18 +271,18 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
     <div class="footer__col">
       <span class="footer__col-title">Product</span>
       <a href="{{ url_for('studio') }}">Voice Studio</a>
-      <a href="{{ url_for('voice_cloning') }}">Voice Cloning</a>
       <a href="{{ url_for('video_redub') }}">Video Redub</a>
+      <a href="{{ url_for('voice_cloning') }}">Voice Cloning</a>
       <a href="{{ url_for('tools_hub') }}">Audio Tools</a>
       <a href="{{ url_for('pricing') }}">Pricing</a>
-      <a href="{{ url_for('activate') }}">Activate license</a>
     </div>
     <div class="footer__col">
       <span class="footer__col-title">Resources</span>
-      <a href="{{ url_for('blog_list') }}">Blog &amp; guides</a>
-      <a href="{{ url_for('developers') }}">Developer API</a>
       <a href="{{ url_for('voices_page') }}">Voice library</a>
+      <a href="{{ url_for('blog_list') }}">Blog</a>
+      <a href="{{ url_for('developers') }}">Developer API</a>
       <a href="{{ url_for('how_we_test') }}">How we test</a>
+      <a href="{{ url_for('activate') }}">Activate license</a>
     </div>
     <div class="footer__col">
       <span class="footer__col-title">Company</span>
@@ -279,9 +291,12 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
       <a href="{{ url_for('privacy') }}">Privacy</a>
       <a href="{{ url_for('terms') }}">Terms</a>
     </div>
-    <div class="footer__col">
-      <span class="footer__col-title">Guides &amp; Languages</span>
-      {% for link in seo_footer_links_ctx %}<a href="{{ url_for('seo_landing_page', slug=link.slug) }}">{{ link.label }}</a>{% endfor %}
+    <div class="footer__col footer__col--guides">
+      <span class="footer__col-title">Guides</span>
+      {% for link in seo_footer_links_ctx[:6] %}<a href="{{ url_for('seo_landing_page', slug=link.slug) }}">{{ link.label }}</a>{% endfor %}
+      {% if seo_footer_links_ctx|length > 6 %}
+      <a href="{{ url_for('blog_list') }}" class="footer__more-link">More guides →</a>
+      {% endif %}
     </div>
   </div>
   <div class="footer__bottom">
