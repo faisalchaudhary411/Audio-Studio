@@ -168,30 +168,33 @@ function initStudio(){
   });
 }
 
-// ---- Mobile nav hamburger (full-screen royal drawer) ----
+// ---- Mobile nav hamburger (drawer outside header) ----
 function initNavToggle(){
   const btn = document.getElementById('nav-hamburger');
-  const links = document.getElementById('nav-links');
-  if(!btn || !links) return;
+  const drawer = document.getElementById('nav-drawer');
+  if(!btn || !drawer) return;
 
   function setOpen(open) {
-    links.classList.toggle('is-open', open);
+    drawer.classList.toggle('is-open', open);
     btn.classList.toggle('is-open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) drawer.removeAttribute('hidden');
+    else drawer.setAttribute('hidden', '');
     document.body.classList.toggle('nav-drawer-open', open);
   }
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    setOpen(!links.classList.contains('is-open'));
+    setOpen(!drawer.classList.contains('is-open'));
   });
-  links.querySelectorAll('a').forEach(a => {
+  drawer.querySelectorAll('a').forEach(a => {
     a.addEventListener('click', () => setOpen(false));
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setOpen(false);
   });
 }
+
 
 
 // ---- Voice preview play/pause ----
