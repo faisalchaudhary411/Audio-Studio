@@ -1,0 +1,92 @@
+{# Video audio redub — Pro only. Voice/language picker mirrors Studio. #}
+<div class="panel" id="panel-redub" data-tool="redub">
+  <span class="panel__label">Video audio redub</span>
+  <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
+    Extract → transcribe → translate → re-voice with a stock neural voice → mux back onto the video.
+    Up to 50MB / ~10 minutes. <strong style="color:var(--brass-hi);">Pro plan</strong> — uses the same 88 voices as Studio (no cloning).
+  </p>
+
+  {% if not is_pro_ctx %}
+  <div class="limit-toast" style="margin-bottom:14px;">
+    Video redub is included with Pro.
+    <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);margin-left:6px;">See plans →</a>
+  </div>
+  {% endif %}
+
+  <input type="file" class="file-input" id="redub-file"
+         accept="video/*,.mp4,.mov,.mkv,.webm,.m4v,.avi"
+         style="margin-bottom:12px;"
+         {% if not is_pro_ctx %}disabled{% endif %}>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Source language (for transcription)</label>
+      <select id="redub-source-lang" class="studio-select" style="width:100%;" {% if not is_pro_ctx %}disabled{% endif %}>
+        <option value="auto">Auto-detect</option>
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="hi-IN">Hindi</option>
+        <option value="ur-PK">Urdu</option>
+        <option value="bn-IN">Bengali</option>
+        <option value="ta-IN">Tamil</option>
+        <option value="te-IN">Telugu</option>
+        <option value="ar-SA">Arabic</option>
+        <option value="es-ES">Spanish</option>
+        <option value="fr-FR">French</option>
+        <option value="de-DE">German</option>
+        <option value="it-IT">Italian</option>
+        <option value="pt-BR">Portuguese</option>
+        <option value="ja-JP">Japanese</option>
+        <option value="ko-KR">Korean</option>
+        <option value="zh-CN">Chinese (Mandarin)</option>
+        <option value="tr-TR">Turkish</option>
+        <option value="ru-RU">Russian</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Speech rate</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <input type="range" class="studio-range" id="redub-speed" min="50" max="150" step="5" value="100"
+               style="flex:1;" {% if not is_pro_ctx %}disabled{% endif %}>
+        <span id="redub-speed-label" style="font-family:var(--mono);font-size:0.82rem;color:var(--text-mid);min-width:3.2em;">100%</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+    <div>
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Target language</label>
+      <select id="redub-target-lang" class="studio-select" style="width:100%;" {% if not is_pro_ctx %}disabled{% endif %}>
+        {% if voices %}
+          {% for lang in voices.keys() %}
+          <option value="{{ lang }}" {% if lang == 'US English' %}selected{% endif %}>{{ lang }}</option>
+          {% endfor %}
+        {% else %}
+          <option value="US English">US English</option>
+        {% endif %}
+      </select>
+    </div>
+    <div>
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Target voice</label>
+      <select id="redub-voice" class="studio-select" style="width:100%;" {% if not is_pro_ctx %}disabled{% endif %}>
+        {# Populated by JS from window.VOXCRAFT_VOICES #}
+      </select>
+    </div>
+  </div>
+
+  <div class="render-bar">
+    <button class="btn btn--brass" id="redub-btn" {% if not is_pro_ctx %}disabled{% endif %}>Redub video</button>
+    <span class="render-status" data-redub-status></span>
+  </div>
+  <div class="progress-bar" id="redub-progress" aria-hidden="true" style="margin-top:10px;">
+    <div class="progress-bar__fill"></div>
+  </div>
+
+  <div id="redub-result" style="margin-top:14px;"></div>
+</div>
+
+<script>
+  // Expose the same voice catalogue Studio uses so the target voice dropdown stays in sync.
+  window.VOXCRAFT_VOICES = window.VOXCRAFT_VOICES || {{ (voices or {})|tojson }};
+</script>
