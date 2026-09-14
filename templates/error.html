@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ title or "Error" }} — VoxCraft{% endblock %}
+{% block meta_description %}{{ message or "Something went wrong." }}{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:520px;text-align:center;padding-top:64px;padding-bottom:64px;">
+  <p style="font-family:var(--mono);font-size:0.8rem;color:var(--brass);letter-spacing:0.08em;margin-bottom:12px;">{{ code or "Error" }}</p>
+  <h1 class="section__title" style="margin-bottom:12px;">{{ title or "Something went wrong" }}</h1>
+  <p class="section__sub" style="margin-bottom:28px;">{{ message or "Please try again in a moment." }}</p>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;">
+    <a href="{{ url_for('landing') }}" class="btn btn--brass">Home</a>
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost">Voice Studio</a>
+    <a href="{{ url_for('contact') }}" class="btn btn--ghost">Contact</a>
+  </div>
+</section>
+{% endblock %}
