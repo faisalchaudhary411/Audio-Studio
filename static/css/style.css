@@ -3041,3 +3041,52 @@ body:not(.has-sticky-ad) .section{padding-bottom:4px;}
     padding-right:16px;
   }
 }
+
+/* ===== Video redub dedicated layout ===== */
+.redub-panel{max-width:100%;}
+.redub-lead{
+  color:var(--text-mid);
+  font-size:0.88rem;
+  line-height:1.55;
+  margin:0 0 16px;
+}
+.redub-pro-tag{color:var(--brass-hi);font-weight:600;}
+.redub-dropzone{margin-bottom:18px;min-height:120px;}
+.redub-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px 16px;
+  margin-bottom:18px;
+}
+@media (max-width:600px){
+  .redub-grid{grid-template-columns:1fr;}
+}
+.redub-field{min-width:0;display:flex;flex-direction:column;gap:6px;}
+.redub-label{
+  font-family:var(--mono);
+  font-size:0.78rem;
+  color:var(--text-mid);
+  letter-spacing:0.02em;
+}
+.redub-label-hint{
+  font-size:0.72rem;
+  color:var(--text-dim);
+  margin-top:-4px;
+}
+.redub-field .studio-select{width:100%;}
+.redub-speed-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-height:40px;
+}
+.redub-speed-row .studio-range{flex:1;min-width:0;}
+.redub-speed-val{
+  font-family:var(--mono);
+  font-size:0.85rem;
+  color:var(--text-mid);
+  min-width:3.2em;
+  text-align:right;
+}
+.redub-actions{margin-top:4px;}
+.redub-result{margin-top:16px;}
