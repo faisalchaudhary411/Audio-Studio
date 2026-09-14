@@ -230,26 +230,38 @@ function initVoicePreviews(){
   });
 }
 
-// ---- "More" dropdown in desktop nav ----
+// ---- Desktop nav dropdowns (Create, More, …) ----
 function initNavMore(){
-  const wrap = document.getElementById('nav-more');
-  const btn = document.getElementById('nav-more-btn');
-  if(!wrap || !btn) return;
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const open = wrap.classList.toggle('is-open');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-  document.addEventListener('click', () => {
-    wrap.classList.remove('is-open');
-    btn.setAttribute('aria-expanded', 'false');
-  });
-  wrap.querySelectorAll('a').forEach(a => {
-    a.addEventListener('click', () => {
-      wrap.classList.remove('is-open');
-      btn.setAttribute('aria-expanded', 'false');
+  const wraps = Array.from(document.querySelectorAll('.nav__more'));
+  if (!wraps.length) return;
+
+  function closeAll(except) {
+    wraps.forEach((w) => {
+      if (except && w === except) return;
+      w.classList.remove('is-open');
+      const b = w.querySelector('.nav__more-btn');
+      if (b) b.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  wraps.forEach((wrap) => {
+    const btn = wrap.querySelector('.nav__more-btn');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !wrap.classList.contains('is-open');
+      closeAll();
+      if (willOpen) {
+        wrap.classList.add('is-open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    wrap.querySelectorAll('a').forEach((a) => {
+      a.addEventListener('click', () => closeAll());
     });
   });
+
+  document.addEventListener('click', () => closeAll());
 }
 
 // ---- Pricing monthly / annual display toggle ----
