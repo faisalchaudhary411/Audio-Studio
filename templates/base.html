@@ -79,72 +79,34 @@
     <span class="nav__brand-text">VoxCraft</span>
   </a>
 
-  <nav class="nav__links" id="nav-links" aria-label="Primary">
+  <nav class="nav__links nav__links--desktop" aria-label="Primary">
     <a href="{{ url_for('studio') }}" class="nav__link is-primary">Studio</a>
     <a href="{{ url_for('tools_hub') }}" class="nav__link">Tools</a>
     <a href="{{ url_for('pricing') }}" class="nav__link">Pricing</a>
-
     <div class="nav__more" id="nav-products">
       <button type="button" class="nav__more-btn" id="nav-products-btn" aria-expanded="false" aria-haspopup="true">
         Products
         <svg class="nav__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
-      <div class="nav__more-menu" id="nav-products-menu" role="menu">
-        <a href="{{ url_for('video_redub') }}" role="menuitem">
-          <span class="nav__mi-title">Video Redub</span>
-          <span class="nav__mi-sub">Translate &amp; re-voice video</span>
-        </a>
-        <a href="{{ url_for('voice_cloning') }}" role="menuitem">
-          <span class="nav__mi-title">Voice Cloning</span>
-          <span class="nav__mi-sub">Clone a short sample</span>
-        </a>
-        <a href="{{ url_for('studio') }}" role="menuitem">
-          <span class="nav__mi-title">Voice Studio</span>
-          <span class="nav__mi-sub">88 neural TTS voices</span>
-        </a>
-        <a href="{{ url_for('tools_hub') }}" role="menuitem">
-          <span class="nav__mi-title">Audio Tools</span>
-          <span class="nav__mi-sub">Convert, trim, denoise…</span>
-        </a>
+      <div class="nav__more-menu" role="menu">
+        <a href="{{ url_for('video_redub') }}" role="menuitem"><span class="nav__mi-title">Video Redub</span><span class="nav__mi-sub">Translate &amp; re-voice video</span></a>
+        <a href="{{ url_for('voice_cloning') }}" role="menuitem"><span class="nav__mi-title">Voice Cloning</span><span class="nav__mi-sub">Clone a short sample</span></a>
+        <a href="{{ url_for('studio') }}" role="menuitem"><span class="nav__mi-title">Voice Studio</span><span class="nav__mi-sub">88 neural TTS voices</span></a>
+        <a href="{{ url_for('tools_hub') }}" role="menuitem"><span class="nav__mi-title">Audio Tools</span><span class="nav__mi-sub">Convert, trim, denoise…</span></a>
       </div>
     </div>
-
     <div class="nav__more" id="nav-more">
       <button type="button" class="nav__more-btn" id="nav-more-btn" aria-expanded="false" aria-haspopup="true">
         More
         <svg class="nav__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
       </button>
-      <div class="nav__more-menu" id="nav-more-menu" role="menu">
+      <div class="nav__more-menu" role="menu">
         <a href="{{ url_for('voices_page') }}" role="menuitem">Voices</a>
         <a href="{{ url_for('blog_list') }}" role="menuitem">Blog</a>
         <a href="{{ url_for('developers') }}" role="menuitem">Developer API</a>
         <a href="{{ url_for('about') }}" role="menuitem">About</a>
         <a href="{{ url_for('contact') }}" role="menuitem">Contact</a>
       </div>
-    </div>
-
-    {# Mobile-only account block at end of sheet #}
-    <div class="nav__mobile-user">
-      {% if account_user_ctx and account_user_ctx.email %}
-      <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--block">
-        <span class="nav-user__avatar">
-          {% if account_user_ctx.avatar_url %}
-          <img src="{{ account_user_ctx.avatar_url }}" alt="">
-          {% else %}
-          <span>{{ account_user_ctx.initial }}</span>
-          {% endif %}
-        </span>
-        <span class="nav-user__meta">
-          <span class="nav-user__name">{{ account_user_ctx.name }}</span>
-          <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">
-            {% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}
-          </span>
-        </span>
-      </a>
-      {% else %}
-      <a href="{{ url_for('account_login') }}" class="nav__link">Log in</a>
-      <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm nav__mobile-cta">Get Pro</a>
-      {% endif %}
     </div>
   </nav>
 
@@ -163,17 +125,11 @@
     {% if account_user_ctx and account_user_ctx.email %}
     <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--desktop" title="{{ account_user_ctx.email }}">
       <span class="nav-user__avatar">
-        {% if account_user_ctx.avatar_url %}
-        <img src="{{ account_user_ctx.avatar_url }}" alt="">
-        {% else %}
-        <span>{{ account_user_ctx.initial }}</span>
-        {% endif %}
+        {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
       </span>
       <span class="nav-user__meta">
         <span class="nav-user__name">{{ account_user_ctx.name.split(' ')[0] }}</span>
-        <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">
-          {% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}
-        </span>
+        <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">{% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}</span>
       </span>
     </a>
     {% else %}
@@ -186,6 +142,47 @@
     </button>
   </div>
 </header>
+
+{# Mobile drawer — OUTSIDE header so position:fixed is not trapped #}
+<nav class="nav-drawer" id="nav-drawer" aria-label="Mobile menu" hidden>
+  <a href="{{ url_for('studio') }}" class="nav__link is-primary">Studio</a>
+  <a href="{{ url_for('tools_hub') }}" class="nav__link">Tools</a>
+  <a href="{{ url_for('pricing') }}" class="nav__link">Pricing</a>
+  <div class="nav__more">
+    <div class="nav__more-menu">
+      <a href="{{ url_for('video_redub') }}"><span class="nav__mi-title">Video Redub</span></a>
+      <a href="{{ url_for('voice_cloning') }}"><span class="nav__mi-title">Voice Cloning</span></a>
+      <a href="{{ url_for('studio') }}"><span class="nav__mi-title">Voice Studio</span></a>
+      <a href="{{ url_for('tools_hub') }}"><span class="nav__mi-title">Audio Tools</span></a>
+    </div>
+  </div>
+  <div class="nav__more">
+    <div class="nav__more-menu">
+      <a href="{{ url_for('voices_page') }}">Voices</a>
+      <a href="{{ url_for('blog_list') }}">Blog</a>
+      <a href="{{ url_for('developers') }}">Developer API</a>
+      <a href="{{ url_for('about') }}">About</a>
+      <a href="{{ url_for('contact') }}">Contact</a>
+    </div>
+  </div>
+  <div class="nav__mobile-user">
+    {% if account_user_ctx and account_user_ctx.email %}
+    <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--block">
+      <span class="nav-user__avatar">
+        {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
+      </span>
+      <span class="nav-user__meta">
+        <span class="nav-user__name">{{ account_user_ctx.name }}</span>
+        <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">{% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}</span>
+      </span>
+    </a>
+    {% else %}
+    <a href="{{ url_for('account_login') }}" class="nav__link">Log in</a>
+    <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm nav__mobile-cta">Get Pro</a>
+    {% endif %}
+  </div>
+</nav>
+
 
 <div class="announce-banner" id="announce-banner" hidden>
   <span class="announce-banner__badge" id="announce-banner-badge">NEWS</span>
