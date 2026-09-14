@@ -89,6 +89,9 @@ DEFAULT_LIMITS = {
     "MUSIC_MONTHLY_LIMIT": 40,
     "CLONE_DAILY_LIMIT": 30,
     "MUSIC_DAILY_LIMIT": 20,
+    # Video redub (Pro). 0 = unlimited for that period.
+    "REDUB_DAILY_LIMIT_PRO": 20,
+    "REDUB_MONTHLY_LIMIT_PRO": 100,
     "AUTO_APPROVE_MANUAL": True,
     "MANUAL_GRACE_HOURS": 72,
     # ---- Developer API self-serve tiers (auto flow: free = instant

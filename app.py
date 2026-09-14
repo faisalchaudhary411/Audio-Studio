@@ -1925,6 +1925,8 @@ def admin_limits():
             "MUSIC_MONTHLY_LIMIT": int(request.form.get("MUSIC_MONTHLY_LIMIT", 40)),
             "CLONE_DAILY_LIMIT": int(request.form.get("CLONE_DAILY_LIMIT", 30)),
             "MUSIC_DAILY_LIMIT": int(request.form.get("MUSIC_DAILY_LIMIT", 20)),
+            "REDUB_DAILY_LIMIT_PRO": int(request.form.get("REDUB_DAILY_LIMIT_PRO", 20)),
+            "REDUB_MONTHLY_LIMIT_PRO": int(request.form.get("REDUB_MONTHLY_LIMIT_PRO", 100)),
             # Default matches len of FREE_VOICES in voices.py (currently 27).
             "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 27)),
             "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
@@ -3895,12 +3897,30 @@ def api_eq():
 @app.route("/api/tools/redub", methods=["POST"])
 def api_redub():
     """Audio-only video redub: extract → transcribe → translate → edge-tts → mux.
-    Pro plan only (not free, not gated behind Pro+). Uses stock edge-tts voices."""
+    Pro plan only (not free, not gated behind Pro+). Uses stock edge-tts voices.
+    Daily/monthly redub counts are admin-editable via /admin/limits."""
     if not is_pro():
         return jsonify({
             "error": "Video redub is a Pro feature. Upgrade to Pro to redub videos with any of the 88 stock voices.",
             "upgrade_url": "/pricing",
         }), 402
+
+    lim = get_limits()
+    daily_limit = int(lim.get("REDUB_DAILY_LIMIT_PRO") or 0)
+    monthly_limit = int(lim.get("REDUB_MONTHLY_LIMIT_PRO") or 0)
+    if daily_limit > 0:
+        used_d = usage_tracking.get_daily_counter(request, "usage_redub")
+        if used_d >= daily_limit:
+            return jsonify({
+                "error": f"Daily redub limit reached ({daily_limit}/day). Try again tomorrow, or contact support if you need more.",
+            }), 429
+    if monthly_limit > 0:
+        lk = session.get("license_key") or ""
+        used_m = usage_tracking.get_license_monthly_counter(lk, "usage_redub") if lk else 0
+        if used_m >= monthly_limit:
+            return jsonify({
+                "error": f"Monthly redub limit reached ({monthly_limit}/month). Resets next billing cycle.",
+            }), 429
 
     file = request.files.get("file")
     if not file:
@@ -3945,6 +3965,11 @@ def api_redub():
         )
     except Exception as e:
         return api_error(e, "redub this video")
+
+        _bump_counter("usage_redub")
+    lk = session.get("license_key") or ""
+    if lk:
+        usage_tracking.bump_license_monthly_counter(lk, "usage_redub", 1)
 
     char_count = int(result.get("char_count") or 0)
     if char_count and _would_exceed_pro_tts_quota(char_count):
