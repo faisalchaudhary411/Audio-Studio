@@ -1239,26 +1239,26 @@ input.admin-input{
   align-items:stretch;
 }
 @media (max-width:900px){
-  .steps{grid-template-columns:1fr;gap:16px;}
+  .steps{grid-template-columns:1fr;gap:14px;}
 }
 .step{
   background:var(--ink-panel);
   border:1px solid var(--line);
   border-radius:var(--radius);
-  padding:24px 22px;
+  padding:22px 20px 18px;
   display:flex;
   flex-direction:column;
-  min-width:0; /* prevent grid blowout from long text / images */
+  min-width:0;
   transition:border-color .2s ease, box-shadow .2s ease;
 }
 .step:hover{border-color:var(--line-strong);box-shadow:var(--shadow-soft);}
 .step__num{
   font-family:var(--mono);font-size:0.72rem;color:var(--brass);
-  letter-spacing:0.08em;display:block;margin-bottom:12px;
+  letter-spacing:0.08em;display:block;margin-bottom:10px;
   flex-shrink:0;
 }
 .step h3{
-  font-size:1.15rem;
+  font-size:1.12rem;
   margin:0 0 8px;
   letter-spacing:-0.01em;
   line-height:1.3;
@@ -1266,27 +1266,33 @@ input.admin-input{
 }
 .step p{
   color:var(--text-mid);
-  font-size:0.92rem;
-  line-height:1.6;
-  margin:0 0 16px;
-  flex:1 1 auto; /* text grows so screenshots align at bottom */
+  font-size:0.9rem;
+  line-height:1.55;
+  margin:0 0 14px;
+  flex:0 0 auto; /* don't stretch text; keep cards compact on mobile */
 }
 .step__shot{
   display:block;
   width:100%;
-  height:auto;
-  max-height:280px;
-  aspect-ratio:4/3;
+  height:220px;
   object-fit:cover;
   object-position:top center;
-  margin-top:auto; /* push screenshots to a consistent baseline */
+  margin-top:auto;
   border-radius:calc(var(--radius) - 6px);
   border:1px solid var(--line);
   box-shadow:0 8px 24px rgba(0,0,0,0.35);
   background:var(--ink);
 }
+/* Distinct crop focus per step so cards don't all look the same */
+.step:nth-child(1) .step__shot{object-position:center 12%;}
+.step:nth-child(2) .step__shot{object-position:center 18%;}
+.step:nth-child(3) .step__shot{object-position:center 55%;} /* export / download area */
 @media (max-width:900px){
-  .step__shot{max-height:none;aspect-ratio:16/10;}
+  .step{padding:18px 16px 14px;}
+  .step__shot{height:200px;}
+}
+@media (max-width:480px){
+  .step__shot{height:180px;}
 }
 
 .feature-grid{
