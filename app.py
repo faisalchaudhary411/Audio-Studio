@@ -1001,6 +1001,15 @@ def voice_cloning():
     return render_template("voice_cloning.html", clone_char_limit=CLONE_CHAR_LIMIT)
 
 
+@app.route("/video-redub")
+def video_redub():
+    """Dedicated page for audio-only video redub (Pro). Same widget as the
+    /tools/video-audio-redub tool page, with full marketing content and
+    Studio-style voice picker."""
+    active_voices = VOICES if is_pro() else FREE_VOICES
+    return render_template("redub.html", voices=active_voices)
+
+
 @app.route("/pricing")
 def pricing():
     limits = persistence.load_limits()
