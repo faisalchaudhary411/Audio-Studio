@@ -773,6 +773,27 @@ def admin_required(view_func):
     return wrapper
 
 
+
+def _account_user_ctx() -> dict:
+    """Lightweight profile chip data for the nav (safe for every page)."""
+    email = (session.get("account_email") or "").strip().lower()
+    if not email:
+        return {}
+    try:
+        u = accounts.find_user(email) or {}
+    except Exception:
+        u = {}
+    name = (u.get("name") or "").strip() or email.split("@")[0]
+    return {
+        "email": email,
+        "name": name,
+        "username": (u.get("username") or "").strip(),
+        "avatar_url": (u.get("avatar_url") or "").strip(),
+        "initial": (name[0] if name else "U").upper(),
+        "plan": get_plan() or "free",
+    }
+
+
 @app.context_processor
 def inject_globals():
     # Canonical URL, one rule for the whole site: the current path, absolute,
@@ -790,6 +811,7 @@ def inject_globals():
         "license_name_ctx": get_license_name(),
         "has_clone_music_ctx": has_clone_and_music(),
         "account_email_ctx": session.get("account_email", ""),
+        "account_user_ctx": _account_user_ctx(),
         "canonical_url": canonical_url,
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
