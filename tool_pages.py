@@ -540,14 +540,54 @@ TOOL_PAGES = {
         "related_tools": ["normalize-audio-volume", "remove-background-noise", "convert-audio-format"],
         "blog_keywords": ["eq", "bass", "treble"],
     },
-
+    "video-audio-redub": {
+        "widget": "redub",
+        "usage_key": None,  # Pro-only; no free daily counter
+        "title": "Video Audio Redub Online — Translate & Re-voice | VoxCraft",
+        "meta_description": "Replace a video's spoken audio with a translated track in any of 27 languages. Uses VoxCraft's 88 neural voices. Pro feature — no GPU cloning required.",
+        "eyebrow": "Video redub",
+        "h1": "Redub a video into another language",
+        "sub": "Upload a video, pick a target language and voice, get a new dubbed track muxed back onto the original picture. Pro plan.",
+        "intro": [
+            "Audio-only redub keeps the original picture and replaces the spoken track. The pipeline extracts audio, transcribes speech, translates the script, re-voices it with a stock neural voice, then muxes the new audio onto the video — all without needing a cloned voice or GPU time.",
+            "This is the practical path for creators who want an Urdu, Hindi, Tamil, or English version of an existing clip without re-recording. Phase 1 uses the same 88 edge-tts voices as Studio; voice-cloning the original speaker is a later option under Pro+.",
+        ],
+        "how_it_works": [
+            "Upload an MP4/MOV/WebM/MKV (up to 50MB, up to ~10 minutes).",
+            "Choose the source language for transcription (or leave Auto).",
+            "Pick the target language and any of the 88 stock voices — same picker as Studio.",
+            "VoxCraft transcribes, translates with Google NMT, generates the new voice with edge-tts, and muxes it onto your video.",
+            "Download the dubbed MP4, or just the new audio track if you prefer to re-mux yourself.",
+        ],
+        "use_cases": [
+            ("YouTube localization", "Ship the same explainer in Urdu and Hindi without re-recording the VO."),
+            ("Course modules", "Turn one English lesson video into region-specific versions for students."),
+            ("Shorts / Reels", "Repurpose a viral clip into another language while keeping the original edit."),
+            ("Client delivery", "Provide a dubbed cut when the client needs a second language track quickly."),
+        ],
+        "tips": [
+            "Clear speech transcribes better than music-heavy or noisy tracks — denoise first if needed.",
+            "If source and target are the same language, translation is skipped and only the voice is replaced.",
+            "Match the target voice's language to the target language for natural pronunciation.",
+            "Long videos burn TTS character quota the same way Studio does — a 5-minute script is typically a few thousand characters.",
+        ],
+        "faq": [
+            ("Is this free?", "No — redub is included with the Pro plan. Free accounts can still use Transcribe and Extract audio separately."),
+            ("Does it clone the original speaker?", "Not in Phase 1. It uses the same stock neural voices as Studio (88 voices, 27 languages). Cloned-speaker redub is a later Pro+ option."),
+            ("Which languages work?", "Any language pair where we have a stock voice and Google Translate coverage — including Urdu, Hindi, Bengali, Punjabi, Tamil, Telugu, Arabic, and English variants."),
+            ("What happens to the original audio?", "It is replaced. Download the separate audio track if you want both."),
+            ("How long can a video be?", "Up to about 10 minutes and 50MB in Phase 1."),
+        ],
+        "related_tools": ["transcribe-audio-to-text", "extract-audio-from-video", "convert-audio-format"],
+        "blog_keywords": ["redub", "dubbing", "translate video", "video voiceover"],
+    },
 }
 
 TOOL_ORDER = [
     "transcribe-audio-to-text", "convert-audio-format", "merge-audio-files", "trim-cut-audio",
     "remove-background-noise", "normalize-audio-volume", "adjust-audio-volume", "change-audio-speed",
     "fade-audio", "split-audio-by-silence", "reverse-audio", "stereo-to-mono", "loop-audio",
-    "simple-audio-eq", "voice-changer", "extract-audio-from-video", "ai-music-generator",
+    "simple-audio-eq", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
 ]
 
 

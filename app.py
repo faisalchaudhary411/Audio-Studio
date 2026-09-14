@@ -39,6 +39,7 @@ from clone_engine import start_clone_job, get_job
 import modal_client
 import music_engine
 import audio_tools
+import redub_engine
 import persistence
 import tool_pages
 import seo_pages
@@ -1019,6 +1020,7 @@ def pricing():
         "No ads",
         f"Batch up to {limits['PRO_BATCH_MAX']} lines",
         "Unlimited audio tools",
+        "Video audio redub (translate + re-voice)",
     ]
     pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or [
         f"{_tts_pp:,} TTS characters/month",
@@ -3365,8 +3367,15 @@ def tool_page(slug):
     tool["use_cases"] = [(n, _fill_placeholders(d, url_map)) for n, d in tool.get("use_cases", [])]
     tool["faq"] = [(q, _fill_placeholders(a, url_map)) for q, a in tool.get("faq", [])]
 
-    return render_template("tool_page.html", tool=tool, related_tools=related_tools, related_posts=related_posts,
-                            lang_options=audio_tools.LANG_OPTIONS, usage=usage_summary())
+    return render_template(
+        "tool_page.html",
+        tool=tool,
+        related_tools=related_tools,
+        related_posts=related_posts,
+        lang_options=audio_tools.LANG_OPTIONS,
+        usage=usage_summary(),
+        voices=VOICES,  # full catalogue for redub (and any future tool that needs Studio voices)
+    )
 
 
 # Slugs that already belong to another route (so the catch-all below can
@@ -3872,6 +3881,91 @@ def api_eq():
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
         return api_error(e, "apply EQ to this file")
+
+
+@app.route("/api/tools/redub", methods=["POST"])
+def api_redub():
+    """Audio-only video redub: extract → transcribe → translate → edge-tts → mux.
+    Pro plan only (not free, not gated behind Pro+). Uses stock edge-tts voices."""
+    if not is_pro():
+        return jsonify({
+            "error": "Video redub is a Pro feature. Upgrade to Pro to redub videos with any of the 88 stock voices.",
+            "upgrade_url": "/pricing",
+        }), 402
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No video file uploaded."}), 400
+
+    source_lang = (request.form.get("source_lang") or "auto").strip()
+    target_lang = (request.form.get("target_lang") or "US English").strip()
+    voice_id = (request.form.get("voice_id") or "").strip()
+    try:
+        speed_pct = int(request.form.get("speed_pct") or 100)
+    except (TypeError, ValueError):
+        speed_pct = 100
+
+    if not voice_id:
+        return jsonify({"error": "Pick a target voice."}), 400
+
+    # Validate voice_id is one of the known stock voices
+    known = {vid for lang_voices in VOICES.values() for vid in lang_voices.values()}
+    if voice_id not in known:
+        return jsonify({"error": "Unknown voice. Choose a voice from the list."}), 400
+
+    if target_lang not in VOICES:
+        return jsonify({"error": "Unknown target language."}), 400
+
+    video_bytes = file.read()
+    if not video_bytes:
+        return jsonify({"error": "Empty file."}), 400
+
+    # Soft pre-check against TTS monthly quota using a rough estimate
+    # (actual char count comes from translated text after the job runs).
+    lim = get_limits()
+    # We'll charge the real translated length after success via _would_exceed / bump below.
+
+    try:
+        result = redub_engine.redub_video(
+            video_bytes,
+            file.filename or "video.mp4",
+            source_lang=source_lang,
+            target_studio_lang=target_lang,
+            voice_id=voice_id,
+            speed_pct=speed_pct,
+        )
+    except Exception as e:
+        return api_error(e, "redub this video")
+
+    char_count = int(result.get("char_count") or 0)
+    if char_count and _would_exceed_pro_tts_quota(char_count):
+        return jsonify({
+            "error": f"This redub would use {char_count:,} characters and exceed your monthly TTS quota "
+                     f"({_tts_monthly_quota_for_plan():,}/month). Quota resets next month."
+        }), 429
+
+    # Count toward Pro TTS monthly character quota (same bucket as Studio)
+    if char_count:
+        try:
+            _bump_monthly_chars(char_count)
+            _bump_pro_tts_chars(char_count)
+        except Exception:
+            pass
+
+    return jsonify({
+        "video_b64": result["video_b64"],
+        "audio_b64": result["audio_b64"],
+        "filename": result["filename"],
+        "audio_filename": result["audio_filename"],
+        "transcript": result["transcript"],
+        "translated": result["translated"],
+        "char_count": char_count,
+        "size_kb": result["size_kb"],
+        "audio_size_kb": result["audio_size_kb"],
+        "skipped_translation": result.get("skipped_translation", False),
+        "target_lang": result.get("target_lang"),
+        "voice_id": result.get("voice_id"),
+    })
 
 
 @app.route("/api/tts/preview", methods=["POST"])
