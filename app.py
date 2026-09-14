@@ -3211,7 +3211,7 @@ def account_login():
 
     email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
-    user = accounts.verify_login(email, password)
+    user = accounts.verify_login_identifier(email, password)
 
     if user:
         persistence.clear_login_attempts(ip_hash)
