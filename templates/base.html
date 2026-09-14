@@ -145,19 +145,27 @@
 
 {# Mobile drawer — OUTSIDE header so position:fixed is not trapped #}
 <nav class="nav-drawer" id="nav-drawer" aria-label="Mobile menu" hidden>
-  <a href="{{ url_for('studio') }}" class="nav__link is-primary">Studio</a>
-  <a href="{{ url_for('tools_hub') }}" class="nav__link">Tools</a>
-  <a href="{{ url_for('pricing') }}" class="nav__link">Pricing</a>
-  <div class="nav__more">
-    <div class="nav__more-menu">
-      <a href="{{ url_for('video_redub') }}"><span class="nav__mi-title">Video Redub</span></a>
-      <a href="{{ url_for('voice_cloning') }}"><span class="nav__mi-title">Voice Cloning</span></a>
-      <a href="{{ url_for('studio') }}"><span class="nav__mi-title">Voice Studio</span></a>
-      <a href="{{ url_for('tools_hub') }}"><span class="nav__mi-title">Audio Tools</span></a>
+  <div class="nav-drawer__scroll">
+    <a href="{{ url_for('studio') }}" class="nav-drawer__link nav-drawer__link--primary">Studio</a>
+    <a href="{{ url_for('tools_hub') }}" class="nav-drawer__link">Tools</a>
+    <a href="{{ url_for('pricing') }}" class="nav-drawer__link">Pricing</a>
+
+    <button type="button" class="nav-drawer__acc" data-acc="products" aria-expanded="false">
+      Products
+      <svg class="nav-drawer__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="nav-drawer__panel" id="acc-products" hidden>
+      <a href="{{ url_for('video_redub') }}">Video Redub</a>
+      <a href="{{ url_for('voice_cloning') }}">Voice Cloning</a>
+      <a href="{{ url_for('studio') }}">Voice Studio</a>
+      <a href="{{ url_for('tools_hub') }}">Audio Tools</a>
     </div>
-  </div>
-  <div class="nav__more">
-    <div class="nav__more-menu">
+
+    <button type="button" class="nav-drawer__acc" data-acc="more" aria-expanded="false">
+      More
+      <svg class="nav-drawer__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="nav-drawer__panel" id="acc-more" hidden>
       <a href="{{ url_for('voices_page') }}">Voices</a>
       <a href="{{ url_for('blog_list') }}">Blog</a>
       <a href="{{ url_for('developers') }}">Developer API</a>
@@ -165,23 +173,28 @@
       <a href="{{ url_for('contact') }}">Contact</a>
     </div>
   </div>
-  <div class="nav__mobile-user">
+
+  <div class="nav-drawer__foot">
     {% if account_user_ctx and account_user_ctx.email %}
-    <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--block">
-      <span class="nav-user__avatar">
+    <a href="{{ url_for('account_dashboard') }}" class="nav-drawer__profile">
+      <span class="nav-drawer__avatar">
         {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
       </span>
-      <span class="nav-user__meta">
-        <span class="nav-user__name">{{ account_user_ctx.name }}</span>
-        <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">{% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}</span>
+      <span class="nav-drawer__who">
+        <span class="nav-drawer__who-name">{{ account_user_ctx.name.split(' ')[0] }}</span>
+        <span class="nav-drawer__who-plan">{% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}</span>
       </span>
+      <span class="nav-drawer__who-go">Account →</span>
     </a>
     {% else %}
-    <a href="{{ url_for('account_login') }}" class="nav__link">Log in</a>
-    <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm nav__mobile-cta">Get Pro</a>
+    <div class="nav-drawer__auth">
+      <a href="{{ url_for('account_login') }}" class="nav-drawer__link">Log in</a>
+      <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm">Get Pro</a>
+    </div>
     {% endif %}
   </div>
 </nav>
+
 
 
 <div class="announce-banner" id="announce-banner" hidden>
