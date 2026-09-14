@@ -168,24 +168,31 @@ function initStudio(){
   });
 }
 
-// ---- Mobile nav hamburger ----
+// ---- Mobile nav hamburger (full-screen royal drawer) ----
 function initNavToggle(){
   const btn = document.getElementById('nav-hamburger');
   const links = document.getElementById('nav-links');
   if(!btn || !links) return;
-  btn.addEventListener('click', () => {
-    const open = links.classList.toggle('is-open');
+
+  function setOpen(open) {
+    links.classList.toggle('is-open', open);
     btn.classList.toggle('is-open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    document.body.classList.toggle('nav-drawer-open', open);
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(!links.classList.contains('is-open'));
   });
   links.querySelectorAll('a').forEach(a => {
-    a.addEventListener('click', () => {
-      links.classList.remove('is-open');
-      btn.classList.remove('is-open');
-      btn.setAttribute('aria-expanded', 'false');
-    });
+    a.addEventListener('click', () => setOpen(false));
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
   });
 }
+
 
 // ---- Voice preview play/pause ----
 function initVoicePreviews(){
