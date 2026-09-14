@@ -1039,6 +1039,7 @@ def pricing():
         "No ads",
         f"Batch up to {limits['PRO_BATCH_MAX']} lines",
         "Unlimited audio tools",
+        "Video audio redub (translate + re-voice)",
     ]
 
     # BUG FIX: "Current plan" was hardcoded onto the Free tier's card
@@ -1079,6 +1080,7 @@ def pricing():
         "free_tools": f"{limits.get('FREE_DAILY_ACTIONS', 10)} actions/day",
         "clone_mo": f"{_clone_mo} gens/mo",
         "music_mo": f"{_music_mo} tracks/mo",
+        "redub": "Video audio redub",
     }
     return render_template("pricing.html", plans=plans, compare=compare)
 
@@ -3317,7 +3319,7 @@ def tools_hub():
     page that matches their query."""
     ordered_tools = [dict(slug=s, **(tool_pages.get_tool_page(s) or tool_pages.TOOL_PAGES[s])) for s in tool_pages.TOOL_ORDER]
     return render_template("tools.html", ordered_tools=ordered_tools,
-                            filedesk_url=os.environ.get("FILEDESK_URL", "").strip())
+                            filedesk_url=(os.environ.get("FILEDESK_URL") or "https://filedesk.site.je/").strip())
 
 
 @app.route("/tools/<slug>")
