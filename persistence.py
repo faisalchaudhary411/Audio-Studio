@@ -223,6 +223,28 @@ def init_db():
                 );
             """)
             conn.commit()
+
+            # One-time backfill: usernames set before the `usernames` index
+            # table existed (or before profile saves went through
+            # reserve_username()) live only inside users.data's JSON blob,
+            # so get_username_owner()/find_by_login() can't see them yet —
+            # that's why a previously-set username can 404 on login even
+            # though it shows correctly on /account. INSERT OR IGNORE makes
+            # this safe to run on every startup: already-indexed usernames
+            # are left alone, only genuinely missing ones get added.
+            rows = conn.execute("SELECT email, data FROM users").fetchall()
+            for email, data in rows:
+                try:
+                    rec = json.loads(data)
+                except Exception:
+                    continue
+                uname = (rec.get("username") or "").strip().lower()
+                if uname:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO usernames(username, email) VALUES (?, ?)",
+                        (uname, email),
+                    )
+            conn.commit()
         finally:
             conn.close()
 
