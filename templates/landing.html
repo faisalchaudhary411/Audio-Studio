@@ -159,19 +159,41 @@
       <span class="step__num">01</span>
       <h3>Drop in your script</h3>
       <p>Paste text in any supported language. Numerals, loanwords, and mixed Urdu–English are handled automatically.</p>
-      <img class="step__shot" src="{{ static_url('img/screenshots/step-input.png') }}" alt="Pasting a script into VoxCraft Studio" loading="lazy" width="720" height="1119">
+      <div class="step__mock" aria-hidden="true">
+        <div class="step__mock-pills">
+          <span class="step__mock-pill step__mock-pill--active">Single</span>
+          <span class="step__mock-pill">Batch</span>
+        </div>
+        <div class="step__mock-box">
+          <div class="step__mock-line step__mock-line--100"></div>
+          <div class="step__mock-line step__mock-line--80"></div>
+          <div class="step__mock-line step__mock-line--60"></div>
+        </div>
+      </div>
     </div>
     <div class="step">
       <span class="step__num">02</span>
       <h3>Pick a neural voice</h3>
       <p>{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages — rate and pitch controls without SSML wrangling.</p>
-      <img class="step__shot" src="{{ static_url('img/screenshots/step-voice.png') }}" alt="Picking a neural voice in VoxCraft Studio" loading="lazy" width="720" height="1467">
+      <div class="step__mock" aria-hidden="true">
+        <div class="step__mock-voice step__mock-voice--on"><span class="step__mock-radio step__mock-radio--on"></span>Uzma — Female</div>
+        <div class="step__mock-voice"><span class="step__mock-radio"></span>Andrew — Male</div>
+        <div class="step__mock-voice"><span class="step__mock-radio"></span>Aria — Female</div>
+      </div>
     </div>
     <div class="step">
       <span class="step__num">03</span>
       <h3>Export clean audio</h3>
       <p>Download MP3 or WAV, ready for YouTube, shorts, or client delivery.</p>
-      <img class="step__shot" src="{{ static_url('img/screenshots/step-render.png') }}" alt="Exporting rendered audio from VoxCraft Studio" loading="lazy" width="720" height="1361">
+      <div class="step__mock" aria-hidden="true">
+        <div class="step__mock-wave">
+          <span style="height:35%;"></span><span style="height:60%;"></span><span style="height:100%;"></span>
+          <span style="height:45%;"></span><span style="height:80%;"></span><span style="height:30%;"></span>
+          <span style="height:70%;"></span><span style="height:50%;"></span><span style="height:90%;"></span>
+          <span style="height:40%;"></span>
+        </div>
+        <div class="step__mock-dl">⬇ Download MP3</div>
+      </div>
     </div>
   </div>
 </section>
