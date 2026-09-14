@@ -61,7 +61,7 @@
 <header class="nav">
   <a href="{{ url_for('landing') }}" class="nav__brand">
     <span class="nav__mark" aria-hidden="true">
-      <svg viewBox="0 0 100 56" width="39" height="22">
+      <svg viewBox="0 0 100 56" width="36" height="20">
         <defs><linearGradient id="voxGradNav" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stop-color="#F5C670"/><stop offset="1" stop-color="#6FC4B9"/>
         </linearGradient></defs>
@@ -76,27 +76,45 @@
         <rect x="90.04" y="3.26" width="6.96" height="49.48" rx="3.48" fill="#4FA69C"/>
       </svg>
     </span>
-    VoxCraft
+    <span class="nav__brand-text">VoxCraft</span>
   </a>
-  <nav class="nav__links" id="nav-links">
-    <a href="{{ url_for('studio') }}" class="is-primary">Studio</a>
-    <a href="{{ url_for('tools_hub') }}">Tools</a>
-    <a href="{{ url_for('pricing') }}">Pricing</a>
 
-    <div class="nav__more" id="nav-create">
-      <button type="button" class="nav__more-btn" id="nav-create-btn" aria-expanded="false" aria-haspopup="true">Create ▾</button>
-      <div class="nav__more-menu" id="nav-create-menu" role="menu">
-        <span class="nav__more-label" role="presentation">AI features</span>
-        <a href="{{ url_for('video_redub') }}" role="menuitem">Video Redub</a>
-        <a href="{{ url_for('voice_cloning') }}" role="menuitem">Voice Cloning</a>
-        <a href="{{ url_for('studio') }}" role="menuitem">Voice Studio</a>
+  <nav class="nav__links" id="nav-links" aria-label="Primary">
+    <a href="{{ url_for('studio') }}" class="nav__link is-primary">Studio</a>
+    <a href="{{ url_for('tools_hub') }}" class="nav__link">Tools</a>
+    <a href="{{ url_for('pricing') }}" class="nav__link">Pricing</a>
+
+    <div class="nav__more" id="nav-products">
+      <button type="button" class="nav__more-btn" id="nav-products-btn" aria-expanded="false" aria-haspopup="true">
+        Products
+        <svg class="nav__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="nav__more-menu" id="nav-products-menu" role="menu">
+        <a href="{{ url_for('video_redub') }}" role="menuitem">
+          <span class="nav__mi-title">Video Redub</span>
+          <span class="nav__mi-sub">Translate &amp; re-voice video</span>
+        </a>
+        <a href="{{ url_for('voice_cloning') }}" role="menuitem">
+          <span class="nav__mi-title">Voice Cloning</span>
+          <span class="nav__mi-sub">Clone a short sample</span>
+        </a>
+        <a href="{{ url_for('studio') }}" role="menuitem">
+          <span class="nav__mi-title">Voice Studio</span>
+          <span class="nav__mi-sub">88 neural TTS voices</span>
+        </a>
+        <a href="{{ url_for('tools_hub') }}" role="menuitem">
+          <span class="nav__mi-title">Audio Tools</span>
+          <span class="nav__mi-sub">Convert, trim, denoise…</span>
+        </a>
       </div>
     </div>
 
     <div class="nav__more" id="nav-more">
-      <button type="button" class="nav__more-btn" id="nav-more-btn" aria-expanded="false" aria-haspopup="true">More ▾</button>
+      <button type="button" class="nav__more-btn" id="nav-more-btn" aria-expanded="false" aria-haspopup="true">
+        More
+        <svg class="nav__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
       <div class="nav__more-menu" id="nav-more-menu" role="menu">
-        <span class="nav__more-label" role="presentation">Resources</span>
         <a href="{{ url_for('voices_page') }}" role="menuitem">Voices</a>
         <a href="{{ url_for('blog_list') }}" role="menuitem">Blog</a>
         <a href="{{ url_for('developers') }}" role="menuitem">Developer API</a>
@@ -105,19 +123,31 @@
       </div>
     </div>
 
-    {% if plan_ctx == 'pro_plus' %}
-    <a href="{{ url_for('pricing') }}" class="nav-plan nav-plan--plus" title="{{ license_name_ctx or 'Pro+' }}">Pro+</a>
-    {% elif plan_ctx == 'pro' %}
-    <a href="{{ url_for('pricing') }}" class="nav-plan" title="{{ license_name_ctx or 'Pro' }}">Pro</a>
-    {% else %}
-    <a href="{{ url_for('upgrade') }}" class="nav-plan nav-plan--cta">Get Pro</a>
-    {% endif %}
-    {% if account_email_ctx %}
-    <a href="{{ url_for('account_dashboard') }}" class="nav-account" title="{{ account_email_ctx }}">Account</a>
-    {% else %}
-    <a href="{{ url_for('account_login') }}">Log in</a>
-    {% endif %}
+    {# Mobile-only account block at end of sheet #}
+    <div class="nav__mobile-user">
+      {% if account_user_ctx and account_user_ctx.email %}
+      <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--block">
+        <span class="nav-user__avatar">
+          {% if account_user_ctx.avatar_url %}
+          <img src="{{ account_user_ctx.avatar_url }}" alt="">
+          {% else %}
+          <span>{{ account_user_ctx.initial }}</span>
+          {% endif %}
+        </span>
+        <span class="nav-user__meta">
+          <span class="nav-user__name">{{ account_user_ctx.name }}</span>
+          <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">
+            {% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}
+          </span>
+        </span>
+      </a>
+      {% else %}
+      <a href="{{ url_for('account_login') }}" class="nav__link">Log in</a>
+      <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm nav__mobile-cta">Get Pro</a>
+      {% endif %}
+    </div>
   </nav>
+
   <div class="nav__actions">
     <div class="notif-bell-wrap">
       <button class="notif-bell" id="notif-bell" aria-label="Notifications" aria-expanded="false">
@@ -129,10 +159,31 @@
         <div class="notif-dropdown__list" id="notif-list"><div class="notif-dropdown__empty">Nothing new right now.</div></div>
       </div>
     </div>
+
+    {% if account_user_ctx and account_user_ctx.email %}
+    <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--desktop" title="{{ account_user_ctx.email }}">
+      <span class="nav-user__avatar">
+        {% if account_user_ctx.avatar_url %}
+        <img src="{{ account_user_ctx.avatar_url }}" alt="">
+        {% else %}
+        <span>{{ account_user_ctx.initial }}</span>
+        {% endif %}
+      </span>
+      <span class="nav-user__meta">
+        <span class="nav-user__name">{{ account_user_ctx.name.split(' ')[0] }}</span>
+        <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">
+          {% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}
+        </span>
+      </span>
+    </a>
+    {% else %}
+    <a href="{{ url_for('account_login') }}" class="nav__link nav__link--login">Log in</a>
+    <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm nav__cta">Get Pro</a>
+    {% endif %}
+
     <button class="nav__hamburger" id="nav-hamburger" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
-    <a href="{{ url_for('studio') }}" class="btn btn--brass btn--sm nav__cta">Open Voice Studio</a>
   </div>
 </header>
 
@@ -244,11 +295,11 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
     </div>
   </div>
 
-  <div class="footer__top">
+    <div class="footer__top">
     <div class="footer__brand-col">
       <a href="{{ url_for('landing') }}" class="footer__brand">
         <span class="nav__mark" aria-hidden="true">
-          <svg viewBox="0 0 100 56" width="36" height="20">
+          <svg viewBox="0 0 100 56" width="32" height="18">
             <defs><linearGradient id="voxGradFooter" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0" stop-color="#F5C670"/><stop offset="1" stop-color="#6FC4B9"/>
             </linearGradient></defs>
@@ -265,7 +316,7 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
         </span>
         VoxCraft
       </a>
-      <p class="footer__tagline">Neural text-to-speech for Urdu, Hindi, and 25 more languages — built for creators who ship daily. No signup to start.</p>
+      <p class="footer__tagline">Neural TTS for Urdu, Hindi, and 25 more languages — built for creators who ship daily.</p>
       <p class="footer__meta">{{ voice_count_ctx|default(88) }} voices · Commercial use allowed</p>
     </div>
     <div class="footer__col">
@@ -277,29 +328,22 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
       <a href="{{ url_for('pricing') }}">Pricing</a>
     </div>
     <div class="footer__col">
-      <span class="footer__col-title">Resources</span>
-      <a href="{{ url_for('voices_page') }}">Voice library</a>
-      <a href="{{ url_for('blog_list') }}">Blog</a>
-      <a href="{{ url_for('developers') }}">Developer API</a>
-      <a href="{{ url_for('how_we_test') }}">How we test</a>
-      <a href="{{ url_for('activate') }}">Activate license</a>
-    </div>
-    <div class="footer__col">
       <span class="footer__col-title">Company</span>
       <a href="{{ url_for('about') }}">About</a>
+      <a href="{{ url_for('blog_list') }}">Blog</a>
+      <a href="{{ url_for('developers') }}">API</a>
       <a href="{{ url_for('contact') }}">Contact</a>
-      <a href="{{ url_for('privacy') }}">Privacy</a>
-      <a href="{{ url_for('terms') }}">Terms</a>
+      <a href="{{ url_for('activate') }}">Activate</a>
     </div>
-    <div class="footer__col footer__col--guides">
-      <span class="footer__col-title">Guides</span>
-      {% for link in seo_footer_links_ctx[:6] %}<a href="{{ url_for('seo_landing_page', slug=link.slug) }}">{{ link.label }}</a>{% endfor %}
-      {% if seo_footer_links_ctx|length > 6 %}
-      <a href="{{ url_for('blog_list') }}" class="footer__more-link">More guides →</a>
-      {% endif %}
+    <div class="footer__col">
+      <span class="footer__col-title">Languages</span>
+      {% for link in seo_footer_links_ctx[:4] %}
+      <a href="{{ url_for('seo_landing_page', slug=link.slug) }}">{{ link.label }}</a>
+      {% endfor %}
+      <a href="{{ url_for('voices_page') }}">All voices →</a>
     </div>
   </div>
-  <div class="footer__bottom">
+<div class="footer__bottom">
     <span class="footer__copy">&copy; 2026 VoxCraft — text to voice, crafted.</span>
     <span class="footer__made-in" title="Independently built and operated from Pakistan">
       <span class="footer__pk-flag" aria-hidden="true">🇵🇰</span>
