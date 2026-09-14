@@ -6,7 +6,7 @@
   <div class="panel" style="padding:32px 28px;">
     <div style="text-align:center;margin-bottom:22px;">
       <span class="panel__label" style="display:block;">My Account</span>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-top:4px;">Log in to see your license key, API key, and usage.</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-top:4px;">Log in to unlock your Pro plan on this device, and see license, API keys, and usage.</p>
     </div>
 
     {% if error %}
@@ -16,11 +16,11 @@
     {% endif %}
 
     <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Email</label>
-      <input type="email" name="email" placeholder="you@example.com" class="studio-input" style="margin-bottom:16px;" required autofocus>
+      <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Email or username</label>
+      <input type="text" name="email" placeholder="you@example.com or username" class="studio-input" style="margin-bottom:16px;" required autofocus autocomplete="username">
 
       <label style="display:block;color:var(--text-mid);font-size:0.8rem;margin-bottom:6px;">Password</label>
-      <input type="password" name="password" placeholder="••••••••" class="studio-input" required>
+      <input type="password" name="password" placeholder="••••••••" class="studio-input" required autocomplete="current-password">
 
       <button type="submit" class="btn btn--brass btn--block" style="margin-top:22px;">Log in</button>
     </form>
@@ -28,7 +28,7 @@
       <a href="{{ url_for('forgot_password') }}" style="color:var(--brass-hi);">Forgot password?</a>
     </p>
     <p style="text-align:center;margin-top:8px;color:var(--text-dim);font-size:0.78rem;">
-      Accounts are created automatically when you subscribe to Pro, Pro+, or a paid Developer API plan — check your email after purchase for a "set your password" link.
+      Accounts are created when you subscribe to Pro, Pro+, or a paid Developer API plan — check your email after purchase for a set-password link. After login, your plan activates on this browser automatically.
     </p>
   </div>
 </section>
