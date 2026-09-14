@@ -33,7 +33,7 @@
     const res = await fetch(`/api/clone/status/${jobId}`);
     const data = await res.json();
     if (data.status === 'done') {
-      cloneStatus.textContent = 'Done.';
+      cloneStatus.textContent = 'Done — preparing download (UI stays responsive)…';
       const ts = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'');
       const fname = `VoxCraft-Clone-${ts}.wav`;
       // Persist for cross-tool "Send to …" handoff (tools.js reads this key)
@@ -45,26 +45,60 @@
           ts: Date.now(),
         }));
       } catch (e) {}
-      cloneResult.innerHTML = `
-        <div class="result-panel">
-          <audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
-          <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-            <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/wav;base64,${data.audio_b64}">Download WAV</a>
-          </div>
-          <div class="result-panel__next" style="margin-top:10px;">
-            <span class="result-panel__next-label">Send to another tool</span>
-            <div class="result-panel__next-links" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-              <a class="btn btn--ghost btn--sm" data-send-tool="trim-cut-audio" href="/tools/trim-cut-audio">Trim</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="remove-background-noise" href="/tools/remove-background-noise">Denoise</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="normalize-audio-volume" href="/tools/normalize-audio-volume">Normalize</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="merge-audio-files" href="/tools/merge-audio-files">Merge</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="convert-audio-format" href="/tools/convert-audio-format">Convert</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="change-audio-speed" href="/tools/change-audio-speed">Speed</a>
-              <a class="btn btn--ghost btn--sm" data-send-tool="fade-audio" href="/tools/fade-audio">Fade</a>
+      // Prefer the shared helper (uses background worker for large files)
+      if (typeof voxAudioPlayerHtml === 'function') {
+        cloneResult.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, 'audio/wav');
+        if (typeof voxHydrateAudioResult === 'function') {
+          voxHydrateAudioResult(cloneResult, data.audio_b64, fname, 'audio/wav');
+        }
+      } else {
+        // Minimal fallback shell + async blob URL so we never dump 24 MB base64 into the DOM
+        cloneResult.innerHTML = `
+          <div class="result-panel" data-vox-b64-pending="1">
+            <audio controls style="width:100%;" data-vox-audio-src></audio>
+            <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
+              <button type="button" class="btn btn--brass btn--sm" data-vox-download disabled>Preparing download…</button>
             </div>
-          </div>
-        </div>`;
+            <div class="result-panel__next" style="margin-top:10px;">
+              <span class="result-panel__next-label">Send to another tool</span>
+              <div class="result-panel__next-links" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+                <a class="btn btn--ghost btn--sm" data-send-tool="trim-cut-audio" href="/tools/trim-cut-audio">Trim</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="remove-background-noise" href="/tools/remove-background-noise">Denoise</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="normalize-audio-volume" href="/tools/normalize-audio-volume">Normalize</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="merge-audio-files" href="/tools/merge-audio-files">Merge</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="convert-audio-format" href="/tools/convert-audio-format">Convert</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="change-audio-speed" href="/tools/change-audio-speed">Speed</a>
+                <a class="btn btn--ghost btn--sm" data-send-tool="fade-audio" href="/tools/fade-audio">Fade</a>
+              </div>
+            </div>
+          </div>`;
+        (async function () {
+          try {
+            const url = await (typeof voxB64ToObjectURL === 'function'
+              ? voxB64ToObjectURL(data.audio_b64, 'audio/wav')
+              : Promise.resolve(URL.createObjectURL(
+                  new Blob([Uint8Array.from(atob(data.audio_b64), c => c.charCodeAt(0))], { type: 'audio/wav' })
+                )));
+            const audio = cloneResult.querySelector('audio');
+            const btn = cloneResult.querySelector('[data-vox-download]');
+            if (audio) audio.src = url;
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = 'Download WAV';
+              btn.onclick = function () {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fname;
+                a.click();
+              };
+            }
+          } catch (err) {
+            cloneStatus.textContent = 'Ready (download may be slow on this device).';
+          }
+        })();
+      }
       generateBtn.disabled = false;
+      cloneStatus.textContent = 'Done.';
       return;
     }
     if (data.status === 'error') {

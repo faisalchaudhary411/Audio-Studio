@@ -383,6 +383,9 @@
           'Your audio',
           'Your narration'
         );
+        if (typeof voxHydrateAudioResult === 'function') {
+          voxHydrateAudioResult(singleResult, data.audio_b64, fname, mime);
+        }
       } else {
         try {
           sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
@@ -395,9 +398,9 @@
         singleResult.innerHTML = `
           <div class="result-panel">
             <div class="result-panel__label">Your narration</div>
-            <audio controls src="data:${mime};base64,${data.audio_b64}"></audio>
+            <audio controls data-vox-audio-src></audio>
             <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;">
-              <a class="btn btn--brass btn--sm" download="${fname}" href="data:${mime};base64,${data.audio_b64}">Download</a>
+              <button type="button" class="btn btn--brass btn--sm" data-vox-download disabled>Preparing download…</button>
               <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
             </div>
             <div class="result-panel__next">
@@ -412,6 +415,9 @@
             </div>
           </div>
         `;
+        if (typeof voxHydrateAudioResult === 'function') {
+          voxHydrateAudioResult(singleResult, data.audio_b64, fname, mime);
+        }
       }
       const items = loadHistory();
       items.unshift({
@@ -486,26 +492,94 @@
       batchStatus.classList.add('studio-status-ready');
       if (typeof voxButtonSuccess === 'function') voxButtonSuccess(generateBatchBtn);
       try { window.dispatchEvent(new CustomEvent('voxcraft:generated')); } catch (e) {}
+      // Build shell without embedding base64; hydrate each clip + zip/merged via worker
       batchResult.innerHTML = `
         <div class="result-panel">
           <div class="result-panel__label">${data.clips.length} narrations</div>
           <div class="batch-clips">
-            ${data.clips.map(c => `
-              <div class="batch-clip">
+            ${data.clips.map((c, i) => `
+              <div class="batch-clip" data-batch-clip-idx="${i}">
                 <div class="batch-clip__idx">Clip ${c.idx}</div>
                 <div class="batch-clip__text">“${(c.text || '').slice(0, 100)}${(c.text || '').length > 100 ? '…' : ''}”</div>
-                <audio controls src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
-                <a class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
-                   download="${c.filename || ('clip-' + c.idx + '.mp3')}" href="data:audio/mpeg;base64,${c.audio_b64}">Download MP3</a>
+                <audio controls data-vox-audio-src preload="metadata"></audio>
+                <button type="button" class="btn btn--ghost btn--sm" style="margin-top:8px;display:inline-flex;"
+                   data-vox-download data-clip-idx="${i}" disabled>Preparing…</button>
               </div>
             `).join('')}
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
-            ${data.zip_b64 ? `<a class="btn btn--brass btn--sm" download="${data.zip_filename || 'voxcraft-batch.zip'}" href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>` : ''}
-            ${data.merged_b64 ? `<a class="btn btn--ghost btn--sm" download="${data.merged_filename || 'voxcraft-batch-merged.mp3'}" href="data:audio/mpeg;base64,${data.merged_b64}">Download merged MP3</a>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;" data-batch-extra>
+            ${data.zip_b64 ? `<button type="button" class="btn btn--brass btn--sm" data-batch-zip disabled>Preparing ZIP…</button>` : ''}
+            ${data.merged_b64 ? `<button type="button" class="btn btn--ghost btn--sm" data-batch-merged disabled>Preparing merged MP3…</button>` : ''}
           </div>
         </div>
       `;
+      // Hydrate each clip off the main thread so the page stays responsive
+      (async function hydrateBatch() {
+        const toUrl = typeof voxB64ToObjectURL === 'function'
+          ? voxB64ToObjectURL
+          : async (b64, mime) => {
+              const bin = atob(b64.replace(/^data:[^;]+;base64,/, ''));
+              const bytes = new Uint8Array(bin.length);
+              for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+              return URL.createObjectURL(new Blob([bytes], { type: mime }));
+            };
+        for (let i = 0; i < data.clips.length; i++) {
+          const c = data.clips[i];
+          const clipEl = batchResult.querySelector(`[data-batch-clip-idx="${i}"]`);
+          if (!clipEl || !c.audio_b64) continue;
+          try {
+            const url = await toUrl(c.audio_b64, 'audio/mpeg');
+            const audio = clipEl.querySelector('audio');
+            const btn = clipEl.querySelector('[data-vox-download]');
+            if (audio) audio.src = url;
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = 'Download MP3';
+              const fname = c.filename || ('clip-' + c.idx + '.mp3');
+              btn.onclick = function () {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fname;
+                a.click();
+              };
+            }
+          } catch (err) {
+            console.warn('[voxcraft] batch clip hydrate failed', err);
+          }
+        }
+        if (data.zip_b64) {
+          const zipBtn = batchResult.querySelector('[data-batch-zip]');
+          if (zipBtn) {
+            try {
+              const url = await toUrl(data.zip_b64, 'application/zip');
+              zipBtn.disabled = false;
+              zipBtn.textContent = 'Download all as ZIP';
+              zipBtn.onclick = function () {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.zip_filename || 'voxcraft-batch.zip';
+                a.click();
+              };
+            } catch (e) {}
+          }
+        }
+        if (data.merged_b64) {
+          const mBtn = batchResult.querySelector('[data-batch-merged]');
+          if (mBtn) {
+            try {
+              const url = await toUrl(data.merged_b64, 'audio/mpeg');
+              mBtn.disabled = false;
+              mBtn.textContent = 'Download merged MP3';
+              mBtn.onclick = function () {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.merged_filename || 'voxcraft-batch-merged.mp3';
+                a.click();
+              };
+            } catch (e) {}
+          }
+        }
+      })();
     } catch (e) {
       batchStatus.textContent = 'Network error — check your connection and try again.';
     } finally {

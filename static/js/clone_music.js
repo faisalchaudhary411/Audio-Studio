@@ -629,8 +629,12 @@
             cloneStatus.textContent = 'Ready';
             cloneStatus.classList.add('studio-status-ready');
           }
+          // Use shared player + background worker so a ~24 MB clone never freezes the tab
           if (typeof voxAudioPlayerHtml === 'function') {
             cloneResult.innerHTML = voxAudioPlayerHtml(result.audio_b64, cloneName, 'audio/wav');
+            if (typeof voxHydrateAudioResult === 'function') {
+              voxHydrateAudioResult(cloneResult, result.audio_b64, cloneName, 'audio/wav');
+            }
           } else {
             try {
               sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
@@ -641,10 +645,10 @@
               }));
             } catch (e) {}
             cloneResult.innerHTML = `
-              <div class="result-panel">
-                <audio controls style="width:100%;" src="data:audio/wav;base64,${result.audio_b64}"></audio>
+              <div class="result-panel" data-vox-b64-pending="1">
+                <audio controls style="width:100%;" data-vox-audio-src></audio>
                 <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-                  <a class="btn btn--brass btn--sm" download="${cloneName}" href="data:audio/wav;base64,${result.audio_b64}">Download WAV</a>
+                  <button type="button" class="btn btn--brass btn--sm" data-vox-download disabled>Preparing download…</button>
                 </div>
                 <div class="result-panel__next" style="margin-top:10px;">
                   <span class="result-panel__next-label">Send to another tool</span>
@@ -658,6 +662,9 @@
                 </div>
               </div>
             `;
+            if (typeof voxHydrateAudioResult === 'function') {
+              voxHydrateAudioResult(cloneResult, result.audio_b64, cloneName, 'audio/wav');
+            }
           }
         } else {
           cloneStatus.textContent = result.error || 'Generation failed.';

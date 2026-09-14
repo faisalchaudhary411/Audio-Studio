@@ -752,7 +752,117 @@ function voxApplyTransferToInput(input, data) {
   }
 }
 
-/** Shared result panel HTML used by clone, music, studio, and tools. */
+// ---- Background audio worker (keeps UI responsive for large base64 audio) ----
+// Large clone / batch payloads (20–50 MB) used to freeze the main thread when
+// we built data: URLs and dumped them into the DOM. Decoding + Blob creation
+// now happens in a dedicated worker; the main thread only receives an
+// ArrayBuffer and creates a short-lived object URL.
+let _voxAudioWorker = null;
+let _voxAudioWorkerReady = false;
+const _voxAudioPending = new Map();
+let _voxAudioReqId = 0;
+
+function voxGetAudioWorker() {
+  if (_voxAudioWorker) return _voxAudioWorker;
+  try {
+    // Path matches Flask static route; cache-busted by deploy when file changes
+    const url = '/static/js/audio-worker.js';
+    _voxAudioWorker = new Worker(url);
+    _voxAudioWorker.onmessage = function (e) {
+      const msg = e.data || {};
+      const pending = _voxAudioPending.get(msg.id);
+      if (!pending) return;
+      _voxAudioPending.delete(msg.id);
+      if (msg.ok) {
+        pending.resolve({ buffer: msg.buffer, mime: msg.mime, filename: msg.filename });
+      } else {
+        pending.reject(new Error(msg.error || 'worker decode failed'));
+      }
+    };
+    _voxAudioWorker.onerror = function (err) {
+      console.warn('[voxcraft] audio worker error', err);
+      // Reject all pending so callers can fall back
+      _voxAudioPending.forEach((p) => p.reject(err));
+      _voxAudioPending.clear();
+      _voxAudioWorker = null;
+    };
+    _voxAudioWorkerReady = true;
+  } catch (e) {
+    console.warn('[voxcraft] audio worker unavailable', e);
+    _voxAudioWorker = null;
+  }
+  return _voxAudioWorker;
+}
+
+/** Decode base64 → Blob off the main thread. Falls back to main-thread decode. */
+function voxB64ToBlob(b64, mime) {
+  mime = mime || 'application/octet-stream';
+  return new Promise((resolve, reject) => {
+    const worker = voxGetAudioWorker();
+    if (!worker) {
+      // Fallback: main-thread atob (ok for small files)
+      try {
+        const binary = atob(b64.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, ''));
+        const len = binary.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+        resolve(new Blob([bytes], { type: mime }));
+      } catch (e) {
+        reject(e);
+      }
+      return;
+    }
+    const id = ++_voxAudioReqId;
+    _voxAudioPending.set(id, {
+      resolve: (result) => {
+        try {
+          resolve(new Blob([result.buffer], { type: result.mime || mime }));
+        } catch (e) {
+          reject(e);
+        }
+      },
+      reject: reject,
+    });
+    worker.postMessage({ id: id, b64: b64, mime: mime });
+  });
+}
+
+/** Create a revocable object URL from base64. Prefer this over data: URLs. */
+async function voxB64ToObjectURL(b64, mime) {
+  const blob = await voxB64ToBlob(b64, mime);
+  return URL.createObjectURL(blob);
+}
+
+/** Trigger a file download from base64 without ever putting the payload in the DOM. */
+async function voxDownloadB64(b64, filename, mime) {
+  try {
+    const url = await voxB64ToObjectURL(b64, mime || 'application/octet-stream');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'download.bin';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    console.warn('[voxcraft] download failed', e);
+    // Last-resort data URL (small files only)
+    const a = document.createElement('a');
+    a.href = `data:${mime || 'application/octet-stream'};base64,${b64}`;
+    a.download = filename || 'download.bin';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
+/**
+ * Shared result panel HTML used by clone, music, studio, and tools.
+ * For large audio we no longer embed the base64 in the HTML. Instead we
+ * return a shell and then hydrate the audio + download link with a blob URL
+ * created on a background worker (see voxHydrateAudioResult).
+ */
 function voxAudioPlayerHtml(b64, filename, mime) {
   mime = mime || 'audio/wav';
   filename = filename || 'audio.wav';
@@ -764,12 +874,13 @@ function voxAudioPlayerHtml(b64, filename, mime) {
     ? ''
     : `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
   const safeName = String(filename).replace(/[<>&"']/g, '');
-  const src = `data:${mime};base64,${b64}`;
+  // Use a placeholder src; real blob URL is set asynchronously by voxHydrateAudioResult
+  // so the huge base64 string never lands in the DOM.
   return `
-    <div class="result-panel">
+    <div class="result-panel" data-vox-b64-pending="1">
       <div class="result-panel__label">Your audio</div>
       <div class="vox-player" data-vox-player>
-        <audio preload="metadata" src="${src}"></audio>
+        <audio preload="metadata" data-vox-audio-src></audio>
         <div class="vox-player__row">
           <button type="button" class="vox-player__play" data-vp-play aria-label="Play">
             <svg class="vox-player__icon vox-player__icon--play" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
@@ -780,10 +891,10 @@ function voxAudioPlayerHtml(b64, filename, mime) {
             <div class="vox-player__times"><span data-vp-cur>0:00</span><span data-vp-dur>0:00</span></div>
           </div>
         </div>
-        <div class="vox-player__meta"><strong>${safeName}</strong><span data-vp-state>Ready</span></div>
+        <div class="vox-player__meta"><strong>${safeName}</strong><span data-vp-state>Preparing…</span></div>
       </div>
       <div class="result-panel__actions">
-        <a class="btn btn--brass btn--sm" download="${filename}" href="${src}">Download</a>
+        <button type="button" class="btn btn--brass btn--sm" data-vox-download disabled>Preparing download…</button>
         <button type="button" class="btn btn--ghost btn--sm" data-vp-replay>Play again</button>
       </div>
       <div class="result-panel__next">
@@ -793,6 +904,65 @@ function voxAudioPlayerHtml(b64, filename, mime) {
       </div>
     </div>
   `;
+}
+
+/**
+ * After inserting voxAudioPlayerHtml() into the DOM, call this with the same
+ * b64 / filename / mime so the audio element and download button get a real
+ * blob URL created off the main thread.
+ */
+async function voxHydrateAudioResult(root, b64, filename, mime) {
+  if (!root || !b64) return;
+  const panel = root.querySelector ? root.querySelector('[data-vox-b64-pending]') || root : root;
+  if (!panel || !panel.querySelector) return;
+  mime = mime || 'audio/wav';
+  filename = filename || 'audio.wav';
+  const stateEl = panel.querySelector('[data-vp-state]');
+  const dlBtn = panel.querySelector('[data-vox-download]');
+  const audio = panel.querySelector('audio[data-vox-audio-src], audio');
+  try {
+    if (stateEl) stateEl.textContent = 'Decoding…';
+    const url = await voxB64ToObjectURL(b64, mime);
+    if (audio) {
+      audio.src = url;
+      audio.removeAttribute('data-vox-audio-src');
+      // Keep a reference so we can revoke later if the panel is cleared
+      panel._voxObjectUrl = url;
+    }
+    if (dlBtn) {
+      dlBtn.disabled = false;
+      dlBtn.textContent = 'Download';
+      dlBtn.onclick = function (e) {
+        e.preventDefault();
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      };
+    }
+    if (stateEl) stateEl.textContent = 'Ready';
+    panel.removeAttribute('data-vox-b64-pending');
+    // Re-bind custom player controls now that src is set
+    if (typeof voxBindPlayers === 'function') voxBindPlayers(panel);
+  } catch (e) {
+    console.warn('[voxcraft] hydrate failed', e);
+    if (stateEl) stateEl.textContent = 'Ready (fallback)';
+    // Fallback: tiny data URL only if decode failed (should be rare)
+    if (audio && b64.length < 2e6) {
+      audio.src = `data:${mime};base64,${b64}`;
+    }
+    if (dlBtn) {
+      dlBtn.disabled = false;
+      dlBtn.textContent = 'Download';
+      dlBtn.onclick = function (e) {
+        e.preventDefault();
+        voxDownloadB64(b64, filename, mime);
+      };
+    }
+  }
 }
 
 function voxFormatTime(sec) {

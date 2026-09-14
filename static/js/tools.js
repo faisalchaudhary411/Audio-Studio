@@ -117,10 +117,10 @@
       `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
     ).join('');
     return `
-      <div class="result-panel">
-        <audio controls src="data:${mime};base64,${b64}"></audio>
+      <div class="result-panel" data-vox-b64-pending="1">
+        <audio controls data-vox-audio-src></audio>
         <div class="result-panel__actions">
-          <a class="btn btn--brass btn--sm" download="${filename}" href="data:${mime};base64,${b64}">Download</a>
+          <button type="button" class="btn btn--brass btn--sm" data-vox-download disabled>Preparing download…</button>
           <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('.result-panel').querySelector('audio').play()">Play again</button>
         </div>
         <div class="result-panel__next">
@@ -129,6 +129,16 @@
         </div>
       </div>
     `;
+  }
+
+  /** Insert player HTML and hydrate blob URL via background worker. */
+  function setAudioResult(el, b64, filename, mime) {
+    if (!el) return;
+    mime = mime || 'audio/mpeg';
+    el.innerHTML = audioPlayerHtml(b64, filename, mime);
+    if (typeof voxHydrateAudioResult === 'function') {
+      voxHydrateAudioResult(el, b64, filename, mime);
+    }
   }
 
   // When landing on a tool with a saved transfer, offer to load it
@@ -502,7 +512,7 @@
         return;
       }
       if (convertStatus) convertStatus.textContent = `Converted to ${(data.format || '').toUpperCase()}`;
-      if (convertResult) convertResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
+      if (convertResult) setAudioResult(convertResult, data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       setToolError(convertResult, convertStatus, null, 'Network error — check your connection and try again.');
     } finally {
@@ -600,7 +610,7 @@
         return;
       }
       if (mergeStatus) mergeStatus.textContent = `Merged ${mergeSelectedFiles.length} files`;
-      if (mergeResult) mergeResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
+      if (mergeResult) setAudioResult(mergeResult, data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       setToolError(mergeResult, mergeStatus, null, 'Network error — check your connection and try again.');
     } finally {
@@ -688,7 +698,7 @@
           return;
         }
         if (cutterStatus) cutterStatus.textContent = 'Silence trimmed';
-        if (cutterResult) cutterResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (cutterResult) setAudioResult(cutterResult, data.audio_b64, data.filename);
       } else if (cutterMode === 'trim') {
         if (cutterStatus) cutterStatus.textContent = 'Trimming…';
         form.append('start_sec', document.getElementById('cutter-start').value);
@@ -700,7 +710,7 @@
           return;
         }
         if (cutterStatus) cutterStatus.textContent = 'Trimmed';
-        if (cutterResult) cutterResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (cutterResult) setAudioResult(cutterResult, data.audio_b64, data.filename);
       } else {
         if (cutterStatus) cutterStatus.textContent = 'Splitting…';
         const splitEl = document.getElementById('cutter-split') || document.getElementById('cutter-split-at');
@@ -791,7 +801,7 @@
         return;
       }
       if (denoiseStatus) denoiseStatus.textContent = 'Noise removed';
-      if (denoiseResult) denoiseResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      if (denoiseResult) setAudioResult(denoiseResult, data.audio_b64, data.filename);
     } catch (e) {
       setToolError(denoiseResult, denoiseStatus, null, 'Network error — check your connection and try again.');
     } finally {
@@ -890,7 +900,7 @@
         return;
       }
       if (vcStatus) vcStatus.textContent = 'Effect applied';
-      if (vcResult) vcResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+      if (vcResult) setAudioResult(vcResult, data.audio_b64, data.filename);
     } catch (e) {
       setToolError(vcResult, vcStatus, null, 'Network error — check your connection and try again.');
     } finally {
@@ -951,7 +961,7 @@
         return;
       }
       if (vxStatus) vxStatus.textContent = `Extracted · ${data.size_kb} KB`;
-      if (vxResult) vxResult.innerHTML = audioPlayerHtml(data.audio_b64, data.filename, mimeFor(data.format));
+      if (vxResult) setAudioResult(vxResult, data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       setToolError(vxResult, vxStatus, null, 'Network error — check your connection and try again.');
     } finally {
@@ -988,7 +998,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Normalize failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
-        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
@@ -1020,7 +1030,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Volume adjust failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
-        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
@@ -1064,7 +1074,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Speed change failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
-        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
@@ -1100,7 +1110,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Fade failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
-        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
@@ -1138,19 +1148,67 @@
         const clips = data.clips || [];
         if (status) status.textContent = `${clips.length} clip${clips.length === 1 ? '' : 's'} ready`;
         if (result) {
-          const zipBtn = data.zip_b64
-            ? `<a class="btn btn--brass btn--sm" style="margin-bottom:12px;display:inline-flex;"
-                 download="${data.zip_filename || 'voxcraft-split.zip'}"
-                 href="data:application/zip;base64,${data.zip_b64}">Download all as ZIP</a>`
-            : '';
-          result.innerHTML = zipBtn + clips.map((c) => `
-            <div class="batch-clip" style="margin-bottom:12px;">
-              <div class="batch-clip__idx">Part ${c.idx} · ${c.duration_sec}s · ${c.size_kb} KB</div>
-              <audio controls src="data:audio/mpeg;base64,${c.audio_b64}"></audio>
-              <a class="btn btn--ghost btn--sm" style="margin-top:6px;display:inline-flex;"
-                 download="${c.filename}" href="data:audio/mpeg;base64,${c.audio_b64}">Download</a>
-            </div>
-          `).join('');
+          result.innerHTML = `
+            <div data-split-extra style="margin-bottom:12px;"></div>
+            ${clips.map((c, i) => `
+              <div class="batch-clip" style="margin-bottom:12px;" data-split-clip="${i}">
+                <div class="batch-clip__idx">Part ${c.idx} · ${c.duration_sec}s · ${c.size_kb} KB</div>
+                <audio controls data-vox-audio-src preload="metadata"></audio>
+                <button type="button" class="btn btn--ghost btn--sm" style="margin-top:6px;display:inline-flex;"
+                   data-vox-download disabled>Preparing…</button>
+              </div>
+            `).join('')}`;
+          (async function () {
+            const toUrl = typeof voxB64ToObjectURL === 'function'
+              ? voxB64ToObjectURL
+              : async (b64, mime) => {
+                  const bin = atob(b64.replace(/^data:[^;]+;base64,/, ''));
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+                };
+            if (data.zip_b64) {
+              try {
+                const url = await toUrl(data.zip_b64, 'application/zip');
+                const wrap = result.querySelector('[data-split-extra]');
+                if (wrap) {
+                  const btn = document.createElement('button');
+                  btn.type = 'button';
+                  btn.className = 'btn btn--brass btn--sm';
+                  btn.style.cssText = 'margin-bottom:12px;display:inline-flex;';
+                  btn.textContent = 'Download all as ZIP';
+                  btn.onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.zip_filename || 'voxcraft-split.zip';
+                    a.click();
+                  };
+                  wrap.appendChild(btn);
+                }
+              } catch (e) {}
+            }
+            for (let i = 0; i < clips.length; i++) {
+              const c = clips[i];
+              const el = result.querySelector(`[data-split-clip="${i}"]`);
+              if (!el || !c.audio_b64) continue;
+              try {
+                const url = await toUrl(c.audio_b64, 'audio/mpeg');
+                const audio = el.querySelector('audio');
+                const btn = el.querySelector('[data-vox-download]');
+                if (audio) audio.src = url;
+                if (btn) {
+                  btn.disabled = false;
+                  btn.textContent = 'Download';
+                  btn.onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = c.filename || ('part-' + c.idx + '.mp3');
+                    a.click();
+                  };
+                }
+              } catch (e) {}
+            }
+          })();
         }
       } catch (e) {
         if (status) status.textContent = 'Network error.';
@@ -1181,7 +1239,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
-        if (result) result.innerHTML = audioPlayerHtml(data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
