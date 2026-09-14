@@ -80,6 +80,12 @@
             <td class="is-yes">Unlimited</td>
           </tr>
           <tr>
+            <th scope="row">Video redub</th>
+            <td class="is-no">—</td>
+            <td class="is-yes">{{ compare.redub }}</td>
+            <td class="is-yes">{{ compare.redub }}</td>
+          </tr>
+          <tr>
             <th scope="row">Voice cloning</th>
             <td class="is-no">—</td>
             <td class="is-no">—</td>
@@ -106,7 +112,7 @@
         </tbody>
       </table>
     </div>
-    <p class="pricing-compare-note">Most creators start on <strong>Pro</strong>. Choose <strong>Pro+</strong> only if you need cloning or music.</p>
+    <p class="pricing-compare-note">Most creators start on <strong>Pro</strong> (includes <a href="{{ url_for('video_redub') }}" style="color:var(--brass-hi);">video redub</a>). Choose <strong>Pro+</strong> only if you need cloning or music.</p>
   </div>
 
   <p style="text-align:center;color:var(--text-dim);font-size:0.8rem;margin-top:16px;max-width:42ch;margin-left:auto;margin-right:auto;">

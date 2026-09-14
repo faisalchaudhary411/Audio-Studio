@@ -16,9 +16,19 @@
 {% endif %}
 
 <div class="section" style="padding-top:0;">
+  <div class="tools-group" style="margin-bottom:8px;">
+    <div class="tool-grid tool-grid--compact">
+      <a href="{{ url_for('video_redub') }}" class="tool-card tool-card--compact">
+        <span class="tool-card__tag">Pro · Featured</span>
+        <h3 class="tool-card__title">Video redub</h3>
+        <p class="tool-card__sub">Translate &amp; re-voice a video’s spoken track — dedicated studio page.</p>
+        <span class="tool-card__cta">Open →</span>
+      </a>
+    </div>
+  </div>
   {# Group tools into simple categories for a cleaner library #}
   {% set groups = [
-    ("Speech & text", ["transcribe-audio-to-text", "voice-changer"]),
+    ("Speech & text", ["transcribe-audio-to-text", "voice-changer", "video-audio-redub"]),
     ("Edit & clean", ["trim-cut-audio", "merge-audio-files", "remove-background-noise", "split-audio-by-silence", "fade-audio"]),
     ("Volume & tone", ["normalize-audio-volume", "adjust-audio-volume", "simple-audio-eq"]),
     ("Format & channels", ["convert-audio-format", "stereo-to-mono", "extract-audio-from-video"]),
