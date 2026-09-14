@@ -41,15 +41,15 @@
       <div class="profile-grid">
         <div class="profile-field">
           <label for="profile-name">Display name</label>
-          <input type="text" id="profile-name" name="name" value="{{ user.name or '' }}" maxlength="80" autocomplete="name" class="studio-select" style="width:100%;">
+          <input type="text" id="profile-name" name="name" value="{{ user.name or '' }}" maxlength="80" autocomplete="name" class="studio-input" style="width:100%;">
         </div>
         <div class="profile-field">
           <label for="profile-username">Username</label>
-          <input type="text" id="profile-username" name="username" value="{{ user.username or '' }}" maxlength="32" pattern="[A-Za-z0-9._]*" placeholder="optional" class="studio-select" style="width:100%;">
+          <input type="text" id="profile-username" name="username" value="{{ user.username or '' }}" maxlength="32" pattern="[A-Za-z0-9._]*" placeholder="optional" class="studio-input" style="width:100%;">
         </div>
         <div class="profile-field">
           <label for="profile-phone">Phone</label>
-          <input type="tel" id="profile-phone" name="phone" value="{{ user.phone or '' }}" maxlength="24" autocomplete="tel" placeholder="optional" class="studio-select" style="width:100%;">
+          <input type="tel" id="profile-phone" name="phone" value="{{ user.phone or '' }}" maxlength="24" autocomplete="tel" placeholder="optional" class="studio-input" style="width:100%;">
         </div>
         <div class="profile-field">
           <label for="profile-avatar">Profile photo</label>
@@ -59,7 +59,15 @@
       </div>
       <div class="profile-field" style="margin-top:12px;">
         <label for="profile-avatar-url">Or photo URL</label>
-        <input type="url" id="profile-avatar-url" name="avatar_url" value="{{ user.avatar_url or '' }}" placeholder="https://…" class="studio-select" style="width:100%;">
+        {% set avatar_is_upload = user.avatar_url and user.avatar_url.startswith('/static/') %}
+        <input type="url" id="profile-avatar-url" name="avatar_url"
+               value="{{ '' if avatar_is_upload else (user.avatar_url or '') }}"
+               placeholder="https://…" class="studio-input" style="width:100%;">
+        {% if avatar_is_upload %}
+        <span class="profile-hint">Currently using your uploaded photo — paste a link here only if you want to switch to an external image instead.</span>
+        {% else %}
+        <span class="profile-hint">Paste a link to an image instead of uploading one.</span>
+        {% endif %}
       </div>
       <div style="margin-top:16px;">
         <button type="submit" class="btn btn--brass btn--sm">Save profile</button>
@@ -75,15 +83,15 @@
       <div class="profile-grid">
         <div class="profile-field">
           <label for="cur-pass">Current password</label>
-          <input type="password" id="cur-pass" name="current_password" required autocomplete="current-password" class="studio-select" style="width:100%;">
+          <input type="password" id="cur-pass" name="current_password" required autocomplete="current-password" class="studio-input" style="width:100%;">
         </div>
         <div class="profile-field">
           <label for="new-pass">New password</label>
-          <input type="password" id="new-pass" name="new_password" required minlength="8" autocomplete="new-password" class="studio-select" style="width:100%;">
+          <input type="password" id="new-pass" name="new_password" required minlength="8" autocomplete="new-password" class="studio-input" style="width:100%;">
         </div>
         <div class="profile-field">
           <label for="new-pass2">Confirm new password</label>
-          <input type="password" id="new-pass2" name="new_password2" required minlength="8" autocomplete="new-password" class="studio-select" style="width:100%;">
+          <input type="password" id="new-pass2" name="new_password2" required minlength="8" autocomplete="new-password" class="studio-input" style="width:100%;">
         </div>
       </div>
       <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
