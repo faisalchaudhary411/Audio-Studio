@@ -115,3 +115,61 @@ def consume_token(token: str) -> dict:
     record["used"] = True
     persistence.set_password_token(token, record)
     return {"email": record["email"], "purpose": record["purpose"]}
+
+
+def update_profile(email: str, *, name: str = None, username: str = None,
+                   phone: str = None, avatar_url: str = None) -> dict:
+    """Update profile fields on the user JSON record. Returns updated record or {}."""
+    email = (email or "").strip().lower()
+    record = find_user(email)
+    if not record:
+        return {}
+    if name is not None:
+        record["name"] = (name or "").strip()[:80] or record.get("name") or "Customer"
+    if username is not None:
+        u = (username or "").strip().lstrip("@")[:32]
+        # allow letters, numbers, underscore, dot
+        import re
+        u = re.sub(r"[^a-zA-Z0-9._]", "", u)
+        record["username"] = u
+    if phone is not None:
+        record["phone"] = (phone or "").strip()[:24]
+    if avatar_url is not None:
+        record["avatar_url"] = (avatar_url or "").strip()[:500]
+    persistence.set_user(email, record)
+    return record
+
+
+def change_password(email: str, current_password: str, new_password: str) -> tuple:
+    """Returns (ok: bool, error: str)."""
+    email = (email or "").strip().lower()
+    record = find_user(email)
+    if not record or not record.get("password_hash"):
+        return False, "Account not found or password not set yet."
+    if not check_password_hash(record["password_hash"], current_password or ""):
+        return False, "Current password is incorrect."
+    if len(new_password or "") < 8:
+        return False, "New password must be at least 8 characters."
+    if current_password == new_password:
+        return False, "New password must be different from the current one."
+    record["password_hash"] = generate_password_hash(new_password)
+    persistence.set_user(email, record)
+    return True, ""
+
+
+def username_taken(username: str, except_email: str = "") -> bool:
+    """Best-effort uniqueness check across users table."""
+    username = (username or "").strip().lstrip("@").lower()
+    if not username:
+        return False
+    try:
+        users = persistence.list_users() if hasattr(persistence, "list_users") else []
+    except Exception:
+        users = []
+    except_email = (except_email or "").strip().lower()
+    for u in users:
+        if (u.get("email") or "").lower() == except_email:
+            continue
+        if (u.get("username") or "").lower() == username:
+            return True
+    return False

@@ -906,6 +906,22 @@ def set_user(email: str, record: dict):
             conn.close()
 
 
+def list_users(limit: int = 500) -> list:
+    """Return up to `limit` user records (profile / username checks)."""
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT data FROM users LIMIT ?", (int(limit),)).fetchall()
+        out = []
+        for r in rows:
+            try:
+                out.append(json.loads(r[0]))
+            except Exception:
+                pass
+        return out
+    finally:
+        conn.close()
+
+
 def get_password_token(token: str) -> dict:
     conn = _connect()
     try:

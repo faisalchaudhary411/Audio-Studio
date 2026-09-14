@@ -3315,6 +3315,70 @@ def account_dashboard():
                             plan_usage=plan_usage, usage_near=usage_near, usage_full=usage_full)
 
 
+@app.route("/account/profile", methods=["POST"])
+@account_required
+def account_profile():
+    email = session["account_email"]
+    name = request.form.get("name", "")
+    username = request.form.get("username", "")
+    phone = request.form.get("phone", "")
+    avatar_url = (request.form.get("avatar_url") or "").strip()
+
+    if username and accounts.username_taken(username, except_email=email):
+        flash("That username is already taken.", "error")
+        return redirect(url_for("account_dashboard"))
+
+    # Optional avatar upload (stored under static/uploads/avatars)
+    avatar_file = request.files.get("avatar")
+    if avatar_file and avatar_file.filename:
+        data = avatar_file.read()
+        if len(data) > 1_000_000:
+            flash("Photo must be under 1 MB.", "error")
+            return redirect(url_for("account_dashboard"))
+        ext = (avatar_file.filename.rsplit(".", 1)[-1] or "jpg").lower()
+        if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
+            flash("Use JPG, PNG, WebP, or GIF.", "error")
+            return redirect(url_for("account_dashboard"))
+        if ext == "jpeg":
+            ext = "jpg"
+        upload_dir = os.path.join(app.root_path, "static", "uploads", "avatars")
+        os.makedirs(upload_dir, exist_ok=True)
+        safe = hashlib.sha256(email.encode()).hexdigest()[:16]
+        fname = f"{safe}.{ext}"
+        path = os.path.join(upload_dir, fname)
+        with open(path, "wb") as f:
+            f.write(data)
+        avatar_url = url_for("static", filename=f"uploads/avatars/{fname}")
+
+    accounts.update_profile(
+        email,
+        name=name,
+        username=username,
+        phone=phone,
+        avatar_url=avatar_url if avatar_url else None,
+    )
+    flash("Profile saved.", "ok")
+    return redirect(url_for("account_dashboard"))
+
+
+@app.route("/account/password", methods=["POST"])
+@account_required
+def account_password():
+    email = session["account_email"]
+    current_password = request.form.get("current_password") or ""
+    new_password = request.form.get("new_password") or ""
+    new_password2 = request.form.get("new_password2") or ""
+    if new_password != new_password2:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("account_dashboard"))
+    ok, err = accounts.change_password(email, current_password, new_password)
+    if not ok:
+        flash(err or "Could not change password.", "error")
+        return redirect(url_for("account_dashboard"))
+    flash("Password updated.", "ok")
+    return redirect(url_for("account_dashboard"))
+
+
 @app.route("/account/rotate-api-key", methods=["POST"])
 @account_required
 def account_rotate_api_key():
