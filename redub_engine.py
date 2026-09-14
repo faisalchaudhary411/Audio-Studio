@@ -1,14 +1,20 @@
 """
 redub_engine.py — Audio-only video redub (Phase 1).
 
-Pipeline (all local / free except Google Translate):
+Pipeline (all local / free except translation API):
   1. Extract audio from video          (ffmpeg — already paid for on VPS)
   2. Transcribe original audio         (existing audio_tools.transcribe)
-  3. Translate transcript              (Google Cloud Translation NMT)
+  3. Translate transcript              (Azure Translator preferred, Google fallback)
   4. Re-voice with edge-tts stock voice (existing tts_engine.tts_dispatch)
   5. Mux new audio onto original video (ffmpeg)
 
 No GPU / no voice cloning. Gated to Pro (not Pro+) in the API layer.
+
+Env vars (Azure preferred):
+  AZURE_TRANSLATOR_KEY      — KEY 1 from Azure portal Keys and Endpoint
+  AZURE_TRANSLATOR_REGION   — e.g. eastus, westeurope, global (optional if global)
+Optional Google fallback:
+  GOOGLE_TRANSLATE_API_KEY
 """
 
 from __future__ import annotations
@@ -25,12 +31,14 @@ from errors import UserFacingError
 from audio_tools import video_to_audio, transcribe, check_file_size
 from tts_engine import tts_dispatch
 
-# Google Cloud Translation v2 REST (basic NMT). Free tier: 500K chars/month.
+# Azure Translator v3 REST
+AZURE_TRANSLATE_URL = "https://api.cognitive.microsofttranslator.com/translate"
+
+# Google Cloud Translation v2 REST (fallback only)
 GOOGLE_TRANSLATE_URL = "https://translation.googleapis.com/language/translate/v2"
 
-# Map Studio language labels → Google Translate language codes.
-# Only languages we actually ship voices for need entries.
-LANG_TO_GOOGLE = {
+# Map Studio language labels → ISO codes used by Azure / Google
+LANG_TO_CODE = {
     "US English": "en",
     "UK English": "en",
     "Australian": "en",
@@ -42,10 +50,10 @@ LANG_TO_GOOGLE = {
     "German": "de",
     "Italian": "it",
     "Portuguese (Brazil)": "pt",
-    "Portuguese (Portugal)": "pt",
+    "Portuguese (Portugal)": "pt-pt",
     "Japanese": "ja",
     "Korean": "ko",
-    "Chinese (Mandarin)": "zh-CN",
+    "Chinese (Mandarin)": "zh-Hans",
     "Arabic": "ar",
     "Hindi": "hi",
     "Urdu": "ur",
@@ -61,8 +69,6 @@ LANG_TO_GOOGLE = {
     "Thai": "th",
     "Vietnamese": "vi",
     "Swedish": "sv",
-    "Polish": "pl",
-    "Dutch": "nl",
 }
 
 # SpeechRecognition / Whisper lang codes used by audio_tools.transcribe
@@ -93,76 +99,150 @@ MAX_VIDEO_MB = 50
 MAX_DURATION_SEC = 10 * 60  # 10 minutes hard cap for Phase 1
 
 
+def _azure_credentials() -> tuple[str, str]:
+    """Return (key, region). Region may be empty for global resources."""
+    key = (os.environ.get("AZURE_TRANSLATOR_KEY") or os.environ.get("AZURE_TRANSLATE_KEY") or "").strip()
+    region = (os.environ.get("AZURE_TRANSLATOR_REGION") or os.environ.get("AZURE_TRANSLATE_REGION") or "").strip()
+    return key, region
+
+
 def _google_api_key() -> str:
-    key = (os.environ.get("GOOGLE_TRANSLATE_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+    return (os.environ.get("GOOGLE_TRANSLATE_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+
+
+def _code_for_studio_lang(studio_lang: str) -> str:
+    code = LANG_TO_CODE.get(studio_lang)
+    if not code:
+        raise UserFacingError(f"Target language '{studio_lang}' is not supported for redub yet.")
+    return code
+
+
+def _translate_azure(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
+    key, region = _azure_credentials()
     if not key:
+        raise UserFacingError("Azure Translator key not configured.")
+
+    # Normalize codes Azure expects
+    to_code = target_lang_code
+    if to_code == "zh-CN":
+        to_code = "zh-Hans"
+    if to_code == "pt":
+        to_code = "pt"  # Azure maps pt → Brazilian by default
+
+    params = {"api-version": "3.0", "to": to_code}
+    if source_lang_code and source_lang_code not in ("auto", ""):
+        src = source_lang_code.split("-")[0].lower()
+        if src == "zh":
+            src = "zh-Hans"
+        params["from"] = src
+
+    headers = {
+        "Ocp-Apim-Subscription-Key": key,
+        "Content-Type": "application/json; charset=UTF-8",
+    }
+    if region and region.lower() not in ("global", ""):
+        headers["Ocp-Apim-Subscription-Region"] = region
+
+    body = [{"text": text}]
+
+    try:
+        resp = requests.post(AZURE_TRANSLATE_URL, params=params, headers=headers, json=body, timeout=60)
+    except requests.RequestException as e:
+        raise UserFacingError("Azure Translator is temporarily unreachable. Please try again in a moment.") from e
+
+    if resp.status_code == 401:
         raise UserFacingError(
-            "Translation is not configured yet. Set GOOGLE_TRANSLATE_API_KEY on the server "
-            "(Google Cloud Translation free tier covers ~110 five-minute jobs/month)."
+            "Azure Translator key is invalid or expired. Check AZURE_TRANSLATOR_KEY and region in the portal."
         )
-    return key
+    if resp.status_code == 403:
+        raise UserFacingError(
+            "Azure Translator access denied. Confirm the resource is active and the free/paid tier allows this call."
+        )
+    if resp.status_code == 429:
+        raise UserFacingError("Azure Translator rate limit hit. Wait a minute and try again.")
+    if resp.status_code >= 400:
+        try:
+            detail = resp.json()
+            detail = detail[0].get("error", {}).get("message") if isinstance(detail, list) else str(detail)[:200]
+        except Exception:
+            detail = resp.text[:200]
+        raise UserFacingError(f"Azure translation failed: {detail}")
+
+    data = resp.json()
+    try:
+        return data[0]["translations"][0]["text"].strip()
+    except (KeyError, IndexError, TypeError) as e:
+        raise UserFacingError("Unexpected response from Azure Translator.") from e
+
+
+def _translate_google(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
+    key = _google_api_key()
+    if not key:
+        raise UserFacingError("Google Translate key not configured.")
+
+    # Google prefers zh-CN style
+    to_code = target_lang_code
+    if to_code == "zh-Hans":
+        to_code = "zh-CN"
+    if to_code == "pt-pt":
+        to_code = "pt"
+
+    params = {"key": key}
+    body = {"q": text, "target": to_code, "format": "text"}
+    if source_lang_code and source_lang_code not in ("auto", ""):
+        body["source"] = source_lang_code.split("-")[0].lower()
+
+    try:
+        resp = requests.post(GOOGLE_TRANSLATE_URL, params=params, json=body, timeout=60)
+    except requests.RequestException as e:
+        raise UserFacingError("Google Translate is temporarily unreachable.") from e
+
+    if resp.status_code >= 400:
+        try:
+            detail = resp.json().get("error", {}).get("message", resp.text[:200])
+        except Exception:
+            detail = resp.text[:200]
+        raise UserFacingError(f"Google translation failed: {detail}")
+
+    data = resp.json()
+    try:
+        translated = data["data"]["translations"][0]["translatedText"]
+    except (KeyError, IndexError, TypeError) as e:
+        raise UserFacingError("Unexpected response from Google Translate.") from e
+
+    return (
+        translated.replace("&quot;", '"')
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .strip()
+    )
 
 
 def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
-    """Translate plain text via Google Cloud Translation NMT v2 REST."""
+    """
+    Translate plain text. Prefers Azure Translator; falls back to Google if Azure
+    is not configured. Set AZURE_TRANSLATOR_KEY (+ optional REGION) on the server.
+    """
     text = (text or "").strip()
     if not text:
         raise UserFacingError("Nothing to translate — transcription returned empty text.")
     if len(text) > 100_000:
         raise UserFacingError("Transcript is too long to translate in one pass (100k character limit).")
 
-    params = {"key": _google_api_key()}
-    body = {
-        "q": text,
-        "target": target_lang_code,
-        "format": "text",
-    }
-    if source_lang_code and source_lang_code not in ("auto", ""):
-        # Google accepts ISO codes like "en", "hi", "ur"
-        body["source"] = source_lang_code.split("-")[0].lower()
+    azure_key, _ = _azure_credentials()
+    google_key = _google_api_key()
 
-    try:
-        resp = requests.post(GOOGLE_TRANSLATE_URL, params=params, json=body, timeout=60)
-    except requests.RequestException as e:
-        raise UserFacingError("Translation service is temporarily unreachable. Please try again in a moment.") from e
+    if azure_key:
+        return _translate_azure(text, target_lang_code, source_lang_code)
+    if google_key:
+        return _translate_google(text, target_lang_code, source_lang_code)
 
-    if resp.status_code == 403:
-        raise UserFacingError(
-            "Google Translate API key is invalid or Translation API is not enabled on the project. "
-            "Enable Cloud Translation API and check the key."
-        )
-    if resp.status_code == 429:
-        raise UserFacingError("Translation rate limit hit. Wait a minute and try again.")
-    if resp.status_code >= 400:
-        try:
-            detail = resp.json().get("error", {}).get("message", resp.text[:200])
-        except Exception:
-            detail = resp.text[:200]
-        raise UserFacingError(f"Translation failed: {detail}")
-
-    data = resp.json()
-    try:
-        translated = data["data"]["translations"][0]["translatedText"]
-    except (KeyError, IndexError, TypeError) as e:
-        raise UserFacingError("Unexpected response from translation service.") from e
-
-    # Google HTML-escapes some characters even with format=text
-    translated = (
-        translated.replace("&quot;", '"')
-        .replace("&#39;", "'")
-        .replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
+    raise UserFacingError(
+        "Translation is not configured. Set AZURE_TRANSLATOR_KEY (and AZURE_TRANSLATOR_REGION if needed) "
+        "on the server. Free F0 tier includes 2 million characters/month."
     )
-    return translated.strip()
-
-
-def _google_code_for_studio_lang(studio_lang: str) -> str:
-    code = LANG_TO_GOOGLE.get(studio_lang)
-    if not code:
-        # Fallback: try first two letters of a voice id if somehow missing
-        raise UserFacingError(f"Target language '{studio_lang}' is not supported for redub yet.")
-    return code
 
 
 def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: bytes,
@@ -257,22 +337,21 @@ def redub_video(
         )
 
     # ---- 3. Translate ----
-    target_code = _google_code_for_studio_lang(target_studio_lang)
-    # Infer source code for Google from transcribe lang when not auto
-    source_google = None
+    target_code = _code_for_studio_lang(target_studio_lang)
+    source_code = None
     if source_lang != "auto":
-        source_google = source_lang.split("-")[0].lower()
-        if source_google == "zh":
-            source_google = "zh-CN"
+        source_code = source_lang.split("-")[0].lower()
+        if source_code == "zh":
+            source_code = "zh-Hans"
 
     # Skip translation if source and target are the same language family
     same_lang = False
-    if source_google and source_google == target_code:
+    if source_code and source_code.split("-")[0] == target_code.split("-")[0]:
         same_lang = True
     if same_lang:
         translated = transcript
     else:
-        translated = translate_text(transcript, target_code, source_lang_code=source_google)
+        translated = translate_text(transcript, target_code, source_lang_code=source_code)
 
     if not translated:
         raise UserFacingError("Translation returned empty text.")
