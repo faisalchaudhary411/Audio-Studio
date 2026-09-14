@@ -1380,6 +1380,8 @@
       form.append('target_lang', targetLang ? targetLang.value : 'US English');
       form.append('voice_id', voiceSelect.value);
       form.append('speed_pct', speed ? speed.value : '100');
+      const matchEl = document.getElementById('redub-match-length');
+      form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
 
       try {
         const res = await fetch('/api/tools/redub', { method: 'POST', body: form });
@@ -1395,9 +1397,11 @@
         }
 
         if (status) {
-          status.textContent = data.skipped_translation
+          let msg = data.skipped_translation
             ? ('Done · same language, voice replaced · ' + (data.size_kb || '') + ' KB')
             : ('Done · ' + (data.char_count || 0) + ' chars · ' + (data.size_kb || '') + ' KB');
+          if (data.length_matched) msg += ' · length matched';
+          status.textContent = msg;
           status.classList.add('studio-status-ready');
         }
         if (typeof voxButtonSuccess === 'function') voxButtonSuccess(btn);
@@ -1410,6 +1414,7 @@
               '<div class="result-panel__label">Dubbed video</div>' +
               '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 10px;">' +
                 (data.skipped_translation ? 'Translation skipped (same language). ' : '') +
+                (data.length_matched ? 'Audio stretched to match original length. ' : '') +
                 'New voice: <strong style="color:var(--text-hi);">' + (data.target_lang || '') + '</strong>' +
                 ' · ' + (data.char_count || 0) + ' characters billed to your TTS quota' +
               '</p>' +
