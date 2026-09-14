@@ -7,8 +7,10 @@
   bottom: 0; left: 0; right: 0;
   z-index: 28;
   display: none;
-  height: 78px;
-  overflow: hidden;
+  height: 78px !important;
+  max-height: 78px !important;
+  overflow: hidden !important;
+  contain: strict;
   background: linear-gradient(180deg, rgba(18, 24, 32, 0.98), rgba(10, 14, 19, 0.99));
   border-top: 1px solid transparent;
   border-image: linear-gradient(90deg, rgba(232,169,60,0.55), rgba(79,166,156,0.55)) 1;
@@ -66,7 +68,8 @@
 <div class="ad-sticky" id="ad-sticky" aria-label="Sponsored">
   <span class="ad-sticky__label">Sponsored</span>
   <a href="{{ url_for('upgrade') }}" class="ad-sticky__remove">Remove with Pro</a>
-  <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no" title="Sponsored content" loading="lazy"></iframe>
+  <iframe src="{{ url_for('ads_slot', slot='sticky_footer') }}" scrolling="no" title="Sponsored content" loading="lazy"
+    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
 </div>
 <script>
 (function () {
