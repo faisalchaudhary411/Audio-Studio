@@ -168,19 +168,29 @@ function initStudio(){
   });
 }
 
-// ---- Mobile nav hamburger (drawer outside header) ----
+// ---- Mobile nav drawer + accordion ----
 function initNavToggle(){
   const btn = document.getElementById('nav-hamburger');
   const drawer = document.getElementById('nav-drawer');
   if(!btn || !drawer) return;
 
+  let scrollY = 0;
+
   function setOpen(open) {
     drawer.classList.toggle('is-open', open);
     btn.classList.toggle('is-open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) drawer.removeAttribute('hidden');
-    else drawer.setAttribute('hidden', '');
-    document.body.classList.toggle('nav-drawer-open', open);
+    if (open) {
+      scrollY = window.scrollY || 0;
+      drawer.removeAttribute('hidden');
+      document.body.classList.add('nav-drawer-open');
+      document.body.style.top = `-${scrollY}px`;
+    } else {
+      drawer.setAttribute('hidden', '');
+      document.body.classList.remove('nav-drawer-open');
+      document.body.style.top = '';
+      window.scrollTo(0, scrollY);
+    }
   }
 
   btn.addEventListener('click', (e) => {
@@ -193,7 +203,24 @@ function initNavToggle(){
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setOpen(false);
   });
+
+  drawer.querySelectorAll('.nav-drawer__acc').forEach(acc => {
+    acc.addEventListener('click', () => {
+      const id = acc.getAttribute('data-acc');
+      const panel = document.getElementById('acc-' + id);
+      if (!panel) return;
+      const willOpen = panel.hasAttribute('hidden');
+      // close other panels
+      drawer.querySelectorAll('.nav-drawer__panel').forEach(p => p.setAttribute('hidden', ''));
+      drawer.querySelectorAll('.nav-drawer__acc').forEach(b => b.setAttribute('aria-expanded', 'false'));
+      if (willOpen) {
+        panel.removeAttribute('hidden');
+        acc.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
 }
+
 
 
 
