@@ -33,6 +33,7 @@
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#101820;display:flex;align-items:center;justify-content:center;';
     const iframe = document.createElement('iframe');
     iframe.src = '/ads/slot/interstitial';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
     iframe.style.cssText = 'width:100%;height:100%;border:0;';
     overlay.appendChild(iframe);
     document.body.appendChild(overlay);
