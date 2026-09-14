@@ -51,6 +51,7 @@ import pro_requests
 import notifications
 import promo
 from errors import UserFacingError
+import rbac
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import hmac
@@ -220,7 +221,7 @@ def api_error(e, action="process that request", status=500, category: str = None
     except Exception:
         pass
     if isinstance(e, UserFacingError):
-        return jsonify({"error": _safe_user_message(str(e))}), status
+        return jsonify({"error": str(e)}), status
     return jsonify({"error": f"Something went wrong trying to {action}. Please try again."}), status
 
 
@@ -391,108 +392,6 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
 
 
-# Production safety: never show Werkzeug interactive debuggers or raw
-# exception pages to visitors, even if someone flips FLASK_DEBUG by mistake.
-app.config["PROPAGATE_EXCEPTIONS"] = False
-
-
-def _safe_user_message(msg: str, limit: int = 280) -> str:
-    """Strip paths, secrets, and traceback fragments before client responses."""
-    import re as _re
-    text = (msg or "").strip() or "Something went wrong. Please try again."
-    # Absolute filesystem paths (unix + windows drive)
-    text = _re.sub(r"(?i)(?:/home|/var|/tmp|/usr|/etc|/opt)[/\S]*", "[path]", text)
-    text = _re.sub(r"(?i)\b[A-Z]:\\[\w.\-\\]+", "[path]", text)
-    # Common secret patterns
-    text = _re.sub(
-        r"(?i)(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+",
-        r"\1=[redacted]",
-        text,
-    )
-    text = _re.sub(r"(?i)Bearer\s+[A-Za-z0-9._\-]+", "Bearer [redacted]", text)
-    # Stack-frame noise
-    if "Traceback (most recent call last)" in text or 'File "' in text:
-        text = "Something went wrong. Please try again."
-    return text[:limit]
-
-
-@app.errorhandler(400)
-def _err_400(e):
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "Bad request."}), 400
-    return render_template("error.html", code=400, title="Bad request",
-                           message="That request could not be understood."), 400
-
-
-@app.errorhandler(403)
-def _err_403(e):
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "Forbidden."}), 403
-    return render_template("error.html", code=403, title="Forbidden",
-                           message="You do not have access to this page."), 403
-
-
-@app.errorhandler(404)
-def _err_404(e):
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "Not found."}), 404
-    return render_template("error.html", code=404, title="Page not found",
-                           message="That page does not exist or was moved."), 404
-
-
-@app.errorhandler(413)
-def _err_413(e):
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "File too large. Try a smaller upload."}), 413
-    return render_template("error.html", code=413, title="File too large",
-                           message="That upload exceeds the size limit."), 413
-
-
-@app.errorhandler(429)
-def _err_429(e):
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "Too many requests. Please wait a moment and try again."}), 429
-    return render_template("error.html", code=429, title="Slow down",
-                           message="Too many requests. Please wait a moment and try again."), 429
-
-
-@app.errorhandler(500)
-def _err_500(e):
-    app.logger.error(f"[500] {e}\n{traceback.format_exc()}")
-    try:
-        log_site_issue("system", "http_500", str(e)[:200], status=500, detail=traceback.format_exc()[-1500:])
-    except Exception:
-        pass
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "Something went wrong on our side. Please try again."}), 500
-    return render_template("error.html", code=500, title="Something went wrong",
-                           message="Please try again in a moment. If it keeps happening, contact support."), 500
-
-
-@app.errorhandler(Exception)
-def _err_unhandled(e):
-    """Last-resort catch — never return raw exception text or HTML debugger."""
-    # Let Flask handle HTTPException (404/403/etc.) via their dedicated handlers
-    from werkzeug.exceptions import HTTPException
-    if isinstance(e, HTTPException):
-        return e
-    if isinstance(e, UserFacingError):
-        if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-            return jsonify({"error": _safe_user_message(str(e))}), 400
-        flash(_safe_user_message(str(e)), "error")
-        return redirect(request.referrer or url_for("landing"))
-    app.logger.error(f"[unhandled] {type(e).__name__}: {e}\n{traceback.format_exc()}")
-    try:
-        log_site_issue("system", "unhandled", f"{type(e).__name__}: {e}"[:200],
-                       status=500, detail=traceback.format_exc()[-1500:])
-    except Exception:
-        pass
-    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
-        return jsonify({"error": "Something went wrong. Please try again."}), 500
-    return render_template("error.html", code=500, title="Something went wrong",
-                           message="Please try again in a moment. If it keeps happening, contact support."), 500
-
-
 @app.before_request
 def _make_session_permanent():
     session.permanent = True
@@ -565,20 +464,19 @@ def _security_headers(response):
 
 @app.before_request
 def _auto_restore_pro_session():
-    """Restore Pro session when license_key is missing:
-    1) Logged-in account email → key bound at purchase (preferred, cross-browser)
-    2) Device IP/fingerprint match (key-only activation path)
-    Skipped for static/webhook paths."""
+    """If this browser has no license_key in session (cookies cleared,
+    incognito, or a different browser than where they activated), silently
+    check whether this device's IP or fingerprint matches an already-active
+    key's history and restore it — see licensing.find_key_for_device() for
+    the deliberate convenience-vs-shared-network trade-off this makes.
+    Skipped for static assets and webhook/health endpoints, which never
+    need Pro status and would otherwise trigger a needless DB scan on
+    every single request (image, CSS, JS file, etc.)."""
     if session.get("license_key"):
         return
     skip_prefixes = ("/static/", "/webhook/", "/ads.txt")
     if request.path.startswith(skip_prefixes):
         return
-    # Account login path — works on any browser after email/password login
-    acct = (session.get("account_email") or "").strip().lower()
-    if acct:
-        if bind_account_license(acct):
-            return
     restored_key = licensing.find_key_for_device(request)
     if restored_key:
         session["license_key"] = restored_key
@@ -736,25 +634,6 @@ def _license_context() -> dict:
     return ctx
 
 
-
-def bind_account_license(email: str) -> str:
-    """Attach the customer's Pro/Pro+ key to this session when they log in.
-    Returns the bound key (or empty). License remains the source of truth;
-    account is just the login wrapper. Device fingerprint/IP still used for
-    free-tier limits and auto-restore on key-only activation."""
-    email = (email or "").strip().lower()
-    if not email:
-        return ""
-    key = licensing.find_key_by_email(email)
-    if not key:
-        return ""
-    result = licensing.check_vox_license(key)
-    if result.get("valid"):
-        session["license_key"] = key
-        return key
-    return ""
-
-
 def is_pro() -> bool:
     """Real check now: validates the license key stored in this session
     against licensing.check_vox_license() (backed by license_keys.json on
@@ -781,37 +660,72 @@ def has_clone_and_music() -> bool:
     return get_plan() == "pro_plus"
 
 
-def admin_required(view_func):
+def current_roles():
+    """Roles for this request (plan + optional admin)."""
+    return rbac.roles_for(
+        plan=get_plan() or "free",
+        is_admin=bool(session.get("admin_authed")),
+    )
+
+
+def can(permission: str) -> bool:
+    """True if the current session may perform `permission`."""
+    return rbac.roles_grant(current_roles(), permission)
+
+
+def require_permission(permission: str, *, api: bool = False):
+    """Decorator: block the view unless can(permission).
+    api=True → JSON 402/403; else redirect to upgrade or admin login.
+    """
     from functools import wraps
 
-    @wraps(view_func)
-    def wrapper(*args, **kwargs):
-        if not session.get("admin_authed"):
-            return redirect(url_for("admin_login", next=request.path))
-        return view_func(*args, **kwargs)
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(*args, **kwargs):
+            if can(permission):
+                return view_func(*args, **kwargs)
+            need = rbac.permission_min_role(permission)
+            msg = rbac.upgrade_hint(permission)
+            if need == rbac.ROLE_ADMIN:
+                if api:
+                    return jsonify({"error": "Admin access required."}), 403
+                return redirect(url_for("admin_login", next=request.path))
+            if api or request.path.startswith("/api/"):
+                return jsonify({"error": msg, "required": need}), 402
+            # HTML: send them to pricing/upgrade
+            if need == rbac.ROLE_PRO_PLUS:
+                return redirect(url_for("upgrade", plan="pro_plus"))
+            return redirect(url_for("upgrade", plan="pro"))
+        return wrapper
+    return decorator
 
-    return wrapper
+
+def require_role(*roles: str, api: bool = False):
+    """Decorator: require at least one of the named roles."""
+    from functools import wraps
+    wanted = set(roles)
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(*args, **kwargs):
+            have = current_roles()
+            if have & wanted:
+                return view_func(*args, **kwargs)
+            if rbac.ROLE_ADMIN in wanted:
+                if api:
+                    return jsonify({"error": "Admin access required."}), 403
+                return redirect(url_for("admin_login", next=request.path))
+            msg = "Your plan does not include this feature."
+            if api or request.path.startswith("/api/"):
+                return jsonify({"error": msg}), 402
+            return redirect(url_for("upgrade"))
+        return wrapper
+    return decorator
 
 
-
-def _account_user_ctx() -> dict:
-    """Lightweight profile chip data for the nav (safe for every page)."""
-    email = (session.get("account_email") or "").strip().lower()
-    if not email:
-        return {}
-    try:
-        u = accounts.find_user(email) or {}
-    except Exception:
-        u = {}
-    name = (u.get("name") or "").strip() or email.split("@")[0]
-    return {
-        "email": email,
-        "name": name,
-        "username": (u.get("username") or "").strip(),
-        "avatar_url": (u.get("avatar_url") or "").strip(),
-        "initial": (name[0] if name else "U").upper(),
-        "plan": get_plan() or "free",
-    }
+def admin_required(view_func):
+    """Back-compat: same as require_permission('admin.access')."""
+    return require_permission("admin.access")(view_func)
 
 
 @app.context_processor
@@ -827,11 +741,12 @@ def inject_globals():
     canonical_url = CANONICAL_HOST + request.path
     return {
         "is_pro_ctx": is_pro(),
-        "plan_ctx": get_plan(),
+        "plan_ctx": get_plan() or "free",
         "license_name_ctx": get_license_name(),
         "has_clone_music_ctx": has_clone_and_music(),
+        "roles_ctx": list(current_roles()),
+        "can": can,
         "account_email_ctx": session.get("account_email", ""),
-        "account_user_ctx": _account_user_ctx(),
         "canonical_url": canonical_url,
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
@@ -956,9 +871,7 @@ def healthz():
         persistence.load_limits()
         return jsonify({"status": "ok"}), 200
     except Exception as e:
-        # Never leak exception text to monitors/clients — log only
-        app.logger.error(f"[healthz] DB check failed: {e}\n{traceback.format_exc()}")
-        return jsonify({"status": "error"}), 503
+        return jsonify({"status": "error", "detail": str(e)}), 503
 
 
 @app.route("/")
@@ -3296,15 +3209,13 @@ def account_login():
             return render_template("account_login.html",
                                     error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
 
-    identifier = (request.form.get("email") or request.form.get("login") or "").strip()
+    email = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "")
-    user = accounts.verify_login_identifier(identifier, password)
+    user = accounts.verify_login(email, password)
 
     if user:
         persistence.clear_login_attempts(ip_hash)
         session["account_email"] = user["email"]
-        # Sync Pro/Pro+ key to this browser session
-        bind_account_license(user["email"])
         next_url = request.args.get("next") or url_for("account_dashboard")
         return redirect(next_url)
 
@@ -3331,9 +3242,6 @@ def account_login():
 @app.route("/logout")
 def account_logout():
     session.pop("account_email", None)
-    # Drop session license; device fingerprint may still restore a key that
-    # was activated on this browser via /activate.
-    session.pop("license_key", None)
     return redirect(url_for("landing"))
 
 
@@ -3360,97 +3268,6 @@ def account_dashboard():
     return render_template("account.html", user=user, license_key=license_key,
                             license_info=license_info, api_key_records=api_key_records,
                             plan_usage=plan_usage, usage_near=usage_near, usage_full=usage_full)
-
-
-
-@app.route("/account/check-username")
-@account_required
-def account_check_username():
-    """JSON: {available: bool, reason?: str} for profile form."""
-    u = (request.args.get("u") or "").strip().lstrip("@")
-    import re
-    if len(u) < 3:
-        return jsonify({"available": False, "reason": "too_short"})
-    if not re.match(r"^[A-Za-z][A-Za-z0-9._]{2,31}$", u):
-        return jsonify({"available": False, "reason": "invalid"})
-    email = session.get("account_email", "")
-    if accounts.username_taken(u, except_email=email):
-        return jsonify({"available": False, "reason": "taken"})
-    return jsonify({"available": True})
-
-
-@app.route("/account/profile", methods=["POST"])
-@account_required
-def account_profile():
-    email = session["account_email"]
-    name = request.form.get("name", "")
-    username = request.form.get("username", "")
-    phone = request.form.get("phone", "")
-    avatar_url = (request.form.get("avatar_url") or "").strip()
-
-    if username:
-        import re as _re
-        u_clean = username.strip().lstrip("@")
-        if len(u_clean) < 3:
-            flash("Username must be at least 3 characters.", "error")
-            return redirect(url_for("account_dashboard"))
-        if not _re.match(r"^[A-Za-z][A-Za-z0-9._]{2,31}$", u_clean):
-            flash("Username must start with a letter and use only letters, numbers, . or _", "error")
-            return redirect(url_for("account_dashboard"))
-        if accounts.username_taken(u_clean, except_email=email):
-            flash("That username is already taken.", "error")
-            return redirect(url_for("account_dashboard"))
-        username = u_clean
-
-    # Optional avatar upload (stored under static/uploads/avatars)
-    avatar_file = request.files.get("avatar")
-    if avatar_file and avatar_file.filename:
-        data = avatar_file.read()
-        if len(data) > 1_000_000:
-            flash("Photo must be under 1 MB.", "error")
-            return redirect(url_for("account_dashboard"))
-        ext = (avatar_file.filename.rsplit(".", 1)[-1] or "jpg").lower()
-        if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
-            flash("Use JPG, PNG, WebP, or GIF.", "error")
-            return redirect(url_for("account_dashboard"))
-        if ext == "jpeg":
-            ext = "jpg"
-        upload_dir = os.path.join(app.root_path, "static", "uploads", "avatars")
-        os.makedirs(upload_dir, exist_ok=True)
-        safe = hashlib.sha256(email.encode()).hexdigest()[:16]
-        fname = f"{safe}.{ext}"
-        path = os.path.join(upload_dir, fname)
-        with open(path, "wb") as f:
-            f.write(data)
-        avatar_url = url_for("static", filename=f"uploads/avatars/{fname}")
-
-    accounts.update_profile(
-        email,
-        name=name,
-        username=username,
-        phone=phone,
-        avatar_url=avatar_url if avatar_url else None,
-    )
-    flash("Profile saved.", "ok")
-    return redirect(url_for("account_dashboard"))
-
-
-@app.route("/account/password", methods=["POST"])
-@account_required
-def account_password():
-    email = session["account_email"]
-    current_password = request.form.get("current_password") or ""
-    new_password = request.form.get("new_password") or ""
-    new_password2 = request.form.get("new_password2") or ""
-    if new_password != new_password2:
-        flash("New passwords do not match.", "error")
-        return redirect(url_for("account_dashboard"))
-    ok, err = accounts.change_password(email, current_password, new_password)
-    if not ok:
-        flash(err or "Could not change password.", "error")
-        return redirect(url_for("account_dashboard"))
-    flash("Password updated.", "ok")
-    return redirect(url_for("account_dashboard"))
 
 
 @app.route("/account/rotate-api-key", methods=["POST"])
@@ -3503,7 +3320,6 @@ def set_password(token):
                                 error="Password must be at least 8 characters.")
     accounts.set_password(token_info["email"], password)
     session["account_email"] = token_info["email"]
-    bind_account_license(token_info["email"])
     return redirect(url_for("account_dashboard"))
 
 
@@ -3545,7 +3361,6 @@ def reset_password(token):
                                 error="Password must be at least 8 characters.")
     accounts.set_password(token_info["email"], password)
     session["account_email"] = token_info["email"]
-    bind_account_license(token_info["email"])
     return redirect(url_for("account_dashboard"))
 
 
@@ -4145,7 +3960,7 @@ def api_redub():
     """Audio-only video redub: extract → transcribe → translate → edge-tts → mux.
     Pro plan only (not free, not gated behind Pro+). Uses stock edge-tts voices.
     Daily/monthly redub counts are admin-editable via /admin/limits."""
-    if not is_pro():
+    if not can("redub.use"):
         return jsonify({
             "error": "Video redub is a Pro feature. Upgrade to Pro to redub videos with any of the 88 stock voices.",
             "upgrade_url": "/pricing",
@@ -4541,7 +4356,7 @@ def api_clone_upload():
     voices to persist across sessions, save the reference clip to your
     GitHub-persisted storage (same pattern as your other config data) instead.
     """
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     file = request.files.get("reference_audio")
@@ -4601,7 +4416,7 @@ def api_clone_voice_save():
     reusable voice, gated on the customer explicitly checking the consent
     popup (they own/have permission for this voice and license it to us).
     Without consent == true this refuses outright — no partial save."""
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     license_key = session.get("license_key")
@@ -4663,7 +4478,7 @@ def api_clone_voice_save():
 @app.route("/api/clone/voices", methods=["GET"])
 def api_clone_voices_list():
     """Pro+-only: list the current license's saved voices for a picker UI."""
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
     license_key = session.get("license_key")
     if not license_key:
@@ -4694,7 +4509,7 @@ def api_clone_voices_public():
     still goes through /api/clone/generate like any saved voice, which
     resolves the id server-side.
     """
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
     if not session.get("license_key"):
         return jsonify({"error": "Session expired — please re-activate your license."}), 401
@@ -4721,7 +4536,7 @@ def api_clone_voice_set_access(voice_id):
     cover this, it only ever granted generation "on my request". Going
     back to private needs no consent, only ownership.
     """
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
     license_key = session.get("license_key")
     if not license_key:
@@ -4767,7 +4582,7 @@ def api_clone_voice_set_access(voice_id):
 def api_clone_voice_delete(voice_id):
     """Pro+-only: delete a saved voice. Ownership-checked — deleting someone
     else's voice_id (or a stale/mistyped one) is a no-op 404, not a leak."""
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
     license_key = session.get("license_key")
     if not license_key:
@@ -4803,7 +4618,7 @@ def api_clone_reference_transcribe():
     result is always returned as an editable pre-fill, never auto-submitted
     for generation without the option to review it.
     """
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     data = request.get_json(force=True) or {}
@@ -4838,7 +4653,7 @@ def api_clone_reference_transcribe():
 
 @app.route("/api/clone/generate", methods=["POST"])
 def api_clone_generate():
-    if not has_clone_and_music():
+    if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
     license_key = session.get("license_key", "")
@@ -4990,7 +4805,7 @@ MUSIC_MAX_DURATION_SEC = 120  # keep runs (and cost) bounded — tune in admin l
 
 @app.route("/api/music/generate", methods=["POST"])
 def api_music_generate():
-    if not has_clone_and_music():
+    if not can("music.use"):
         return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
     license_key = session.get("license_key", "")
