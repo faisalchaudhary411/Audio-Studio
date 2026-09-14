@@ -32,8 +32,14 @@
       const fname = `VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav`;
       // Shared handoff so Ace-Step music can be sent to Trim/Denoise/etc.
       if (typeof voxAudioPlayerHtml === 'function') {
+        // Normal path: main.js loaded fine, this already hydrates off the
+        // main thread via the audio worker (see voxHydrateAudioResult).
         result.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, 'audio/wav');
       } else {
+        // Defensive fallback only — main.js failed to load/define the
+        // helper. Still avoid freezing the main thread on a big base64
+        // string: use the worker-backed decode if it's reachable, and
+        // only fall back to a raw data: URL as a last resort.
         try {
           sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
             b64: data.audio_b64,
@@ -44,9 +50,9 @@
         } catch (e) {}
         result.innerHTML = `
           <div class="result-panel">
-            <audio controls style="width:100%;" src="data:audio/wav;base64,${data.audio_b64}"></audio>
+            <audio controls style="width:100%;" data-music-fallback-audio></audio>
             <div class="result-panel__actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">
-              <a class="btn btn--brass btn--sm" download="${fname}" href="data:audio/wav;base64,${data.audio_b64}">Download</a>
+              <a class="btn btn--brass btn--sm" download="${fname}" data-music-fallback-dl disabled>Preparing download…</a>
             </div>
             <div class="result-panel__next" style="margin-top:10px;">
               <span class="result-panel__next-label">Send to another tool</span>
@@ -60,6 +66,26 @@
             </div>
           </div>
         `;
+        (async () => {
+          const audioEl = result.querySelector('[data-music-fallback-audio]');
+          const dlEl = result.querySelector('[data-music-fallback-dl]');
+          try {
+            if (typeof voxB64ToObjectURL === 'function') {
+              const url = await voxB64ToObjectURL(data.audio_b64, 'audio/wav');
+              audioEl.src = url;
+              dlEl.href = url;
+            } else {
+              // True last resort: small enough files, main-thread atob.
+              audioEl.src = `data:audio/wav;base64,${data.audio_b64}`;
+              dlEl.href = `data:audio/wav;base64,${data.audio_b64}`;
+            }
+          } catch (e) {
+            console.warn('[voxcraft] music fallback hydrate failed', e);
+            audioEl.src = `data:audio/wav;base64,${data.audio_b64}`;
+            dlEl.href = `data:audio/wav;base64,${data.audio_b64}`;
+          }
+          dlEl.removeAttribute('disabled');
+        })();
       }
       voxSetBusy(generateBtn, false);
       voxShowProgress(musicProgressBar, false);
