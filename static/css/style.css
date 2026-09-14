@@ -379,26 +379,8 @@ img{max-width:100%;display:block;}
   display:grid;
   grid-template-columns:1.5fr 1fr 1fr 1fr;
   gap:32px 28px;
-  max-width:1000px;margin:0 auto;
+  max-width:1100px;margin:0 auto;
   padding:40px 20px 32px;
-}
-.footer__col-title{
-  font-family:var(--mono);font-size:0.7rem;letter-spacing:0.12em;
-  text-transform:uppercase;color:var(--brass);
-  margin-bottom:4px;
-}
-.footer__col a{
-  color:var(--text-mid);text-decoration:none;font-size:0.9rem;
-  transition:color .15s;
-}
-.footer__col a:hover{color:var(--brass-hi);}
-.footer__tagline{color:var(--text-mid);font-size:0.88rem;line-height:1.55;margin:12px 0 8px;max-width:28ch;}
-.footer__meta{font-family:var(--mono);font-size:0.72rem;color:var(--text-dim);}
-.footer__bottom{
-  border-top:1px solid rgba(232,169,60,0.12);
-  max-width:1000px;margin:0 auto;padding:16px 20px 28px;
-  display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;
-  justify-content:space-between;font-size:0.8rem;color:var(--text-dim);
 }
 @media (max-width:800px){
   .footer__top{grid-template-columns:1fr 1fr;gap:28px 20px;}
@@ -1410,6 +1392,9 @@ input.admin-input{
   transition:border-color .2s ease, box-shadow .2s ease;
 }
 .step:hover{border-color:var(--line-strong);box-shadow:var(--shadow-soft);}
+@media (max-width:900px){
+  .step{padding:18px 16px 14px;}
+}
 .step__num{
   font-family:var(--mono);font-size:0.72rem;color:var(--brass);
   letter-spacing:0.08em;display:block;margin-bottom:10px;
@@ -1429,28 +1414,59 @@ input.admin-input{
   margin:0 0 14px;
   flex:0 0 auto; /* don't stretch text; keep cards compact on mobile */
 }
-.step__shot{
-  display:block;
-  width:100%;
-  height:220px;
-  object-fit:cover;
-  object-position:top center;
+.step__mock{
   margin-top:auto;
   border-radius:calc(var(--radius) - 6px);
   border:1px solid var(--line);
-  box-shadow:0 8px 24px rgba(0,0,0,0.35);
   background:var(--ink);
+  padding:16px;
+  min-height:150px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.35);
 }
-/* Distinct crop focus per step so cards don't all look the same */
-.step:nth-child(1) .step__shot{object-position:center 12%;}
-.step:nth-child(2) .step__shot{object-position:center 18%;}
-.step:nth-child(3) .step__shot{object-position:center 55%;} /* export / download area */
-@media (max-width:900px){
-  .step{padding:18px 16px 14px;}
-  .step__shot{height:200px;}
+/* Step 1 mock — mode pills + fake script lines */
+.step__mock-pills{display:flex;gap:8px;}
+.step__mock-pill{
+  font-family:var(--mono);font-size:0.68rem;letter-spacing:0.03em;
+  padding:5px 12px;border-radius:999px;border:1px solid var(--line);
+  color:var(--text-mid);
+}
+.step__mock-pill--active{background:var(--brass);color:#1a1305;border-color:var(--brass);font-weight:600;}
+.step__mock-box{
+  border:1px solid var(--line);border-radius:8px;padding:12px;
+  display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,0.02);
+}
+.step__mock-line{height:8px;border-radius:4px;background:var(--line-strong);opacity:0.6;}
+.step__mock-line--100{width:100%;}
+.step__mock-line--80{width:80%;}
+.step__mock-line--60{width:55%;}
+/* Step 2 mock — voice list */
+.step__mock-voice{
+  display:flex;align-items:center;gap:10px;
+  font-size:0.82rem;color:var(--text-mid);
+  padding:9px 10px;border-radius:8px;border:1px solid transparent;
+}
+.step__mock-voice--on{border-color:var(--brass);color:var(--text-hi);background:rgba(232,169,60,0.08);}
+.step__mock-radio{
+  width:14px;height:14px;border-radius:50%;border:2px solid var(--line-strong);flex-shrink:0;
+}
+.step__mock-radio--on{border-color:var(--brass);background:radial-gradient(circle,var(--brass) 40%,transparent 44%);}
+/* Step 3 mock — waveform + download pill */
+.step__mock-wave{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:48px;padding:0 4px;}
+.step__mock-wave span{
+  width:4px;border-radius:2px;display:block;
+  background:linear-gradient(180deg,var(--brass-hi),var(--jade-hi));
+}
+.step__mock-dl{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-family:var(--mono);font-size:0.75rem;color:#1a1305;
+  background:var(--brass);border-radius:999px;padding:9px 14px;font-weight:600;
 }
 @media (max-width:480px){
-  .step__shot{height:180px;}
+  .step__mock{min-height:130px;padding:14px;}
 }
 
 .feature-grid{
