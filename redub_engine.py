@@ -166,7 +166,7 @@ def _translate_azure(text: str, target_lang_code: str, source_lang_code: Optiona
             detail = detail[0].get("error", {}).get("message") if isinstance(detail, list) else str(detail)[:200]
         except Exception:
             detail = resp.text[:200]
-        raise UserFacingError(f"Azure translation failed: {detail}")
+        raise UserFacingError("Azure translation failed. Check the target language and try again.")
 
     data = resp.json()
     try:
@@ -202,7 +202,7 @@ def _translate_google(text: str, target_lang_code: str, source_lang_code: Option
             detail = resp.json().get("error", {}).get("message", resp.text[:200])
         except Exception:
             detail = resp.text[:200]
-        raise UserFacingError(f"Google translation failed: {detail}")
+        raise UserFacingError("Google translation failed. Check the target language and try again.")
 
     data = resp.json()
     try:
@@ -381,8 +381,8 @@ def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: b
 
         proc = subprocess.run(cmd, capture_output=True, timeout=180)
         if proc.returncode != 0 or not os.path.exists(out_path) or os.path.getsize(out_path) < 100:
-            err = (proc.stderr or b"").decode("utf-8", errors="replace")[:300]
-            raise UserFacingError(f"Could not mux audio onto video. {err or 'ffmpeg failed.'}")
+            # Do not forward raw ffmpeg stderr (paths, codecs) to clients
+            raise UserFacingError("Could not mux audio onto video. Try a different file format (MP4 works best).")
 
         with open(out_path, "rb") as f:
             return f.read()

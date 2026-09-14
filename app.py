@@ -220,7 +220,7 @@ def api_error(e, action="process that request", status=500, category: str = None
     except Exception:
         pass
     if isinstance(e, UserFacingError):
-        return jsonify({"error": str(e)}), status
+        return jsonify({"error": _safe_user_message(str(e))}), status
     return jsonify({"error": f"Something went wrong trying to {action}. Please try again."}), status
 
 
@@ -389,6 +389,108 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # the cookie gets a real expiry date, so it survives the browser/OS clearing
 # out non-permanent session-scoped cookies.
 app.config["PERMANENT_SESSION_LIFETIME"] = dt.timedelta(days=90)
+
+
+# Production safety: never show Werkzeug interactive debuggers or raw
+# exception pages to visitors, even if someone flips FLASK_DEBUG by mistake.
+app.config["PROPAGATE_EXCEPTIONS"] = False
+
+
+def _safe_user_message(msg: str, limit: int = 280) -> str:
+    """Strip paths, secrets, and traceback fragments before client responses."""
+    import re as _re
+    text = (msg or "").strip() or "Something went wrong. Please try again."
+    # Absolute filesystem paths (unix + windows drive)
+    text = _re.sub(r"(?i)(?:/home|/var|/tmp|/usr|/etc|/opt)[/\S]*", "[path]", text)
+    text = _re.sub(r"(?i)\b[A-Z]:\\[\w.\-\\]+", "[path]", text)
+    # Common secret patterns
+    text = _re.sub(
+        r"(?i)(api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+",
+        r"\1=[redacted]",
+        text,
+    )
+    text = _re.sub(r"(?i)Bearer\s+[A-Za-z0-9._\-]+", "Bearer [redacted]", text)
+    # Stack-frame noise
+    if "Traceback (most recent call last)" in text or 'File "' in text:
+        text = "Something went wrong. Please try again."
+    return text[:limit]
+
+
+@app.errorhandler(400)
+def _err_400(e):
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Bad request."}), 400
+    return render_template("error.html", code=400, title="Bad request",
+                           message="That request could not be understood."), 400
+
+
+@app.errorhandler(403)
+def _err_403(e):
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Forbidden."}), 403
+    return render_template("error.html", code=403, title="Forbidden",
+                           message="You do not have access to this page."), 403
+
+
+@app.errorhandler(404)
+def _err_404(e):
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Not found."}), 404
+    return render_template("error.html", code=404, title="Page not found",
+                           message="That page does not exist or was moved."), 404
+
+
+@app.errorhandler(413)
+def _err_413(e):
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "File too large. Try a smaller upload."}), 413
+    return render_template("error.html", code=413, title="File too large",
+                           message="That upload exceeds the size limit."), 413
+
+
+@app.errorhandler(429)
+def _err_429(e):
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Too many requests. Please wait a moment and try again."}), 429
+    return render_template("error.html", code=429, title="Slow down",
+                           message="Too many requests. Please wait a moment and try again."), 429
+
+
+@app.errorhandler(500)
+def _err_500(e):
+    app.logger.error(f"[500] {e}\n{traceback.format_exc()}")
+    try:
+        log_site_issue("system", "http_500", str(e)[:200], status=500, detail=traceback.format_exc()[-1500:])
+    except Exception:
+        pass
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Something went wrong on our side. Please try again."}), 500
+    return render_template("error.html", code=500, title="Something went wrong",
+                           message="Please try again in a moment. If it keeps happening, contact support."), 500
+
+
+@app.errorhandler(Exception)
+def _err_unhandled(e):
+    """Last-resort catch — never return raw exception text or HTML debugger."""
+    # Let Flask handle HTTPException (404/403/etc.) via their dedicated handlers
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    if isinstance(e, UserFacingError):
+        if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+            return jsonify({"error": _safe_user_message(str(e))}), 400
+        flash(_safe_user_message(str(e)), "error")
+        return redirect(request.referrer or url_for("landing"))
+    app.logger.error(f"[unhandled] {type(e).__name__}: {e}\n{traceback.format_exc()}")
+    try:
+        log_site_issue("system", "unhandled", f"{type(e).__name__}: {e}"[:200],
+                       status=500, detail=traceback.format_exc()[-1500:])
+    except Exception:
+        pass
+    if request.path.startswith("/api/") or request.accept_mimetypes.best == "application/json":
+        return jsonify({"error": "Something went wrong. Please try again."}), 500
+    return render_template("error.html", code=500, title="Something went wrong",
+                           message="Please try again in a moment. If it keeps happening, contact support."), 500
 
 
 @app.before_request
@@ -812,7 +914,9 @@ def healthz():
         persistence.load_limits()
         return jsonify({"status": "ok"}), 200
     except Exception as e:
-        return jsonify({"status": "error", "detail": str(e)}), 503
+        # Never leak exception text to monitors/clients — log only
+        app.logger.error(f"[healthz] DB check failed: {e}\n{traceback.format_exc()}")
+        return jsonify({"status": "error"}), 503
 
 
 @app.route("/")
