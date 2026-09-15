@@ -597,8 +597,64 @@ def get_limits() -> dict:
     return _limits_cache["data"]
 
 
+def _effective_license_key() -> str:
+    """The license key that should actually govern this request — a
+    directly-activated session['license_key'] if present, else the key
+    tied to the logged-in account (session['account_email']), same
+    fallback _license_context() uses for is_pro()/get_plan()/can().
+
+    Needed as its own thing (not just is_pro()) because a lot of code
+    doesn't only ask "are they Pro" — it uses the key ITSELF as the
+    identity for usage tracking (usage_tracking.get/bump_license_monthly_
+    counter), in-flight job counting, and saved-voice ownership checks
+    (_voice_usable_by). Those call sites were all reading
+    session.get('license_key') directly and getting "" for an
+    account-only login — even after can()/is_pro() correctly say Pro+,
+    since that only fixed the yes/no check, not the key those functions
+    need as an actual value. Concretely, before this: clone/music routes
+    hard-blocked account-only Pro+ customers with a 401 "Session expired"
+    (they gate on session.get('license_key') truthiness as a second,
+    separate check after can('clone.use')), and Pro TTS monthly quota
+    silently never got tracked or enforced for them at all (the quota
+    functions treated missing key as "nothing to check" and returned
+    early). Same g-cache pattern as _license_context() for the same
+    reason — cheap to call from several places in one request."""
+    cached = getattr(g, "effective_license_key", None)
+    if cached is not None:
+        return "" if cached == "__none__" else cached
+    key = session.get("license_key") or ""
+    if key and licensing.check_vox_license(key).get("valid"):
+        g.effective_license_key = key
+        return key
+    email = session.get("account_email", "")
+    if email:
+        acct_key = licensing.find_key_by_email(email) or ""
+        if acct_key:
+            g.effective_license_key = acct_key
+            return acct_key
+    g.effective_license_key = "__none__"
+    return ""
+
+
 def _license_context() -> dict:
     """Single source of truth for the current session's license status.
+
+    Checks TWO independent things a session can carry, and merges them:
+    1) session['license_key'] — a license key typed into /activate
+       directly in this browser (the original flow).
+    2) session['account_email'] — a username/password account login (see
+       accounts.py). Account login never set license_key itself; it only
+       ever looked the license up live wherever something needed it
+       (/account, the nav avatar). This function didn't know that, so
+       is_pro()/get_plan()/can()/current_roles() — and therefore every
+       Pro-gated tool plus this page's "Current plan" labels — silently
+       treated an account-only login as Free even when they were a
+       paying Pro/Pro+ customer with no license_key activated in that
+       particular browser session.
+    A valid session license_key still wins if both are present (keeps
+    existing /activate behavior exactly as it was); the account lookup
+    is only consulted as a fallback when there's no session key, or it
+    doesn't check out.
 
     CHANGED: is_pro(), get_plan(), and has_clone_and_music() used to each
     independently call licensing.check_vox_license() — so any request/
@@ -617,19 +673,33 @@ def _license_context() -> dict:
     if cached is not None:
         return cached
 
+    ctx = {"valid": False, "plan": "", "name": ""}
+
     key = session.get("license_key")
-    if not key:
-        ctx = {"valid": False, "plan": "", "name": ""}
-    else:
+    if key:
         result = licensing.check_vox_license(key)
-        if not result.get("valid"):
-            ctx = {"valid": False, "plan": "", "name": ""}
-        else:
+        if result.get("valid"):
             ctx = {
                 "valid": True,
                 "plan": result.get("plan", "pro"),
                 "name": result.get("name") or "Pro User",
             }
+
+    if not ctx["valid"]:
+        email = session.get("account_email", "")
+        if email:
+            acct_key = licensing.find_key_by_email(email)
+            if acct_key:
+                result = licensing.check_vox_license(acct_key)
+                if result.get("valid"):
+                    user = accounts.find_user(email)
+                    name = (user.get("name") if user else "") or result.get("name") or "Pro User"
+                    ctx = {
+                        "valid": True,
+                        "plan": result.get("plan", "pro"),
+                        "name": name,
+                    }
+
     g.license_ctx = ctx
     return ctx
 
@@ -737,7 +807,15 @@ def _account_user_context():
     {% if account_user_ctx and account_user_ctx.email %} check was always
     false and it fell through to the logged-out Log in/Get Pro links
     regardless of session state. Cached on g so it only does its lookup
-    once per request no matter how many times a template touches it."""
+    once per request no matter how many times a template touches it.
+
+    Plan comes from get_plan() (-> _license_context()) rather than its own
+    separate licensing.find_key_by_email() call — that function already
+    resolves the account's live license as part of fixing is_pro()/can()
+    for account-only logins, so doing it again here would just be a second
+    redundant lookup per request that could in principle disagree with
+    what actually gates the site (e.g. a directly-activated session
+    license_key taking priority there but not here)."""
     if "account_user_ctx" in g:
         return g.account_user_ctx
     email = session.get("account_email", "")
@@ -748,9 +826,7 @@ def _account_user_context():
     if not user:
         g.account_user_ctx = None
         return None
-    license_key = licensing.find_key_by_email(email)
-    license_info = licensing.check_vox_license(license_key) if license_key else {"valid": False}
-    plan = license_info.get("plan", "free") if license_info.get("valid") else "free"
+    plan = get_plan() or "free"
     name = (user.get("name") or "Customer").strip() or "Customer"
     first_char = (name[:1] or email[:1] or "?").upper()
     ctx = {
@@ -879,7 +955,7 @@ def _would_exceed_pro_tts_quota(char_count: int) -> bool:
     """Read-only check — does NOT bump. Free-tier quota is handled
     separately by _would_exceed_monthly_quota(); this only applies to a
     Pro/Pro+ session with an active license_key."""
-    license_key = session.get("license_key")
+    license_key = _effective_license_key()
     if not license_key or not is_pro():
         return False
     quota = _tts_monthly_quota_for_plan()
@@ -891,7 +967,7 @@ def _would_exceed_pro_tts_quota(char_count: int) -> bool:
 
 def _bump_pro_tts_chars(char_count: int):
     """Only call this AFTER a generation actually succeeds."""
-    license_key = session.get("license_key")
+    license_key = _effective_license_key()
     if not license_key or not is_pro():
         return
     usage_tracking.bump_license_monthly_counter(license_key, "tts_chars", char_count)
@@ -1075,7 +1151,7 @@ def studio():
     # Pro/Pro+ monthly usage for the Studio strip (same source as /account).
     plan_usage = {}
     if is_pro():
-        lk = session.get("license_key") or ""
+        lk = _effective_license_key()
         plan_usage = pro_usage_summary(lk, get_plan())
     return render_template("studio.html", voices=active_voices, pro=is_pro(),
                             free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=batch_max,
@@ -4089,7 +4165,7 @@ def api_redub():
                 "error": f"Daily redub limit reached ({daily_limit}/day). Try again tomorrow, or contact support if you need more.",
             }), 429
     if monthly_limit > 0:
-        lk = session.get("license_key") or ""
+        lk = _effective_license_key()
         used_m = usage_tracking.get_license_monthly_counter(lk, "usage_redub") if lk else 0
         if used_m >= monthly_limit:
             return jsonify({
@@ -4143,7 +4219,7 @@ def api_redub():
         return api_error(e, "redub this video")
 
     _bump_counter("usage_redub")
-    lk = session.get("license_key") or ""
+    lk = _effective_license_key()
     if lk:
         usage_tracking.bump_license_monthly_counter(lk, "usage_redub", 1)
 
@@ -4532,7 +4608,7 @@ def api_clone_voice_save():
     if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
-    license_key = session.get("license_key")
+    license_key = _effective_license_key()
     if not license_key:
         return jsonify({"error": "Session expired — please re-activate your license."}), 401
 
@@ -4593,7 +4669,7 @@ def api_clone_voices_list():
     """Pro+-only: list the current license's saved voices for a picker UI."""
     if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
-    license_key = session.get("license_key")
+    license_key = _effective_license_key()
     if not license_key:
         return jsonify({"error": "Session expired — please re-activate your license."}), 401
 
@@ -4624,7 +4700,7 @@ def api_clone_voices_public():
     """
     if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
-    if not session.get("license_key"):
+    if not _effective_license_key():
         return jsonify({"error": "Session expired — please re-activate your license."}), 401
 
     voices = persistence.load_public_voices()
@@ -4651,7 +4727,7 @@ def api_clone_voice_set_access(voice_id):
     """
     if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
-    license_key = session.get("license_key")
+    license_key = _effective_license_key()
     if not license_key:
         return jsonify({"error": "Session expired — please re-activate your license."}), 401
 
@@ -4697,7 +4773,7 @@ def api_clone_voice_delete(voice_id):
     else's voice_id (or a stale/mistyped one) is a no-op 404, not a leak."""
     if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
-    license_key = session.get("license_key")
+    license_key = _effective_license_key()
     if not license_key:
         return jsonify({"error": "Session expired — please re-activate your license."}), 401
 
@@ -4741,7 +4817,7 @@ def api_clone_reference_transcribe():
         return jsonify({"error": "No reference clip specified."}), 400
 
     if saved_voice_id:
-        license_key = session.get("license_key")
+        license_key = _effective_license_key()
         voice = persistence.get_voice(saved_voice_id)
         if not _voice_usable_by(voice, license_key):
             return jsonify({"error": "Saved voice not found."}), 404
@@ -4769,7 +4845,7 @@ def api_clone_generate():
     if not can("clone.use"):
         return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
 
-    license_key = session.get("license_key", "")
+    license_key = _effective_license_key()
     # In-flight jobs (queued/generating, not yet billed) count toward both
     # limits too — otherwise a burst of requests fired before any of them
     # completes would each see the billed count as still low and all get
@@ -4807,7 +4883,7 @@ def api_clone_generate():
 
     if saved_voice_id:
         voice = persistence.get_voice(saved_voice_id)
-        license_key = session.get("license_key")
+        license_key = _effective_license_key()
         if not _voice_usable_by(voice, license_key):
             return jsonify({"error": "Saved voice not found."}), 404
         path = os.path.join(VOICE_REFS_DIR, voice["filename"])
@@ -4921,7 +4997,7 @@ def api_music_generate():
     if not can("music.use"):
         return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
-    license_key = session.get("license_key", "")
+    license_key = _effective_license_key()
     _music_in_flight = 0
     if license_key:
         _music_in_flight = music_engine.count_active_jobs_for_license(license_key)
