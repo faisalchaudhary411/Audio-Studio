@@ -544,18 +544,18 @@ TOOL_PAGES = {
         "widget": "redub",
         "usage_key": None,  # Pro-only; no free daily counter
         "title": "Video Redub Online Free — AI Translate & Re-voice | VoxCraft",
-        "meta_description": "Redub video online. Translate and replace spoken audio in 27 languages with neural AI voices. AI video dubbing for creators.",
+        "meta_description": "Redub video online. Translate and replace spoken audio in 40+ languages with neural AI voices. AI video dubbing for creators.",
         "eyebrow": "Video redub",
         "h1": "Video redub online — AI translate & re-voice",
         "sub": "Upload a video, pick a target language and voice, get a new dubbed track muxed back onto the original picture. Pro plan.",
         "intro": [
             "Audio-only redub keeps the original picture and replaces the spoken track. The pipeline extracts audio, transcribes speech, translates the script, re-voices it with a stock neural voice, then muxes the new audio onto the video — all without needing a cloned voice or GPU time.",
-            "This is the practical path for creators who want an Urdu, Hindi, Tamil, or English version of an existing clip without re-recording. Phase 1 uses the same 88 edge-tts voices as Studio; voice-cloning the original speaker is a later option under Pro+.",
+            "This is the practical path for creators who want an Urdu, Hindi, Tamil, or English version of an existing clip without re-recording. Phase 1 uses the same neural voices as Studio; voice-cloning the original speaker is a later option under Pro+.",
         ],
         "how_it_works": [
             "Upload an MP4/MOV/WebM/MKV (up to 50MB, up to ~10 minutes).",
             "Choose the source language for transcription (or leave Auto).",
-            "Pick the target language and any of the 88 stock voices — same picker as Studio.",
+            "Pick the target language and any of the 130+ stock voices — same picker as Studio.",
             "VoxCraft transcribes, translates with Google NMT, generates the new voice with edge-tts, and muxes it onto your video.",
             "Download the dubbed MP4, or just the new audio track if you prefer to re-mux yourself.",
         ],
@@ -573,7 +573,7 @@ TOOL_PAGES = {
         ],
         "faq": [
             ("Is this free?", "No — redub is included with the Pro plan. Free accounts can still use Transcribe and Extract audio separately."),
-            ("Does it clone the original speaker?", "Not in Phase 1. It uses the same stock neural voices as Studio (88 voices, 27 languages). Cloned-speaker redub is a later Pro+ option."),
+            ("Does it clone the original speaker?", "Not in Phase 1. It uses the same stock neural voices as Studio (130+ voices, 40+ languages). Cloned-speaker redub is a later Pro+ option."),
             ("Which languages work?", "Any language pair where we have a stock voice and Google Translate coverage — including Urdu, Hindi, Bengali, Punjabi, Tamil, Telugu, Arabic, and English variants."),
             ("What happens to the original audio?", "It is replaced. Download the separate audio track if you want both."),
             ("How long can a video be?", "Up to about 10 minutes and 50MB in Phase 1."),

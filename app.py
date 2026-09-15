@@ -33,7 +33,11 @@ import datetime as dt
 import traceback
 import markdown as md_lib
 
-from voices import VOICES, FREE_VOICES, default_preview_text
+from voices import (
+    VOICES, FREE_VOICES, default_preview_text,
+    LANGUAGE_FLAGS, language_label, ordered_languages,
+    total_voice_count, total_language_count,
+)
 from tts_engine import tts_dispatch, apply_pronunciation_dict
 from clone_engine import start_clone_job, get_job
 import modal_client
@@ -875,7 +879,8 @@ def inject_globals():
         # Re-enable only after approval with ENABLE_INTERSTITIAL=1.
         "enable_interstitial_ctx": os.environ.get("ENABLE_INTERSTITIAL", "") == "1",
         "csrf_token": session.get("csrf_token", ""),
-        "voice_count_ctx": sum(len(v) for v in VOICES.values()),
+        "voice_count_ctx": total_voice_count(),
+        "language_count_ctx": total_language_count(),
         "seo_footer_links_ctx": _SEO_FOOTER_LINKS,
     }
 
@@ -1154,12 +1159,24 @@ def studio():
     if is_pro():
         lk = _effective_license_key()
         plan_usage = pro_usage_summary(lk, get_plan())
-    return render_template("studio.html", voices=active_voices, pro=is_pro(),
-                            free_char_limit=lim["FREE_CHAR_LIMIT"], batch_max=batch_max,
-                            monthly_char_quota=lim["FREE_MONTHLY_CHAR_QUOTA"],
-                            daily_actions=lim["FREE_DAILY_ACTIONS"], batch_limit=lim["FREE_BATCH_LIMIT"],
-                            usage=usage_summary(), clone_char_limit=CLONE_CHAR_LIMIT,
-                            plan_usage=plan_usage)
+    # Ordered list: primary languages first, then the rest (keeps dropdown scannable)
+    lang_order = [l for l in ordered_languages() if l in active_voices]
+    return render_template(
+        "studio.html",
+        voices=active_voices,
+        language_order=lang_order,
+        language_flags=LANGUAGE_FLAGS,
+        language_label=language_label,
+        pro=is_pro(),
+        free_char_limit=lim["FREE_CHAR_LIMIT"],
+        batch_max=batch_max,
+        monthly_char_quota=lim["FREE_MONTHLY_CHAR_QUOTA"],
+        daily_actions=lim["FREE_DAILY_ACTIONS"],
+        batch_limit=lim["FREE_BATCH_LIMIT"],
+        usage=usage_summary(),
+        clone_char_limit=CLONE_CHAR_LIMIT,
+        plan_usage=plan_usage,
+    )
 
 
 @app.route("/voice-cloning")
