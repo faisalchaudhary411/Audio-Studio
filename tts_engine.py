@@ -5,26 +5,40 @@ Kept identical:
 - generate_audio() / generate_audio_markup() retry logic (3 attempts, backoff)
 - _make_silence() real decodable silent MP3 for [pause] tags
 - parse_markup_segments() markup tag parser (pause/strong/em/slow/fast/high/low/whisper)
-- _gtts_fallback() as the fallback engine when edge-tts fails
 - tts_dispatch() central routing function
 
+Fallback chain (stock neural voices — Studio, redub, previews):
+  1. edge-tts (free)
+  2. Azure Speech REST (if AZURE_SPEECH_KEY + AZURE_SPEECH_REGION set)
+     — same voice short-names (e.g. pa-IN-OjasNeural)
+  3. gTTS (generic per-language, last resort)
+
 NOT ported yet (marked TODO): ElevenLabs cloned-voice routing (EL:: prefix).
-Add el_generate_audio() back in and re-enable the branch in tts_dispatch()
-if you want cloned voices in this version.
 """
 
 import asyncio
 import io
+import os
 import re
+import xml.sax.saxutils
 
 import edge_tts
 import lameenc
+
+try:
+    import requests as _requests
+except ImportError:
+    _requests = None
 
 try:
     from gtts import gTTS
     GTTS_AVAILABLE = True
 except ImportError:
     GTTS_AVAILABLE = False
+
+# Optional paid neural fallback — same Microsoft voice IDs as Edge, full catalogue.
+AZURE_SPEECH_KEY = (os.environ.get("AZURE_SPEECH_KEY") or "").strip()
+AZURE_SPEECH_REGION = (os.environ.get("AZURE_SPEECH_REGION") or "").strip()
 
 _SILENCE_SAMPLE_RATE = 24000
 
@@ -254,12 +268,67 @@ def _voice_to_gtts_lang(voice: str) -> str:
     return _GTTS_LANG_MAP.get(lang, lang if len(lang) == 2 else "en")
 
 
+def _azure_configured() -> bool:
+    return bool(AZURE_SPEECH_KEY and AZURE_SPEECH_REGION and _requests is not None)
+
+
+def _rate_to_azure_prosody(rate: str) -> str:
+    """Map edge-style rate ('+10%', '-5%', '+0%') to Azure prosody rate attribute."""
+    r = (rate or "+0%").strip()
+    if not r:
+        return "0%"
+    if r[0] not in "+-":
+        r = "+" + r
+    return r
+
+
+def _azure_tts(text: str, voice: str, rate: str = "+0%") -> bytes:
+    """Synthesize via Azure Cognitive Services Speech REST API.
+
+    Uses the same voice short-name as edge-tts (e.g. en-US-JennyNeural,
+    pa-IN-OjasNeural). Requires AZURE_SPEECH_KEY and AZURE_SPEECH_REGION.
+    Returns MP3 bytes (audio-24khz-48kbitrate-mono-mp3).
+    """
+    if not _azure_configured():
+        raise Exception("Azure Speech is not configured (AZURE_SPEECH_KEY / AZURE_SPEECH_REGION).")
+    if not (text or "").strip():
+        raise Exception("Empty text for Azure TTS.")
+    voice = (voice or "").strip()
+    if not voice:
+        raise Exception("No voice ID for Azure TTS.")
+
+    # Locale from voice short-name: pa-IN-OjasNeural → pa-IN
+    parts = voice.split("-")
+    locale = f"{parts[0]}-{parts[1]}" if len(parts) >= 2 else "en-US"
+    safe_text = xml.sax.saxutils.escape(text)
+    prosody_rate = _rate_to_azure_prosody(rate)
+    ssml = (
+        f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{locale}'>"
+        f"<voice name='{xml.sax.saxutils.escape(voice)}'>"
+        f"<prosody rate='{prosody_rate}'>{safe_text}</prosody>"
+        f"</voice></speak>"
+    )
+    url = f"https://{AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
+    headers = {
+        "Ocp-Apim-Subscription-Key": AZURE_SPEECH_KEY,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+        "User-Agent": "VoxCraft",
+    }
+    resp = _requests.post(url, data=ssml.encode("utf-8"), headers=headers, timeout=60)
+    if resp.status_code != 200:
+        detail = (resp.text or "")[:180]
+        raise Exception(f"Azure Speech HTTP {resp.status_code}: {detail}")
+    audio = resp.content
+    if not audio or len(audio) < 64:
+        raise Exception("Azure Speech returned empty audio.")
+    return audio
+
+
 def _gtts_fallback(text: str, voice: str, speed_pct: int = 100) -> bytes:
-    """Fallback engine using gTTS when the primary neural engine fails.
+    """Last-resort fallback using gTTS when neural engines fail.
 
     gTTS has only one generic voice per language (no real male/female choice).
-    Used when a voice ID is not available on the free neural endpoint —
-    notably some newer Indian locales such as pa-IN (Punjabi).
     """
     if not GTTS_AVAILABLE:
         raise Exception("gTTS is not installed / available as a fallback engine.")
@@ -287,28 +356,15 @@ def _inject_sentence_pauses(text: str, pause_ms: int = 280) -> str:
 
 def tts_dispatch(text: str, voice_id: str, rate: str = "+0%", ssml_mode: bool = False,
                  speed_pct: int = 100, auto_pause: bool = False, _meta: dict | None = None) -> bytes:
-    """Central TTS routing function.
+    """Central TTS routing for stock voices (Studio, redub, previews).
 
-    - voice_id starting with 'GT::' -> not handled here yet, route to gTTS directly (see app.py)
-    - ssml_mode True                -> markup-aware generator
-    - auto_pause True (and not ssml) -> inject short pauses between sentences via markup path
-    - otherwise                     -> plain edge-tts, with gTTS as fallback if edge-tts fails
+    Chain:
+      1. edge-tts (free)
+      2. Azure Speech (same voice ID) if AZURE_SPEECH_KEY + REGION are set
+      3. gTTS last resort (generic language voice only)
 
-    _meta: optional dict the caller passes in to learn which engine actually
-    produced the audio. Added because the gTTS fallback below was silent —
-    if edge-tts fails for any reason (network hiccup, an unsupported/rare
-    voice ID, rate limiting), gTTS kicks in and IGNORES voice_id entirely
-    beyond its bare language prefix (see _gtts_fallback): no gender
-    selection, no per-voice character at all, just one generic voice per
-    language. A caller asking for a specific male/female voice could
-    silently get the wrong gender back with zero indication anything had
-    gone wrong — which is exactly what happened requesting Punjabi
-    'pa-IN-OjasNeural' (male): edge-tts failed silently, gTTS's single
-    generic Punjabi voice (which reads female) played instead. Passing a
-    dict here (instead of a return-type change, which would've meant
-    touching every existing call site) lets a caller that cares — like
-    redub, which shows the customer which voice they picked — detect this
-    and say so, without breaking anything that doesn't pass one.
+    _meta receives engine name: edge-tts | azure_fallback | gtts_fallback
+    so callers can show an honest notice only when quality may differ.
     """
     def _mark(engine: str, reason: str = ""):
         if _meta is not None:
@@ -316,6 +372,7 @@ def tts_dispatch(text: str, voice_id: str, rate: str = "+0%", ssml_mode: bool = 
             if reason:
                 _meta["fallback_reason"] = reason[:200]
 
+    edge_err: Exception | None = None
     try:
         if ssml_mode:
             result = asyncio.run(generate_audio_markup(text, voice_id, rate=rate))
@@ -331,9 +388,28 @@ def tts_dispatch(text: str, voice_id: str, rate: str = "+0%", ssml_mode: bool = 
         _mark("edge-tts")
         return result
     except Exception as e:
+        edge_err = e
+
+    # ── Azure neural fallback (same voice short-name) ─────────────────
+    if _azure_configured():
         try:
-            result = _gtts_fallback(text, voice_id, speed_pct=speed_pct)
-            _mark("gtts_fallback", str(e))
+            # Markup path is flattened to plain text for Azure SSML
+            plain = text
+            if ssml_mode or auto_pause:
+                plain = re.sub(r"\[(?:pause|strong|em|slow|fast|high|low|whisper)[^\]]*\]", " ", text)
+                plain = re.sub(r"\s+", " ", plain).strip() or text
+            result = _azure_tts(plain, voice_id, rate=rate)
+            _mark("azure_fallback", str(edge_err) if edge_err else "")
             return result
-        except Exception:
-            raise e
+        except Exception as azure_err:
+            edge_err = azure_err  # surface last error if gTTS also fails
+
+    # ── gTTS last resort ──────────────────────────────────────────────
+    try:
+        result = _gtts_fallback(text, voice_id, speed_pct=speed_pct)
+        _mark("gtts_fallback", str(edge_err) if edge_err else "")
+        return result
+    except Exception:
+        if edge_err:
+            raise edge_err
+        raise
