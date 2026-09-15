@@ -4,7 +4,7 @@
   <p class="redub-lead">
     Extract → transcribe → translate → re-voice with a stock neural voice → mux back onto the video.
     Up to <strong>50&nbsp;MB</strong> / ~10 minutes.
-    <strong class="redub-pro-tag">Pro plan</strong> — same 88 voices as Studio (no cloning).
+    <strong class="redub-pro-tag">Pro plan</strong> — same 130+ voices as Studio (no cloning).
   </p>
 
   {% if not is_pro_ctx %}
@@ -64,12 +64,16 @@
     <div class="redub-field">
       <label class="redub-label" for="redub-target-lang">Target language</label>
       <select id="redub-target-lang" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
-        {% if voices %}
+        {% if language_order %}
+          {% for lang in language_order %}
+          <option value="{{ lang }}" {% if lang == 'US English' %}selected{% endif %}>{{ language_flags.get(lang, '') }} {{ lang }}</option>
+          {% endfor %}
+        {% elif voices %}
           {% for lang in voices.keys() %}
-          <option value="{{ lang }}" {% if lang == 'US English' %}selected{% endif %}>{{ lang }}</option>
+          <option value="{{ lang }}" {% if lang == 'US English' %}selected{% endif %}>{{ language_flags.get(lang, '') if language_flags is defined else '' }} {{ lang }}</option>
           {% endfor %}
         {% else %}
-          <option value="US English">US English</option>
+          <option value="US English">🇺🇸 US English</option>
         {% endif %}
       </select>
     </div>
