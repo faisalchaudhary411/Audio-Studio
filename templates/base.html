@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
 <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
 <meta name="theme-color" content="#0c1117">
-<meta name="description" content="{% block meta_description %}VoxCraft is a multilingual text-to-speech and AI audio platform — 88+ neural voices, voice cloning, music generation, and 13 free audio tools. No signup needed.{% endblock %}">
+<meta name="description" content="{% block meta_description %}VoxCraft is a multilingual text-to-speech and AI audio platform — 130+ neural voices across 40+ languages, voice cloning, music generation, and 18 free audio tools. No signup needed.{% endblock %}">
 
 <!-- Open Graph / Twitter Card — controls how links look when shared on
      WhatsApp, Facebook, LinkedIn, X/Twitter, Slack, iMessage, etc. This
@@ -28,7 +28,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{ request.url }}">
 <meta property="og:title" content="{% block og_title %}VoxCraft — Multilingual Text-to-Speech & AI Audio Tools{% endblock %}">
-<meta property="og:description" content="{% block og_description %}88+ neural voices across 27 languages, voice cloning, music generation, and 13 free audio tools. No signup needed to start.{% endblock %}">
+<meta property="og:description" content="{% block og_description %}130+ neural voices across 40+ languages, voice cloning, music generation, and 18 free audio tools. No signup needed to start.{% endblock %}">
 <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='favicons/android-chrome-512x512.png', _external=True) }}{% endblock %}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ self.og_title() }}">
@@ -121,7 +121,7 @@
       <div class="nav__more-menu" role="menu">
         <a href="{{ url_for('video_redub') }}" role="menuitem"><span class="nav__mi-title">Video Redub</span><span class="nav__mi-sub">Translate &amp; re-voice video</span></a>
         <a href="{{ url_for('voice_cloning') }}" role="menuitem"><span class="nav__mi-title">Voice Cloning</span><span class="nav__mi-sub">Clone a short sample</span></a>
-        <a href="{{ url_for('studio') }}" role="menuitem"><span class="nav__mi-title">Voice Studio</span><span class="nav__mi-sub">88 neural TTS voices</span></a>
+        <a href="{{ url_for('studio') }}" role="menuitem"><span class="nav__mi-title">Voice Studio</span><span class="nav__mi-sub">130+ neural TTS voices</span></a>
         <a href="{{ url_for('tools_hub') }}" role="menuitem"><span class="nav__mi-title">Audio Tools</span><span class="nav__mi-sub">Convert, trim, denoise…</span></a>
       </div>
     </div>
@@ -372,8 +372,8 @@ href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer">
         </span>
         VoxCraft
       </a>
-      <p class="footer__tagline">Neural TTS for Urdu, Hindi, and 25 more languages — built for creators who ship daily.</p>
-      <p class="footer__meta">{{ voice_count_ctx|default(88) }} voices · Commercial use allowed</p>
+      <p class="footer__tagline">Neural TTS for Urdu, Hindi, and 40+ languages — built for creators who ship daily.</p>
+      <p class="footer__meta">{{ voice_count_ctx|default(130) }} voices · Commercial use allowed</p>
     </div>
     <div class="footer__col">
       <span class="footer__col-title">Product</span>

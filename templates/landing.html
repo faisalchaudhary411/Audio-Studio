@@ -132,11 +132,11 @@
 
 <div class="proof-band reveal-on-scroll" aria-label="Product highlights">
   <div class="proof-item">
-    <span class="proof-item__val">{{ voice_count|default(88) }}</span>
+    <span class="proof-item__val">{{ voice_count|default(130) }}</span>
     <span class="proof-item__label">Neural voices</span>
   </div>
   <div class="proof-item">
-    <span class="proof-item__val">{{ language_count|default(27) }}</span>
+    <span class="proof-item__val">{{ language_count|default(48) }}</span>
     <span class="proof-item__label">Languages</span>
   </div>
   <div class="proof-item">
@@ -174,7 +174,7 @@
     <div class="step">
       <span class="step__num">02</span>
       <h3>Pick a neural voice</h3>
-      <p>{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages — rate and pitch controls without SSML wrangling.</p>
+      <p>{{ voice_count|default(130) }} voices across {{ language_count|default(48) }} languages — rate and pitch controls without SSML wrangling.</p>
       <div class="step__mock" aria-hidden="true">
         <div class="step__mock-voice step__mock-voice--on"><span class="step__mock-radio step__mock-radio--on"></span>Uzma — Female</div>
         <div class="step__mock-voice"><span class="step__mock-radio"></span>Andrew — Male</div>
@@ -261,7 +261,7 @@
   <div class="section__head">
     <span class="section__eyebrow">Voice library</span>
     <h2 class="section__title">A voice for every region, not an afterthought.</h2>
-    <p class="section__sub">{{ voice_count|default(88) }} voices across {{ language_count|default(27) }} languages. South Asian languages are first-class — not a bolt-on.</p>
+    <p class="section__sub">{{ voice_count|default(130) }} voices across {{ language_count|default(48) }} languages. South Asian languages are first-class — not a bolt-on.</p>
   </div>
   <div class="voice-grid">
     {# Short proof strip — first 6 featured voices (South Asian heavy). Full catalogue lives on /voices. #}
@@ -278,7 +278,7 @@
     {% endfor %}
   </div>
   <div class="voices-cta">
-    <a href="{{ url_for('voices_page') }}" class="btn btn--ghost">Browse all {{ voice_count|default(88) }} voices</a>
+    <a href="{{ url_for('voices_page') }}" class="btn btn--ghost">Browse all {{ voice_count|default(130) }} voices</a>
     <a href="{{ url_for('studio') }}" class="btn btn--brass">Try them in Studio</a>
   </div>
 </section>

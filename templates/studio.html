@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/usage_bar.html" import usage_bar %}
-{% block title %}AI Voice Studio — Text-to-Speech in 27 Languages — VoxCraft{% endblock %}
-{% block meta_description %}Generate natural narration from text in 27 languages (88 neural voices), including Urdu and Hindi. Free tier available, batch mode, SSML-style markup, and Pro+ voice cloning.{% endblock %}
+{% block title %}AI Voice Studio — Text-to-Speech in 40+ Languages — VoxCraft{% endblock %}
+{% block meta_description %}Generate natural narration from text in 40+ languages with 130+ neural voices, including strong Urdu and Hindi support. Free tier available, batch mode, and Pro+ voice cloning.{% endblock %}
 
 {% block content %}
 <div class="studio">
@@ -19,7 +19,7 @@
   <div class="section__head">
     <span class="section__eyebrow">AI Voice Studio</span>
     <h1 class="section__title" style="font-size:1.6rem;">Turn a script into narration</h1>
-    <p class="section__sub">Paste text → pick a voice → generate. {{ voices.keys()|list|length }} languages · free to start.</p>
+    <p class="section__sub">Paste text → pick a voice → generate. {{ language_order|length }} languages · 130+ neural voices · free to start.</p>
   </div>
 
   <div class="studio-workbench">
@@ -27,8 +27,8 @@
     <span class="panel__label">Voice &amp; language</span>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <select id="language-select" class="studio-select" aria-label="Language">
-        {% for lang in voices.keys() %}
-        <option value="{{ lang }}">{{ lang }}</option>
+        {% for lang in language_order %}
+        <option value="{{ lang }}">{{ language_flags.get(lang, '') }} {{ lang }}</option>
         {% endfor %}
       </select>
       <select id="voice-select" class="studio-select" aria-label="Voice"></select>
