@@ -304,13 +304,33 @@
           <button type="button" class="history__clear" id="history-clear">Clear</button>
         </div>
         <div class="history__list">
-          ${items.map((item) => `
-            <div class="history-item">
-              <div class="history-item__text">${item.text || ''}</div>
-              <div class="history-item__meta">${item.size_kb} KB · ${item.time}</div>
-              <audio controls src="data:audio/mpeg;base64,${item.audio_b64}"></audio>
-            </div>
-          `).join('')}
+          ${items.map((item) => {
+            const label = String(item.text || 'Narration')
+              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const meta = (item.size_kb != null ? item.size_kb + ' KB' : '—') +
+              (item.time ? ' · ' + item.time : '');
+            const b64 = item.audio_b64 || '';
+            // Themed dark player — same controls as result panel (no native white UI)
+            return (
+              '<div class="history-item">' +
+                '<div class="history-item__text">' + label + '</div>' +
+                '<div class="history-item__meta">' + meta + '</div>' +
+                '<div class="vox-player vox-player--compact" data-vox-player>' +
+                  '<audio preload="metadata" src="data:audio/mpeg;base64,' + b64 + '"></audio>' +
+                  '<div class="vox-player__row">' +
+                    '<button type="button" class="vox-player__play" data-vp-play aria-label="Play">' +
+                      '<svg class="vox-player__icon vox-player__icon--play" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>' +
+                      '<svg class="vox-player__icon vox-player__icon--pause" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>' +
+                    '</button>' +
+                    '<div class="vox-player__timeline">' +
+                      '<input type="range" class="vox-player__seek" data-vp-seek min="0" max="1000" value="0" step="1" aria-label="Seek">' +
+                      '<div class="vox-player__times"><span data-vp-cur>0:00</span><span data-vp-dur>0:00</span></div>' +
+                    '</div>' +
+                  '</div>' +
+                '</div>' +
+              '</div>'
+            );
+          }).join('')}
         </div>
       </div>`;
     const clearBtn = document.getElementById('history-clear');
@@ -319,6 +339,9 @@
         localStorage.removeItem('voxcraft_history');
         renderHistory();
       });
+    }
+    if (typeof voxBindPlayers === 'function') {
+      voxBindPlayers(historyList);
     }
   }
   renderHistory();
