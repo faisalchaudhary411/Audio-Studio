@@ -728,6 +728,42 @@ def admin_required(view_func):
     return require_permission("admin.access")(view_func)
 
 
+def _account_user_context():
+    """Builds the small dict base.html's nav/footer actually expects
+    (account_user_ctx.email/name/avatar_url/initial/plan) for the avatar +
+    plan-badge display. This was the missing piece — account_email_ctx
+    (just the raw email string) was already being injected below, but
+    nothing ever built account_user_ctx itself, so the nav's
+    {% if account_user_ctx and account_user_ctx.email %} check was always
+    false and it fell through to the logged-out Log in/Get Pro links
+    regardless of session state. Cached on g so it only does its lookup
+    once per request no matter how many times a template touches it."""
+    if "account_user_ctx" in g:
+        return g.account_user_ctx
+    email = session.get("account_email", "")
+    if not email:
+        g.account_user_ctx = None
+        return None
+    user = accounts.find_user(email)
+    if not user:
+        g.account_user_ctx = None
+        return None
+    license_key = licensing.find_key_by_email(email)
+    license_info = licensing.check_vox_license(license_key) if license_key else {"valid": False}
+    plan = license_info.get("plan", "free") if license_info.get("valid") else "free"
+    name = (user.get("name") or "Customer").strip() or "Customer"
+    first_char = (name[:1] or email[:1] or "?").upper()
+    ctx = {
+        "email": user.get("email") or email,
+        "name": name,
+        "avatar_url": user.get("avatar_url") or "",
+        "initial": first_char,
+        "plan": plan,
+    }
+    g.account_user_ctx = ctx
+    return ctx
+
+
 @app.context_processor
 def inject_globals():
     # Canonical URL, one rule for the whole site: the current path, absolute,
@@ -747,6 +783,7 @@ def inject_globals():
         "roles_ctx": list(current_roles()),
         "can": can,
         "account_email_ctx": session.get("account_email", ""),
+        "account_user_ctx": _account_user_context(),
         "canonical_url": canonical_url,
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
         "adsense_publisher_id": os.environ.get("ADSENSE_PUBLISHER_ID", ""),
