@@ -1408,13 +1408,15 @@
 
         const videoName = data.filename || 'VoxCraft-Redub.mp4';
         const audioName = data.audio_filename || 'VoxCraft-Redub-Audio.mp3';
+        const notes = [data.translation_note, data.voice_note, data.length_note].filter(Boolean);
+        const notesHtml = notes.map(function (n) {
+          return '<div class="limit-toast" style="margin-bottom:10px;">⚠ ' + escapeHtml(n) + '</div>';
+        }).join('');
         if (result) {
           result.innerHTML =
             '<div class="result-panel">' +
               '<div class="result-panel__label">Dubbed video</div>' +
-              (data.length_note ?
-                '<div class="limit-toast" style="margin-bottom:10px;">⚠ ' + escapeHtml(data.length_note) + '</div>'
-                : '') +
+              notesHtml +
               '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 10px;">' +
                 (data.skipped_translation ? 'Translation skipped (same language). ' : '') +
                 (data.length_matched ? 'Audio stretched to match original length. ' : '') +
