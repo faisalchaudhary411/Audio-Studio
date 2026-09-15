@@ -220,6 +220,17 @@ def _translate_google(text: str, target_lang_code: str, source_lang_code: Option
     )
 
 
+def _count_sentences(text: str) -> int:
+    """Rough, script-agnostic sentence count via common terminators
+    (Latin/Devanagari/Gurmukhi/Urdu/CJK). Used only as a cheap signal that
+    translation dropped a trailing sentence, not for anything precise."""
+    import re
+    if not text:
+        return 0
+    parts = re.split(r"[.!?۔؟।॥。]+", text)
+    return len([p for p in parts if p.strip()])
+
+
 def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
     """
     Translate plain text. Prefers Azure Translator; falls back to Google if Azure
@@ -461,12 +472,48 @@ def redub_video(
     if not translated:
         raise UserFacingError("Translation returned empty text.")
 
+    # ---- 3b. Sanity-check translation completeness ----
+    # No chunking happens in translate_text() (the whole transcript goes in
+    # one API call), but the translation API itself can still come back
+    # having dropped a trailing sentence — seen concretely with a Hindi
+    # closing question ("...which government post do you want the next
+    # video on?") that never appeared anywhere in the Punjabi result. Not
+    # something this code can prevent outright since it's the external
+    # translator's behavior, not a bug in how we call it — but a translation
+    # missing a big chunk of the source is worth one automatic retry
+    # (translation APIs aren't perfectly deterministic call to call), and
+    # if that doesn't help, worth telling the customer rather than quietly
+    # shipping a dub that's missing content.
+    translation_note = None
+    if not same_lang:
+        src_sentences = _count_sentences(transcript)
+        tgt_sentences = _count_sentences(translated)
+        if src_sentences >= 2 and tgt_sentences < src_sentences * 0.6:
+            retry = translate_text(transcript, target_code, source_lang_code=source_code)
+            if retry and _count_sentences(retry) > tgt_sentences:
+                translated = retry
+                tgt_sentences = _count_sentences(retry)
+        if src_sentences >= 2 and tgt_sentences < src_sentences * 0.6:
+            translation_note = (
+                "The translation may be missing part of the original speech "
+                "(the source had roughly " + str(src_sentences) + " sentences, the translation came back with "
+                "about " + str(tgt_sentences) + "). Check the transcript below, and try generating again if "
+                "anything important got dropped."
+            )
+
     # ---- 4. TTS with stock edge-tts voice ----
     speed_pct = max(50, min(200, int(speed_pct or 100)))
     rate_str = f"{speed_pct - 100:+d}%"
-    tts_audio = tts_dispatch(translated, voice_id, rate=rate_str, ssml_mode=False, speed_pct=speed_pct)
+    tts_meta: dict = {}
+    tts_audio = tts_dispatch(translated, voice_id, rate=rate_str, ssml_mode=False, speed_pct=speed_pct, _meta=tts_meta)
     if not tts_audio:
         raise UserFacingError("Could not generate the dubbed voice track. Try another voice.")
+    voice_note = None
+    if tts_meta.get("engine") == "gtts_fallback":
+        voice_note = (
+            "Your selected voice was temporarily unavailable, so a substitute voice was used instead "
+            "(gender/accent may not match what you picked). Try generating again to get the requested voice."
+        )
 
     # ---- 4b. Match length to original video (Phase 1.5) ----
     original_dur = float(duration or 0)
@@ -573,4 +620,6 @@ def redub_video(
         "silent_tail_sec": silent_tail_sec,
         "trimmed_sec": trimmed_sec,
         "length_note": length_note,
+        "voice_note": voice_note,
+        "translation_note": translation_note,
     }

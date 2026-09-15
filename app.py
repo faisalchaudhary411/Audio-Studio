@@ -4250,6 +4250,8 @@ def api_redub():
         "silent_tail_sec": result.get("silent_tail_sec", 0),
         "trimmed_sec": result.get("trimmed_sec", 0),
         "length_note": result.get("length_note"),
+        "voice_note": result.get("voice_note"),
+        "translation_note": result.get("translation_note"),
         "char_count": char_count,
         "size_kb": result["size_kb"],
         "audio_size_kb": result["audio_size_kb"],

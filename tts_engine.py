@@ -219,24 +219,54 @@ def _inject_sentence_pauses(text: str, pause_ms: int = 280) -> str:
 
 
 def tts_dispatch(text: str, voice_id: str, rate: str = "+0%", ssml_mode: bool = False,
-                 speed_pct: int = 100, auto_pause: bool = False) -> bytes:
+                 speed_pct: int = 100, auto_pause: bool = False, _meta: dict | None = None) -> bytes:
     """Central TTS routing function.
 
     - voice_id starting with 'GT::' -> not handled here yet, route to gTTS directly (see app.py)
     - ssml_mode True                -> markup-aware generator
     - auto_pause True (and not ssml) -> inject short pauses between sentences via markup path
     - otherwise                     -> plain edge-tts, with gTTS as fallback if edge-tts fails
+
+    _meta: optional dict the caller passes in to learn which engine actually
+    produced the audio. Added because the gTTS fallback below was silent —
+    if edge-tts fails for any reason (network hiccup, an unsupported/rare
+    voice ID, rate limiting), gTTS kicks in and IGNORES voice_id entirely
+    beyond its bare language prefix (see _gtts_fallback): no gender
+    selection, no per-voice character at all, just one generic voice per
+    language. A caller asking for a specific male/female voice could
+    silently get the wrong gender back with zero indication anything had
+    gone wrong — which is exactly what happened requesting Punjabi
+    'pa-IN-OjasNeural' (male): edge-tts failed silently, gTTS's single
+    generic Punjabi voice (which reads female) played instead. Passing a
+    dict here (instead of a return-type change, which would've meant
+    touching every existing call site) lets a caller that cares — like
+    redub, which shows the customer which voice they picked — detect this
+    and say so, without breaking anything that doesn't pass one.
     """
+    def _mark(engine: str, reason: str = ""):
+        if _meta is not None:
+            _meta["engine"] = engine
+            if reason:
+                _meta["fallback_reason"] = reason[:200]
+
     try:
         if ssml_mode:
-            return asyncio.run(generate_audio_markup(text, voice_id, rate=rate))
+            result = asyncio.run(generate_audio_markup(text, voice_id, rate=rate))
+            _mark("edge-tts")
+            return result
         if auto_pause:
             paused = _inject_sentence_pauses(text)
             if paused != text:
-                return asyncio.run(generate_audio_markup(paused, voice_id, rate=rate))
-        return asyncio.run(generate_audio(text, voice_id, rate=rate))
+                result = asyncio.run(generate_audio_markup(paused, voice_id, rate=rate))
+                _mark("edge-tts")
+                return result
+        result = asyncio.run(generate_audio(text, voice_id, rate=rate))
+        _mark("edge-tts")
+        return result
     except Exception as e:
         try:
-            return _gtts_fallback(text, voice_id, speed_pct=speed_pct)
+            result = _gtts_fallback(text, voice_id, speed_pct=speed_pct)
+            _mark("gtts_fallback", str(e))
+            return result
         except Exception:
             raise e
