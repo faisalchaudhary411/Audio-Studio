@@ -132,6 +132,17 @@
         <span class="nav-user__plan nav-user__plan--{{ account_user_ctx.plan }}">{% if account_user_ctx.plan == 'pro_plus' %}Pro+{% elif account_user_ctx.plan == 'pro' %}Pro{% else %}Free{% endif %}</span>
       </span>
     </a>
+    {% elif is_pro_ctx %}
+    {# License key activated on this device (via /activate) but no account
+       login — previously fell all the way to the generic "Log in / Get
+       Pro" links, which is actively misleading: it offers to sell Pro to
+       someone who already has it (this is also what a cookie-clear leaves
+       behind, since _auto_restore_pro_session can silently re-grant tool
+       access by device fingerprint without restoring the account login).
+       .nav-plan already existed in the stylesheet for exactly this kind
+       of small plan pill but was never actually used anywhere. #}
+    <a href="{{ url_for('activate') }}" class="nav-plan {% if plan_ctx == 'pro_plus' %}nav-plan--plus{% endif %}" title="Pro access is active on this device">✓ {% if plan_ctx == 'pro_plus' %}Pro+{% else %}Pro{% endif %}</a>
+    <a href="{{ url_for('account_login') }}" class="nav__link nav__link--login">Log in</a>
     {% else %}
     <a href="{{ url_for('account_login') }}" class="nav__link nav__link--login">Log in</a>
     <a href="{{ url_for('upgrade') }}" class="btn btn--brass btn--sm nav__cta">Get Pro</a>
@@ -186,6 +197,11 @@
       </span>
       <span class="nav-drawer__who-go">Account →</span>
     </a>
+    {% elif is_pro_ctx %}
+    <div class="nav-drawer__auth">
+      <a href="{{ url_for('activate') }}" class="nav-plan {% if plan_ctx == 'pro_plus' %}nav-plan--plus{% endif %}" title="Pro access is active on this device">✓ {% if plan_ctx == 'pro_plus' %}Pro+{% else %}Pro{% endif %}</a>
+      <a href="{{ url_for('account_login') }}" class="nav-drawer__link">Log in</a>
+    </div>
     {% else %}
     <div class="nav-drawer__auth">
       <a href="{{ url_for('account_login') }}" class="nav-drawer__link">Log in</a>
