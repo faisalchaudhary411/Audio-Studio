@@ -1197,7 +1197,13 @@ def video_redub():
     /tools/video-audio-redub tool page, with full marketing content and
     Studio-style voice picker."""
     active_voices = VOICES if is_pro() else FREE_VOICES
-    return render_template("redub.html", voices=active_voices)
+    lang_order = [l for l in ordered_languages() if l in active_voices]
+    return render_template(
+        "redub.html",
+        voices=active_voices,
+        language_order=lang_order,
+        language_flags=LANGUAGE_FLAGS,
+    )
 
 
 @app.route("/pricing")
@@ -3654,6 +3660,8 @@ def tool_page(slug):
         lang_options=audio_tools.LANG_OPTIONS,
         usage=usage_summary(),
         voices=VOICES,  # full catalogue for redub (and any future tool that needs Studio voices)
+        language_order=ordered_languages(),
+        language_flags=LANGUAGE_FLAGS,
     )
 
 
@@ -4336,9 +4344,13 @@ def api_generate():
     rate_str = f"{speed_pct - 100:+d}%"
     text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
     do_normalize = bool(data.get("normalize", False))
+    tts_meta: dict = {}
     try:
         auto_pause = bool(data.get("auto_pause", False)) and not ssml_mode
-        audio = tts_dispatch(text, voice_id, rate=rate_str, ssml_mode=ssml_mode, speed_pct=speed_pct, auto_pause=auto_pause)
+        audio = tts_dispatch(
+            text, voice_id, rate=rate_str, ssml_mode=ssml_mode,
+            speed_pct=speed_pct, auto_pause=auto_pause, _meta=tts_meta,
+        )
         if do_normalize and audio:
             try:
                 audio = audio_tools.normalize(audio, "gen.mp3", target_dbfs=-3.0)
@@ -4354,10 +4366,20 @@ def api_generate():
 
     timestamp = int(time.time())
     filename = f"VoxCraft-TTS-{timestamp}.mp3"
+    voice_note = None
+    if tts_meta.get("engine") == "gtts_fallback":
+        # Same honest notice redub already returns — selected neural voice was
+        # unavailable (e.g. newer locales like Punjabi on the free endpoint).
+        voice_note = (
+            "Your selected voice was temporarily unavailable, so a substitute voice was used instead "
+            "(gender/accent may not match what you picked). Try generating again, or pick another voice."
+        )
     return jsonify({
         "audio_b64": base64.b64encode(audio).decode("ascii"),
         "filename": filename,
         "size_kb": round(len(audio) / 1024, 1),
+        "voice_note": voice_note,
+        "engine": tts_meta.get("engine") or "edge-tts",
     })
 
 

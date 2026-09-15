@@ -191,12 +191,79 @@ async def generate_audio(text: str, voice: str, rate: str = "+0%") -> bytes:
     raise last_err
 
 
+# Map full Edge/Azure voice short-names (or their locale prefix) to a gTTS
+# language code. gTTS only has one generic voice per language — no gender —
+# so this is a last-resort path when the primary neural engine rejects a
+# voice ID (common for newer Indian locales like pa-IN that exist on Azure
+# Speech but are not always exposed on the free Edge Read Aloud endpoint).
+_GTTS_LANG_MAP = {
+    "en": "en", "en-US": "en", "en-GB": "en", "en-AU": "en", "en-IN": "en",
+    "hi": "hi", "hi-IN": "hi",
+    "ur": "ur", "ur-PK": "ur", "ur-IN": "ur",
+    "pa": "pa", "pa-IN": "pa",          # Punjabi (Gurmukhi) — single generic voice
+    "bn": "bn", "bn-IN": "bn", "bn-BD": "bn",
+    "ta": "ta", "ta-IN": "ta",
+    "te": "te", "te-IN": "te",
+    "ar": "ar", "ar-SA": "ar", "ar-EG": "ar",
+    "es": "es", "es-ES": "es", "es-MX": "es",
+    "fr": "fr", "fr-FR": "fr", "fr-CA": "fr",
+    "de": "de", "de-DE": "de",
+    "it": "it", "it-IT": "it",
+    "pt": "pt", "pt-BR": "pt", "pt-PT": "pt",
+    "ru": "ru", "ru-RU": "ru",
+    "ja": "ja", "ja-JP": "ja",
+    "ko": "ko", "ko-KR": "ko",
+    "zh": "zh-CN", "zh-CN": "zh-CN", "zh-TW": "zh-TW", "zh-HK": "zh-TW",
+    "tr": "tr", "tr-TR": "tr",
+    "pl": "pl", "pl-PL": "pl",
+    "nl": "nl", "nl-NL": "nl",
+    "sv": "sv", "sv-SE": "sv",
+    "id": "id", "id-ID": "id",
+    "ms": "ms", "ms-MY": "ms",
+    "th": "th", "th-TH": "th",
+    "vi": "vi", "vi-VN": "vi",
+    "cs": "cs", "cs-CZ": "cs",
+    "da": "da", "da-DK": "da",
+    "fi": "fi", "fi-FI": "fi",
+    "el": "el", "el-GR": "el",
+    "he": "iw", "he-IL": "iw",          # gTTS still uses legacy 'iw' for Hebrew
+    "hu": "hu", "hu-HU": "hu",
+    "nb": "no", "nb-NO": "no",
+    "ro": "ro", "ro-RO": "ro",
+    "sk": "sk", "sk-SK": "sk",
+    "uk": "uk", "uk-UA": "uk",
+    "fil": "tl", "fil-PH": "tl",        # Filipino → Tagalog code in gTTS
+    "ca": "ca", "ca-ES": "ca",
+    "hr": "hr", "hr-HR": "hr",
+    "bg": "bg", "bg-BG": "bg",
+}
+
+
+def _voice_to_gtts_lang(voice: str) -> str:
+    """Resolve an Edge-style voice ID to the best gTTS language code."""
+    if not voice:
+        return "en"
+    # Full short-name e.g. pa-IN-OjasNeural → try locale then language
+    parts = voice.replace("Neural", "").replace("Multilingual", "").strip("-").split("-")
+    # Try "pa-IN", then "pa"
+    if len(parts) >= 2:
+        locale = f"{parts[0]}-{parts[1]}"
+        if locale in _GTTS_LANG_MAP:
+            return _GTTS_LANG_MAP[locale]
+    lang = parts[0] if parts else "en"
+    return _GTTS_LANG_MAP.get(lang, lang if len(lang) == 2 else "en")
+
+
 def _gtts_fallback(text: str, voice: str, speed_pct: int = 100) -> bytes:
-    """Fallback engine using gTTS when edge-tts fails. Maps edge-tts voice
-    codes (e.g. 'en-US-JennyNeural') to a gTTS language code (e.g. 'en')."""
+    """Fallback engine using gTTS when the primary neural engine fails.
+
+    gTTS has only one generic voice per language (no real male/female choice).
+    Used when a voice ID is not available on the free neural endpoint —
+    notably some newer Indian locales such as pa-IN (Punjabi).
+    """
     if not GTTS_AVAILABLE:
         raise Exception("gTTS is not installed / available as a fallback engine.")
-    lang = voice.split("-")[0] if "-" in voice else "en"
+    lang = _voice_to_gtts_lang(voice)
     buf = io.BytesIO()
     gTTS(text=text, lang=lang, slow=(speed_pct < 80)).write_to_fp(buf)
     return buf.getvalue()

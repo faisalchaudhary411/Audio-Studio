@@ -110,6 +110,9 @@ VOICES = {
         "Swara — Female": "hi-IN-SwaraNeural",
         "Madhur — Male": "hi-IN-MadhurNeural",
     },
+    # Punjabi neural IDs exist on Azure Speech but are often missing from the
+    # free neural endpoint. When they fail, tts_engine falls back to gTTS (`pa`)
+    # which has only one generic Punjabi voice (no real male/female choice).
     "Punjabi": {
         "Vaani — Female": "pa-IN-VaaniNeural",
         "Ojas — Male": "pa-IN-OjasNeural",
