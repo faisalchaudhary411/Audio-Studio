@@ -378,8 +378,12 @@
       const secTag = (activeSection && activeSection !== 'none') ? ('-' + activeSection) : '';
       const fname = (data.filename || ('VoxCraft-Narration' + secTag + '.mp3')).replace(/\.mp3$/i, secTag + '.' + ext).replace(/--+/g, '-');
       const mime = ext === 'wav' ? 'audio/wav' : 'audio/mpeg';
+      // Soft notice when primary neural voice was unavailable (same copy as redub)
+      const voiceNoteHtml = data.voice_note
+        ? `<div class="limit-toast" style="margin-bottom:10px;">⚠ ${data.voice_note}</div>`
+        : '';
       if (typeof voxAudioPlayerHtml === 'function') {
-        singleResult.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, mime).replace(
+        singleResult.innerHTML = voiceNoteHtml + voxAudioPlayerHtml(data.audio_b64, fname, mime).replace(
           'Your audio',
           'Your narration'
         );
@@ -395,7 +399,7 @@
             ts: Date.now(),
           }));
         } catch (e) {}
-        singleResult.innerHTML = `
+        singleResult.innerHTML = voiceNoteHtml + `
           <div class="result-panel">
             <div class="result-panel__label">Your narration</div>
             <audio controls data-vox-audio-src></audio>
