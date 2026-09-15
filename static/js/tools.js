@@ -1417,6 +1417,10 @@
             '<div class="result-panel">' +
               '<div class="result-panel__label">Dubbed video</div>' +
               notesHtml +
+              '<div class="redub-video-wrap">' +
+                '<video class="redub-video-player" data-redub-video-el controls playsinline preload="metadata"></video>' +
+                '<div class="redub-video-wrap__placeholder" data-redub-video-placeholder>Preparing preview…</div>' +
+              '</div>' +
               '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 10px;">' +
                 (data.skipped_translation ? 'Translation skipped (same language). ' : '') +
                 (data.length_matched ? 'Audio stretched to match original length. ' : '') +
@@ -1453,6 +1457,13 @@
             try {
               if (data.video_b64) {
                 const url = await toUrl(data.video_b64, 'video/mp4');
+                const vid = result.querySelector('[data-redub-video-el]');
+                const placeholder = result.querySelector('[data-redub-video-placeholder]');
+                if (vid) {
+                  vid.src = url;
+                  vid.classList.add('is-ready');
+                }
+                if (placeholder) placeholder.remove();
                 const b = result.querySelector('[data-redub-dl-video]');
                 if (b) {
                   b.disabled = false;
@@ -1482,6 +1493,8 @@
             } catch (e) {
               console.warn('[voxcraft] redub download hydrate failed', e);
               if (status) status.textContent = 'Ready — download may be slow on this device.';
+              const placeholder = result.querySelector('[data-redub-video-placeholder]');
+              if (placeholder) placeholder.textContent = 'Preview unavailable on this device — use the download button below.';
             }
           })();
         }
