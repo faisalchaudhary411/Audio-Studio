@@ -36,7 +36,7 @@
       </div>
       {% if p.pkr %}
       <p class="plan__pkr-month" style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;">or {{ p.pkr }}/mo — EasyPaisa / JazzCash / bank</p>
-      <p class="plan__pkr-annual" style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;display:none;">or {{ p.pkr_annual }}/yr — EasyPaisa / JazzCash / bank</p>
+      <p class="plan__pkr-annual" style="color:var(--text-dim);font-size:0.8rem;margin:2px 0 0;">or {{ p.pkr_annual }}/yr — EasyPaisa / JazzCash / bank</p>
       {% endif %}
       <ul class="plan__list">
         {% for item in p.limits %}
