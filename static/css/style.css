@@ -1118,13 +1118,14 @@ img{max-width:100%;display:block;}
 }
 /* ===== Pricing ===== */
 .plans{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:20px;
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;
 }
-@media (max-width:860px){.plans{grid-template-columns:1fr;}}
+@media (max-width:860px){.plans{grid-template-columns:minmax(0,1fr);}}
 .plan{
   background:var(--ink-panel);border:1px solid var(--line);
   border-radius:var(--radius);padding:28px;
   display:flex;flex-direction:column;gap:18px;
+  min-width:0;
   transition:border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 .plan:hover{border-color:var(--line-strong);}
@@ -1142,6 +1143,15 @@ img{max-width:100%;display:block;}
   display:flex;gap:10px;color:var(--text-mid);font-size:0.92rem;
 }
 .plan__list li::before{content:"—";color:var(--brass);opacity:0.85;}
+/* The disabled "Current plan"/"Downgrade automatically..." button has no
+   click target to protect, so let it wrap instead of inheriting .btn's
+   white-space:nowrap — that nowrap is what was forcing this one card
+   (and, via the shared 1fr grid track, every other pricing card and the
+   billing toggle beside them) wider than the viewport on mobile. */
+.plan button.btn[disabled]{
+  white-space:normal;text-align:center;line-height:1.35;
+  padding-top:12px;padding-bottom:12px;
+}
 
 /* ===== Studio (tool) ===== */
 .studio{
