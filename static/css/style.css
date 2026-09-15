@@ -1941,11 +1941,11 @@ textarea.script-input:focus{
 
 /* ===== Pricing billing toggle ===== */
 .billing-toggle{
-  display:inline-flex;align-items:center;gap:4px;
+  display:flex;align-items:center;gap:4px;
   background:rgba(0,0,0,0.3);
   border:1px solid var(--line);
   border-radius:999px;padding:4px;
-  margin:0 auto 28px;max-width:max-content;
+  margin:0 auto 28px;width:fit-content;
 }
 .billing-toggle button{
   appearance:none;border:none;background:transparent;
@@ -1963,12 +1963,14 @@ textarea.script-input:focus{
   margin-left:2px;
 }
 .plan__price-annual{display:none;}
+.plan__period-annual{display:none;}
+.plan__pkr-annual{display:none;}
 body.is-annual .plan__price-month{display:none;}
 body.is-annual .plan__price-annual{display:inline;}
 body.is-annual .plan__period-month{display:none;}
 body.is-annual .plan__period-annual{display:inline;}
 body.is-annual .plan__pkr-month{display:none;}
-body.is-annual .plan__pkr-annual{display:inline;}
+body.is-annual .plan__pkr-annual{display:block;}
 
 /* ===== Homepage proof / trust band ===== */
 .proof-band{
