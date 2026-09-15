@@ -307,8 +307,13 @@ def stretch_audio_to_duration(audio_bytes: bytes, target_sec: float, audio_ext: 
         if abs(ratio - 1.0) < 0.03:
             return audio_bytes  # already close enough
 
-        # Soft clamp: don't make speech unintelligible
-        ratio = max(0.5, min(2.0, ratio))
+        # Soft clamp: don't make speech unintelligible. Widened slightly
+        # from the original 0.5-2.0 for redub specifically (see the
+        # coverage/gap reporting added in redub_video() below — pushing
+        # the clamp further than this starts costing more intelligibility
+        # than it buys in extra coverage, so past this point we report the
+        # remaining gap instead of trying to out-stretch it).
+        ratio = max(0.45, min(2.2, ratio))
         # Allow chaining beyond single-stage limits for moderate extremes already clamped
         filt = _atempo_chain(ratio)
 
@@ -467,6 +472,7 @@ def redub_video(
     original_dur = float(duration or 0)
     stretched = False
     stretch_ratio = 1.0
+    tts_dur_final = 0.0
     if match_length:
         # Prefer accurate duration from the extracted audio file
         tmp_a = None
@@ -494,15 +500,50 @@ def redub_video(
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
                     f.write(tts_audio)
                     tmp_t = f.name
-                tts_dur = _probe_duration_sec(tmp_t)
-                if tts_dur > 0 and original_dur > 0:
-                    stretch_ratio = round(original_dur / tts_dur, 3) if tts_dur else 1.0
+                tts_dur_final = _probe_duration_sec(tmp_t)
+                if tts_dur_final > 0 and original_dur > 0:
+                    stretch_ratio = round(original_dur / tts_dur_final, 3) if tts_dur_final else 1.0
             finally:
                 if tmp_t:
                     try:
                         os.unlink(tmp_t)
                     except OSError:
                         pass
+
+    # ---- 4c. Report any length gap the stretch clamp couldn't close ----
+    # stretch_audio_to_duration() clamps how far it will speed up/slow down
+    # speech (see its docstring) so dubbed audio stays intelligible. When
+    # the translated speech is naturally much shorter or longer than the
+    # source (common — languages/TTS voices don't map 1:1 in speaking
+    # time), that clamp means the stretch can land short of target_sec.
+    # mux_audio_onto_video() then silently pads the remainder with silence
+    # (audio too short — video plays with no dubbed speech for the tail)
+    # or, previously, -shortest would cut the video off at the audio's
+    # length. Neither is wrong to *do* — there's no lossless way to make
+    # mismatched speech fit an exact runtime without per-segment timing
+    # data this pipeline doesn't have yet — but doing it silently is: the
+    # result looked like a bug because nothing ever told the caller it
+    # happened. Surfaced here instead so the API/UI can show an explicit
+    # note rather than a confusing silent tail.
+    silent_tail_sec = 0.0
+    trimmed_sec = 0.0
+    length_note = None
+    if match_length and original_dur > 0.05 and tts_dur_final > 0.05:
+        gap = original_dur - tts_dur_final
+        if gap > 1.5:
+            silent_tail_sec = round(gap, 1)
+            length_note = (
+                f"The dubbed speech runs about {int(round(silent_tail_sec))}s shorter than "
+                f"the source video even after speed-matching — the last {int(round(silent_tail_sec))}s "
+                f"of the video will have no dubbed audio."
+            )
+        elif gap < -1.5:
+            trimmed_sec = round(-gap, 1)
+            length_note = (
+                f"The dubbed speech runs about {int(round(trimmed_sec))}s longer than the source "
+                f"video even after speed-matching — the dubbed audio gets cut off near the end "
+                f"to keep the video's original length."
+            )
 
     # ---- 5. Mux ----
     dubbed_video = mux_audio_onto_video(
@@ -529,4 +570,7 @@ def redub_video(
         "match_length": bool(match_length),
         "original_duration_sec": round(original_dur, 2) if original_dur else None,
         "length_matched": bool(match_length and original_dur > 0.05),
+        "silent_tail_sec": silent_tail_sec,
+        "trimmed_sec": trimmed_sec,
+        "length_note": length_note,
     }
