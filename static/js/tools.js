@@ -1412,6 +1412,9 @@
           result.innerHTML =
             '<div class="result-panel">' +
               '<div class="result-panel__label">Dubbed video</div>' +
+              (data.length_note ?
+                '<div class="limit-toast" style="margin-bottom:10px;">⚠ ' + escapeHtml(data.length_note) + '</div>'
+                : '') +
               '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 10px;">' +
                 (data.skipped_translation ? 'Translation skipped (same language). ' : '') +
                 (data.length_matched ? 'Audio stretched to match original length. ' : '') +
