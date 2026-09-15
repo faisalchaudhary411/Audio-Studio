@@ -15,7 +15,25 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
 <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
 <meta name="theme-color" content="#0c1117">
-<meta name="description" content="{% block meta_description %}VoxCraft — multilingual text-to-speech and practical online audio tools for creators.{% endblock %}">
+<meta name="description" content="{% block meta_description %}VoxCraft is a multilingual text-to-speech and AI audio platform — 88+ neural voices, voice cloning, music generation, and 13 free audio tools. No signup needed.{% endblock %}">
+
+<!-- Open Graph / Twitter Card — controls how links look when shared on
+     WhatsApp, Facebook, LinkedIn, X/Twitter, Slack, iMessage, etc. This
+     was entirely missing before: shares fell back to a bare link with no
+     title/description/preview image. Child templates can override
+     og_title/og_description/og_image (e.g. a blog post using its own
+     title and cover image) — anything that doesn't override inherits
+     these site-wide defaults. -->
+<meta property="og:site_name" content="VoxCraft">
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ request.url }}">
+<meta property="og:title" content="{% block og_title %}VoxCraft — Multilingual Text-to-Speech & AI Audio Tools{% endblock %}">
+<meta property="og:description" content="{% block og_description %}88+ neural voices across 27 languages, voice cloning, music generation, and 13 free audio tools. No signup needed to start.{% endblock %}">
+<meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='favicons/android-chrome-512x512.png', _external=True) }}{% endblock %}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ self.og_title() }}">
+<meta name="twitter:description" content="{{ self.og_description() }}">
+<meta name="twitter:image" content="{{ self.og_image() }}">
 
 <!-- Tells Google which URL is the "real" one when a page is reachable
      through more than one address — e.g. /blog?tag=urdu and /upgrade?plan=pro
