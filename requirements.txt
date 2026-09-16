@@ -29,18 +29,18 @@ pyloudnorm==0.1.1
 #      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 #      source "$HOME/.cargo/env"
 #
-# 2. Install CPU-only torch + torchaudio BEFORE running this file.
-#    This VPS has no GPU, but plain `pip install torch` / `torchaudio`
-#    from PyPI pulls the full CUDA builds (cublas, cudnn, triton, nccl...
-#    several GB of dead weight). Installing the CPU builds first satisfies
-#    the pins below without ever touching the CUDA packages:
-#      pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# 2. Install the pinned CPU-only torch + torchaudio BEFORE running this
+#    file. This VPS has no GPU; plain `pip install torch` / `torchaudio`
+#    from PyPI pulls multi-GB CUDA builds. The versions below are pinned
+#    because newer torchaudio (2.9+) removed APIs that the published
+#    deepfilternet package still imports (torchaudio.backend / AudioMetaData).
+#    Verified working pair (2026-09):
+#      pip install torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 #
 # Skip step 1 and deepfilternet's build fails with "Cargo ... is not
 # installed". Skip step 2 and a plain `pip install -r requirements.txt`
-# silently drags in ~5GB of unused CUDA packages. Missing torchaudio
-# causes: ModuleNotFoundError: No module named 'torchaudio' when Studio
-# denoise runs (df/io.py imports it).
-torch>=2.0.0
-torchaudio>=2.0.0
+# silently drags in ~5GB of unused CUDA packages or a too-new torchaudio
+# that breaks Studio denoise.
+torch==2.5.1
+torchaudio==2.5.1
 deepfilternet>=0.5.6
