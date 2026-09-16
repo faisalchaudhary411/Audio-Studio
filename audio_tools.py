@@ -128,7 +128,16 @@ def estimate_output_size_mb(duration_sec: float, fmt: str, bitrate_kbps: int = N
 # ---------------------------------------------------------------------------
 # Transcribe
 # ---------------------------------------------------------------------------
-def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
+def transcribe(file_bytes: bytes, filename: str, lang_code: str, use_gpu: bool = True) -> dict:
+    """
+    use_gpu controls whether the Modal GPU Whisper worker is eligible to
+    run at all for this call. It costs real per-call GPU money, unlike
+    the Google Speech Recognition fallback below it, which is free. Pass
+    use_gpu=False for free-tier callers so they always land on Google
+    regardless of whether MODAL_WHISPER_ENDPOINT_URL is configured —
+    Pro/Pro+ callers pass use_gpu=True (the default) to get Whisper's
+    better accuracy first, with Google as the fallback either way.
+    """
     _start = time.monotonic()
 
     def _remaining_budget() -> float:
@@ -156,7 +165,7 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
     if prefer_google_first:
         whisper_note = f"skip Whisper for {lang_code} — Google first for script fidelity"
         print(f"[transcribe] {whisper_note}", flush=True)
-    elif modal_whisper.is_configured():
+    elif use_gpu and modal_whisper.is_configured():
         print("[transcribe] MODAL_WHISPER_ENDPOINT_URL is set — calling Whisper worker", flush=True)
         wav_buf = io.BytesIO()
         audio.export(wav_buf, format="wav")
@@ -216,7 +225,10 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str) -> dict:
             whisper_note = (whisper_result.get("error") or "empty text").strip()[:180]
         print(f"[transcribe] Whisper FAILED — {whisper_note} — falling back to Google", flush=True)
     else:
-        whisper_note = "MODAL_WHISPER_ENDPOINT_URL not set in process env"
+        whisper_note = (
+            "GPU Whisper skipped — free-tier caller" if not use_gpu
+            else "MODAL_WHISPER_ENDPOINT_URL not set in process env"
+        )
         print(f"[transcribe] {whisper_note} — using Google Speech only", flush=True)
 
     # If Whisper alone already ate most of the time budget (slow cold start,
@@ -517,13 +529,182 @@ def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
 
 
 # ---------------------------------------------------------------------------
-# Normalize (peak)
+# Denoise -- Studio (DeepFilterNet AI speech enhancement, Pro/Pro+ only)
 # ---------------------------------------------------------------------------
+# denoise() above is classic spectral gating (the noisereduce library):
+# fast, CPU-cheap, and fine for steady hum/hiss, but it's the same family
+# of DSP technique noise gates have used for decades -- it subtracts a
+# noise profile from the spectrum rather than reconstructing speech, so it
+# hits a real quality ceiling on roomy/low-quality mic recordings.
+#
+# DeepFilterNet3 (RWTH Aachen, MIT licensed) is an actual deep-learning
+# speech-enhancement model -- the same class of model Adobe Podcast
+# Enhance is built on, not a fancier noise gate. It's designed to be
+# CPU-friendly (built for real-time on embedded devices), so this runs on
+# the existing VPS with no GPU worker needed -- but it's meaningfully
+# heavier per request than noisereduce (a real model forward pass vs. an
+# FFT), so it's gated to Pro/Pro+ in app.py's api_denoise the same way
+# GPU Whisper is gated for transcribe(): free tier keeps the fast
+# noisereduce path by default, Pro gets the AI pass.
+#
+# NOTE for Faisal: this needs `torch` + `deepfilternet` installed (added
+# to requirements.txt) and downloads its model weights (~a few hundred MB,
+# cached under ~/.cache after the first run) the first time
+# _get_deepfilternet_model() runs on the VPS. I could not runtime-test this
+# specific path in the sandbox this was written in -- it has no free disk
+# space left for a torch install -- so please run it once manually against
+# a real noisy clip after deploying, before calling it live.
+_DF_MODEL_CACHE = {}
+
+# CPU inference time scales with audio length, and this runs inside a
+# synchronous gunicorn request -- same reasoning as transcribe()'s time
+# budget. Longer files should use the standard denoise() path instead.
+MAX_STUDIO_DENOISE_DURATION_SEC = 6 * 60
+
+
+def _get_deepfilternet_model():
+    """Lazily load DeepFilterNet3 once per worker process and cache it --
+    loading weights takes a few seconds, not something to repeat per
+    request."""
+    if "model" not in _DF_MODEL_CACHE:
+        from df.enhance import init_df
+        model, df_state, _ = init_df()
+        _DF_MODEL_CACHE["model"] = model
+        _DF_MODEL_CACHE["df_state"] = df_state
+    return _DF_MODEL_CACHE["model"], _DF_MODEL_CACHE["df_state"]
+
+
+def denoise_studio(file_bytes: bytes, filename: str, output_format: str = "mp3") -> bytes:
+    """AI speech enhancement via DeepFilterNet3. Resamples to the model's
+    required 48kHz, runs deep filtering, resamples back to the source
+    rate so duration/pitch and downstream tools see the rate they expect."""
+    check_file_size(file_bytes)
+    import numpy as np
+    import torch
+    from df.enhance import enhance
+
+    audio = _load_segment(file_bytes, filename)
+    duration_sec = len(audio) / 1000.0
+    if duration_sec > MAX_STUDIO_DENOISE_DURATION_SEC:
+        raise UserFacingError(
+            f"Studio denoise is limited to {MAX_STUDIO_DENOISE_DURATION_SEC // 60:.0f} minutes per file "
+            f"(this file is {duration_sec / 60:.1f} minutes). Try standard Denoise for longer files."
+        )
+
+    model, df_state = _get_deepfilternet_model()
+    model_sr = df_state.sr()
+    original_sr = audio.frame_rate
+
+    # DeepFilterNet expects mono float32 in [-1, 1] at its model rate
+    # (48kHz). Run mono rather than per-channel-then-remux to keep this
+    # simple and match how the standard denoise() path already outputs
+    # mono -- stereo-preserving studio denoise can be a later refinement.
+    work = audio.set_frame_rate(model_sr).set_channels(1)
+    samples = np.array(work.get_array_of_samples()).astype(np.float32) / 32768.0
+    tensor = torch.from_numpy(samples).unsqueeze(0)  # (1, n_samples)
+
+    with torch.no_grad():
+        enhanced = enhance(model, df_state, tensor)
+
+    enhanced_np = np.clip(enhanced.squeeze(0).cpu().numpy(), -1.0, 1.0)
+    enhanced_int16 = (enhanced_np * 32767.0).astype(np.int16)
+
+    enhanced_audio = AudioSegment(
+        enhanced_int16.tobytes(), frame_rate=model_sr, sample_width=2, channels=1
+    )
+    if original_sr != model_sr:
+        enhanced_audio = enhanced_audio.set_frame_rate(original_sr)
+
+    return _export_bytes(enhanced_audio, output_format)
+
+
+# ---------------------------------------------------------------------------
+# Normalize (peak, or true loudness / LUFS)
+# ---------------------------------------------------------------------------
+
+# Common loudness targets creators actually publish to, for the UI presets.
+LUFS_PRESETS = {
+    "streaming": -14.0,   # Spotify / YouTube / Apple Music target
+    "podcast": -16.0,     # common podcast-platform guidance
+    "broadcast": -23.0,   # EBU R128
+}
+
+
+def measure_lufs(file_bytes: bytes, filename: str) -> float:
+    """Integrated loudness (ITU-R BS.1770 / EBU R128) in LUFS, via
+    pyloudnorm. Returns float('-inf') for silent/near-silent audio, same
+    as pyloudnorm itself -- callers should handle that case."""
+    import numpy as np
+    import pyloudnorm as pyln
+
+    audio = _load_segment(file_bytes, filename)
+    samples = np.array(audio.get_array_of_samples()).astype(np.float64)
+    max_val = float(1 << (8 * audio.sample_width - 1))
+    if audio.channels > 1:
+        samples = samples.reshape((-1, audio.channels))
+    data = samples / max_val
+    meter = pyln.Meter(audio.frame_rate)
+    return float(meter.integrated_loudness(data))
+
+
 def normalize(file_bytes: bytes, filename: str, target_dbfs: float = -3.0,
-              output_format: str = "mp3") -> bytes:
-    """Peak-normalize so the loudest sample reaches target_dbfs (e.g. -3 dBFS)."""
+              output_format: str = "mp3", mode: str = "peak",
+              target_lufs: float = -16.0) -> bytes:
+    """
+    Normalize audio to a consistent level.
+
+    mode="peak" (default, unchanged behavior): gain so the loudest sample
+    reaches target_dbfs. Fast and simple, but two files with different
+    dynamics can still sound very different in loudness at the same peak.
+
+    mode="lufs": true perceptual loudness normalization per ITU-R BS.1770 /
+    EBU R128 -- the same standard Spotify, YouTube and podcast platforms
+    use to decide whether to turn your upload up or down on playback.
+    Two files normalized to the same LUFS target sound equally loud even
+    when their dynamics differ, which peak normalization can't guarantee.
+    """
     check_file_size(file_bytes)
     audio = _load_segment(file_bytes, filename)
+
+    if mode == "lufs":
+        import numpy as np
+        import pyloudnorm as pyln
+
+        samples = np.array(audio.get_array_of_samples()).astype(np.float64)
+        max_val = float(1 << (8 * audio.sample_width - 1))
+        channels = audio.channels
+        if channels > 1:
+            samples = samples.reshape((-1, channels))
+        data = samples / max_val
+
+        meter = pyln.Meter(audio.frame_rate)
+        current_lufs = meter.integrated_loudness(data)
+        # A silent or near-silent file measures as -inf LUFS -- there is
+        # nothing meaningful to normalize, so return it unchanged rather
+        # than asking for infinite gain to hit the target.
+        if current_lufs == float("-inf") or current_lufs != current_lufs:
+            return _export_bytes(audio, output_format)
+
+        adjusted = pyln.normalize.loudness(data, current_lufs, target_lufs)
+        # Same safeguard the peak path already has: hitting a loud LUFS
+        # target on a low-crest-factor source can ask for more gain than
+        # 0 dBFS allows -- true-peak-limit before re-encoding rather than
+        # letting it clip.
+        peak = np.max(np.abs(adjusted)) if adjusted.size else 0.0
+        if peak > 0.99:
+            adjusted = adjusted * (0.99 / peak)
+
+        int_dtype = np.int16 if audio.sample_width == 2 else np.int32
+        adjusted_int = np.clip(adjusted * max_val, -max_val, max_val - 1).astype(int_dtype)
+        normalized = AudioSegment(
+            adjusted_int.tobytes(),
+            frame_rate=audio.frame_rate,
+            sample_width=audio.sample_width,
+            channels=channels,
+        )
+        return _export_bytes(normalized, output_format)
+
+    # mode == "peak" -- original behavior, unchanged.
     change = target_dbfs - audio.max_dBFS
     # Avoid extreme boosts on near-silent files
     if change > 20:

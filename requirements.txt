@@ -17,3 +17,9 @@ librosa==0.10.2.post1
 soundfile==0.12.1
 psutil==6.0.0
 sentry-sdk[flask]>=2.0.0
+pyloudnorm==0.1.1
+# Studio-quality denoise (DeepFilterNet AI speech enhancement). CPU-only
+# torch is much smaller than the CUDA build -- if this VPS has no GPU,
+# prefer: pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.0.0
+deepfilternet>=0.5.6

@@ -1725,7 +1725,7 @@ def blog_detail(identifier):
         post=post,
         post_html=post_html,
         reading_minutes=reading_minutes,
-        author=post.get("author") or "VoxCraft Team",
+        author=post.get("author") or "Faisal",
         updated_date=post.get("updated_date") or post.get("date", ""),
         related_tool=_blog_tool_link(post),
         related_posts=related_posts,
@@ -3801,7 +3801,12 @@ def api_transcribe():
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        result = audio_tools.transcribe(file.read(), file.filename, lang_code)
+        # GPU Whisper costs real per-call money — only Pro/Pro+ get it.
+        # Free-tier callers still get a working transcript, just via the
+        # free Google Speech Recognition path (use_gpu=False skips Whisper
+        # entirely rather than letting a free user's daily-action quota
+        # spend GPU time).
+        result = audio_tools.transcribe(file.read(), file.filename, lang_code, use_gpu=is_pro())
         _bump_counter("usage_transcribe")
         resp = jsonify(result)
         # Explicit charset so clients never treat Urdu/Hindi JSON as Latin-1
@@ -3917,13 +3922,26 @@ def api_denoise():
     file = request.files.get("file")
     strength = float(request.form.get("strength", 0.5))
     stationary = request.form.get("stationary", "1") not in ("0", "false", "False")
+    engine = request.form.get("engine", "standard")
+    if engine not in ("standard", "studio"):
+        engine = "standard"
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.denoise(file.read(), file.filename, strength, stationary=stationary)
+        if engine == "studio":
+            # DeepFilterNet AI enhancement is a real per-request compute
+            # cost on the VPS (a model forward pass, not just an FFT) --
+            # gated to Pro/Pro+ the same way GPU Whisper is gated in
+            # api_transcribe, so free-tier traffic can't spend it.
+            if not is_pro():
+                return jsonify({"error": "Studio-quality denoise (AI speech enhancement) is a Pro/Pro+ feature. Upgrade, or use standard Denoise."}), 402
+            out_bytes = audio_tools.denoise_studio(file.read(), file.filename)
+        else:
+            out_bytes = audio_tools.denoise(file.read(), file.filename, strength, stationary=stationary)
         _bump_counter("usage_denoise")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"VoxCraft-Denoised-{int(time.time())}.mp3"})
+                         "filename": f"VoxCraft-Denoised-{int(time.time())}.mp3",
+                         "engine": engine})
     except Exception as e:
         return api_error(e, "denoise this file")
 
@@ -4008,16 +4026,33 @@ def api_normalize():
     file = request.files.get("file")
     target = float(request.form.get("target_dbfs", -3.0))
     output_format = request.form.get("output_format", "mp3")
+    mode = request.form.get("mode", "peak")
+    if mode not in ("peak", "lufs"):
+        mode = "peak"
+    target_lufs = float(request.form.get("target_lufs", -16.0))
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.normalize(file.read(), file.filename, target_dbfs=target, output_format=output_format)
+        file_bytes = file.read()
+        before_lufs = None
+        try:
+            before_lufs = audio_tools.measure_lufs(file_bytes, file.filename)
+            if before_lufs == float("-inf"):
+                before_lufs = None
+        except Exception:
+            pass  # measurement is a nice-to-have; never block the actual normalize on it
+        out_bytes = audio_tools.normalize(file_bytes, file.filename, target_dbfs=target,
+                                           output_format=output_format, mode=mode,
+                                           target_lufs=target_lufs)
         _bump_counter("usage_normalize")
         return jsonify({
             "audio_b64": base64.b64encode(out_bytes).decode("ascii"),
             "filename": f"VoxCraft-Normalized-{int(time.time())}.{output_format}",
             "format": output_format,
             "size_kb": round(len(out_bytes) / 1024, 1),
+            "mode": mode,
+            "before_lufs": round(before_lufs, 1) if before_lufs is not None else None,
+            "target_lufs": target_lufs if mode == "lufs" else None,
         })
     except Exception as e:
         return api_error(e, "normalize this file")
