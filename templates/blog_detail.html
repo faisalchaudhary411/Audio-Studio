@@ -50,13 +50,26 @@
   </div>
   {% endif %}
 
-  <div class="panel" style="max-width:820px;margin:24px auto 0;">
-    <span class="panel__label">About the author</span>
-    <p style="margin:8px 0 0;color:var(--text-mid);line-height:1.65;">
-      {{ author }} publishes practical guides about text-to-speech, audio editing and creator workflows on VoxCraft.
-      Where a guide makes a comparison or product recommendation, readers should use the stated criteria
-      and limitations rather than treating a ranking as universal.
-    </p>
+  <div class="panel" style="max-width:820px;margin:24px auto 0;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;">
+    {% if author == 'Faisal' %}
+    <picture style="flex-shrink:0;">
+      <source srcset="{{ static_url('img/founder-final.webp') }}" type="image/webp">
+      <img src="{{ static_url('img/founder-final.jpg') }}"
+           alt="Faisal, founder of VoxCraft"
+           width="56" height="56"
+           loading="lazy"
+           style="width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;border:2px solid var(--line);">
+    </picture>
+    {% endif %}
+    <div style="flex:1;min-width:200px;">
+      <span class="panel__label">About the author</span>
+      <p style="margin:8px 0 0;color:var(--text-mid);line-height:1.65;">
+        {% if author == 'Faisal' %}<a href="{{ url_for('about') }}" style="color:var(--brass-hi);">{{ author }}</a>{% else %}{{ author }}{% endif %}
+        publishes practical guides about text-to-speech, audio editing and creator workflows on VoxCraft.
+        Where a guide makes a comparison or product recommendation, readers should use the stated criteria
+        and limitations rather than treating a ranking as universal.
+      </p>
+    </div>
   </div>
 
   {% if related_posts %}
@@ -93,8 +106,9 @@
   "datePublished": {{ (post.date or "")|tojson }},
   "dateModified": {{ (updated_date or post.date or "")|tojson }},
   "author": {
-    "@type": "Organization",
-    "name": {{ author|tojson }}
+    "@type": {{ ("Person" if author == "Faisal" else "Organization")|tojson }},
+    "name": {{ author|tojson }}{% if author == "Faisal" %},
+    "url": {{ (request.url_root.rstrip("/") + url_for("about"))|tojson }}{% endif %}
   },
   "publisher": {
     "@type": "Organization",
