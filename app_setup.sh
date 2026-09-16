@@ -31,6 +31,9 @@ source venv/bin/activate
 
 echo "=== Installing dependencies ==="
 pip install --upgrade pip
+# CPU-only torch + torchaudio first (avoids multi-GB CUDA packages).
+# Required by deepfilternet / Studio denoise. See requirements.txt comments.
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 pip install gunicorn==22.0.0   # already in requirements.txt, kept here as a safety net
 
