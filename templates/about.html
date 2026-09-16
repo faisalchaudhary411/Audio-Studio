@@ -74,9 +74,18 @@
     <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Commercial use</h2>
     <p>Audio you generate with VoxCraft is yours to use, including in monetised YouTube videos, client projects and commercial work, subject to the Terms of Service and any third-party rights in the material you upload.</p>
 
-    <div class="panel" style="margin-top:34px;">
-      <span class="panel__label">Frequently asked questions</span>
-      <details style="margin-top:10px;">
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Trust &amp; accountability</h2>
+    <p>VoxCraft is operated by a named individual, not an anonymous team. Product decisions, support replies and editorial content all come from the same person who builds the software. That makes it easier to hold the product accountable — and easier for you to know who is behind the tools you use for client or commercial work.</p>
+    <ul>
+      <li><strong>Named founder</strong> — Faisal, based in Lahore, Pakistan (see above).</li>
+      <li><strong>Public policies</strong> — <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi);">Privacy</a> and <a href="{{ url_for('terms') }}" style="color:var(--brass-hi);">Terms</a> are published and updated when behaviour changes.</li>
+      <li><strong>Documented testing</strong> — voice and tool recommendations follow the process on <a href="{{ url_for('how_we_test') }}" style="color:var(--brass-hi);">How we test</a>.</li>
+      <li><strong>Reachable support</strong> — contact form and <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>.</li>
+    </ul>
+
+    <h2 style="font-family:var(--display);margin-top:34px;color:var(--text-hi);">Frequently asked questions</h2>
+    <div class="panel" style="margin-top:12px;">
+      <details style="margin-top:10px;" open>
         <summary>Is VoxCraft free to use?</summary>
         <p style="color:var(--text-mid);line-height:1.7;">Yes. The free tier works with no signup, within daily and monthly usage limits. Pro removes those limits on text-to-speech; Pro+ adds voice cloning and AI music generation. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);">pricing</a> for details.</p>
       </details>
@@ -89,6 +98,10 @@
         <p style="color:var(--text-mid);line-height:1.7;">No. Everything runs in the browser. There is nothing to download for any of the tools.</p>
       </details>
       <details style="margin-top:10px;">
+        <summary>Can I use generated audio commercially?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Yes. Audio you generate is yours to use in monetised YouTube videos, client work and other commercial projects, subject to the <a href="{{ url_for('terms') }}" style="color:var(--brass-hi);">Terms of Service</a> and any rights in material you upload.</p>
+      </details>
+      <details style="margin-top:10px;">
         <summary>Who can I contact for support or business questions?</summary>
         <p style="color:var(--text-mid);line-height:1.7;">Use the <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">contact form</a> or email <a href="mailto:support@voxcraft.site" style="color:var(--brass-hi);">support@voxcraft.site</a>. Every message is read and usually answered within a day.</p>
       </details>
@@ -99,4 +112,17 @@
     </div>
   </div>
 </section>
+
+{# FAQ schema for About page — strengthens E-E-A-T and AEO #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Is VoxCraft free to use?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The free tier works with no signup, within daily and monthly usage limits. Pro removes those limits on text-to-speech; Pro+ adds voice cloning and AI music generation."}},
+    {"@type": "Question", "name": "Can I use generated audio commercially?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Audio you generate is yours to use in monetised YouTube videos, client work and other commercial projects, subject to the Terms of Service."}},
+    {"@type": "Question", "name": "Where is VoxCraft operated from?", "acceptedAnswer": {"@type": "Answer", "text": "VoxCraft is independently operated by Faisal from Lahore, Punjab, Pakistan."}}
+  ]
+}
+</script>
 {% endblock %}

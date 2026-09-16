@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}How VoxCraft Tests Voices and Audio Tools{% endblock %}
+{% block title %}How VoxCraft Tests Voices and Audio Tools — Methodology{% endblock %}
+{% block meta_description %}How VoxCraft evaluates neural voices and free audio tools: naturalness, pronunciation, pacing, use-case fit, and honest limits — so recommendations stay transparent and useful.{% endblock %}
 {% block content %}
 <section class="section" style="max-width:820px;">
   <div class="section__head">
     <span class="section__eyebrow">Methodology</span>
     <h1 class="section__title">How we test voices and audio tools.</h1>
-    <p class="section__sub">When VoxCraft publishes a comparison or recommendation, we want the process to be understandable rather than a list of unexplained rankings.</p>
+    <p class="section__sub">When VoxCraft publishes a comparison or recommendation, the process should be understandable — not a list of unexplained rankings. Updated September 2026.</p>
   </div>
 
   <div style="color:var(--text-mid);line-height:1.8;font-size:1rem;">
@@ -43,9 +44,9 @@
       <p style="margin:8px 0 0;color:var(--text-mid);">Show the test, explain the criteria, disclose limitations, and let readers decide whether the result fits their own workflow.</p>
     </div>
 
-    <div class="panel" style="margin-top:24px;">
-      <span class="panel__label">Frequently asked questions</span>
-      <details style="margin-top:10px;">
+    <h2 style="font-family:var(--display);margin-top:36px;color:var(--text-hi);">Frequently asked questions</h2>
+    <div class="panel" style="margin-top:12px;">
+      <details style="margin-top:10px;" open>
         <summary>Do you accept payment for a favorable review or ranking?</summary>
         <p style="color:var(--text-mid);line-height:1.7;">No. Guides published on VoxCraft reflect our own testing against the stated criteria above, not sponsorship.</p>
       </details>
@@ -57,9 +58,24 @@
         <summary>Can I suggest a comparison or test?</summary>
         <p style="color:var(--text-mid);line-height:1.7;">Yes — <a href="{{ url_for('contact') }}" style="color:var(--brass-hi);">reach out</a> with what you'd like to see tested.</p>
       </details>
+      <details style="margin-top:10px;">
+        <summary>Who performs the tests?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Tests are run by the VoxCraft team (founder-operated). We document criteria on this page so readers can judge fit for their own use case.</p>
+      </details>
     </div>
 
     <p style="margin-top:28px;">See the <a href="{{ url_for('blog_list') }}" style="color:var(--brass-hi);">VoxCraft guides</a> for individual comparisons and tutorials, or explore the <a href="{{ url_for('tools_hub') }}" style="color:var(--brass-hi);">full tool directory</a>.</p>
   </div>
 </section>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": "Do you accept payment for a favorable review or ranking?", "acceptedAnswer": {"@type": "Answer", "text": "No. Guides published on VoxCraft reflect our own testing against stated criteria, not sponsorship."}},
+    {"@type": "Question", "name": "How often is testing content updated?", "acceptedAnswer": {"@type": "Answer", "text": "Guides are updated when a meaningful change would affect the original conclusion. Each post's date reflects when it was last written or updated."}}
+  ]
+}
+</script>
 {% endblock %}
