@@ -761,6 +761,31 @@
       if (denoiseStrengthLabel) denoiseStrengthLabel.textContent = denoiseLabel(denoiseStrength.value);
     });
   });
+
+  // Standard / Studio (AI) engine toggle
+  const denoiseEngineStandardBtn = document.getElementById('denoise-engine-standard');
+  const denoiseEngineStudioBtn = document.getElementById('denoise-engine-studio');
+  const denoiseStandardControls = document.getElementById('denoise-standard-controls');
+  const denoiseStudioNote = document.getElementById('denoise-studio-note');
+  let denoiseEngine = 'standard';
+  function setDenoiseEngine(next) {
+    if (next === 'studio' && denoiseEngineStudioBtn && denoiseEngineStudioBtn.disabled) return; // Pro-gated
+    denoiseEngine = next;
+    const isStandard = denoiseEngine === 'standard';
+    if (denoiseEngineStandardBtn) {
+      denoiseEngineStandardBtn.dataset.active = isStandard ? 'true' : 'false';
+      denoiseEngineStandardBtn.classList.toggle('btn--brass', isStandard);
+    }
+    if (denoiseEngineStudioBtn) {
+      denoiseEngineStudioBtn.dataset.active = isStandard ? 'false' : 'true';
+      denoiseEngineStudioBtn.classList.toggle('btn--brass', !isStandard);
+    }
+    if (denoiseStandardControls) denoiseStandardControls.style.display = isStandard ? '' : 'none';
+    if (denoiseStudioNote) denoiseStudioNote.style.display = isStandard ? 'none' : '';
+  }
+  if (denoiseEngineStandardBtn) denoiseEngineStandardBtn.addEventListener('click', () => setDenoiseEngine('standard'));
+  if (denoiseEngineStudioBtn) denoiseEngineStudioBtn.addEventListener('click', () => setDenoiseEngine('studio'));
+
   // Voice dry/wet label
   const vcDryWet = document.getElementById('voicechange-drywet');
   const vcDryWetLabel = document.getElementById('voicechange-drywet-label');
@@ -786,10 +811,11 @@
     }
     setLoading(denoiseBtn, true);
     showProgress(denoiseProgress, true);
-    if (denoiseStatus) denoiseStatus.textContent = 'Removing noise…';
+    if (denoiseStatus) denoiseStatus.textContent = denoiseEngine === 'studio' ? 'Running AI enhancement…' : 'Removing noise…';
     if (denoiseResult) denoiseResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
+    form.append('engine', denoiseEngine);
     form.append('strength', denoiseStrength ? denoiseStrength.value : '0.5');
     const st = document.getElementById('denoise-stationary');
     form.append('stationary', st && st.checked ? '1' : '0');
@@ -800,7 +826,7 @@
         setToolError(denoiseResult, denoiseStatus, data, 'Denoise failed.');
         return;
       }
-      if (denoiseStatus) denoiseStatus.textContent = 'Noise removed';
+      if (denoiseStatus) denoiseStatus.textContent = data.engine === 'studio' ? 'Enhanced (Studio AI)' : 'Noise removed';
       if (denoiseResult) setAudioResult(denoiseResult, data.audio_b64, data.filename);
     } catch (e) {
       setToolError(denoiseResult, denoiseStatus, null, 'Network error — check your connection and try again.');
@@ -983,6 +1009,46 @@
     if (target && targetLabel) {
       target.addEventListener('input', () => { targetLabel.textContent = target.value; });
     }
+
+    // Peak / LUFS mode toggle
+    const peakModeBtn = document.getElementById('normalize-mode-peak');
+    const lufsModeBtn = document.getElementById('normalize-mode-lufs');
+    const peakControls = document.getElementById('normalize-peak-controls');
+    const lufsControls = document.getElementById('normalize-lufs-controls');
+    let mode = 'peak';
+    function setMode(next) {
+      mode = next;
+      const isPeak = mode === 'peak';
+      if (peakModeBtn) peakModeBtn.dataset.active = isPeak ? 'true' : 'false';
+      if (lufsModeBtn) lufsModeBtn.dataset.active = isPeak ? 'false' : 'true';
+      if (peakModeBtn) peakModeBtn.classList.toggle('btn--brass', isPeak);
+      if (lufsModeBtn) lufsModeBtn.classList.toggle('btn--brass', !isPeak);
+      if (peakControls) peakControls.style.display = isPeak ? '' : 'none';
+      if (lufsControls) lufsControls.style.display = isPeak ? 'none' : '';
+    }
+    if (peakModeBtn) peakModeBtn.addEventListener('click', () => setMode('peak'));
+    if (lufsModeBtn) lufsModeBtn.addEventListener('click', () => setMode('lufs'));
+
+    // LUFS preset dropdown (Streaming / Podcast / Broadcast / Custom)
+    const lufsPreset = document.getElementById('normalize-lufs-preset');
+    const lufsCustomRow = document.getElementById('normalize-lufs-custom-row');
+    const lufsCustom = document.getElementById('normalize-lufs-custom');
+    const lufsCustomLabel = document.getElementById('normalize-lufs-custom-label');
+    if (lufsPreset) {
+      lufsPreset.addEventListener('change', () => {
+        const isCustom = lufsPreset.value === 'custom';
+        if (lufsCustomRow) lufsCustomRow.style.display = isCustom ? '' : 'none';
+      });
+    }
+    if (lufsCustom && lufsCustomLabel) {
+      lufsCustom.addEventListener('input', () => { lufsCustomLabel.textContent = lufsCustom.value; });
+    }
+    function currentTargetLufs() {
+      if (!lufsPreset) return -16;
+      if (lufsPreset.value === 'custom') return lufsCustom ? lufsCustom.value : -16;
+      return lufsPreset.value;
+    }
+
     btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
       const file = document.getElementById('normalize-file').files[0];
       if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
@@ -991,13 +1057,20 @@
       if (result) result.innerHTML = '';
       const form = new FormData();
       form.append('file', file);
+      form.append('mode', mode);
       form.append('target_dbfs', target ? target.value : '-3');
+      form.append('target_lufs', currentTargetLufs());
       form.append('output_format', (document.getElementById('normalize-format') || {}).value || 'mp3');
       try {
         const res = await fetch('/api/tools/normalize', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Normalize failed.'); return; }
-        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        let statusText = `Done · ${data.size_kb || ''} KB`;
+        if (data.mode === 'lufs' && data.target_lufs != null) {
+          const before = data.before_lufs != null ? `${data.before_lufs} LUFS → ` : '';
+          statusText = `Done · ${before}${data.target_lufs} LUFS · ${data.size_kb || ''} KB`;
+        }
+        if (status) status.textContent = statusText;
         if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
