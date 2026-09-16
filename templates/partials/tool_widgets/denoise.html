@@ -1,18 +1,36 @@
   <div class="panel">
     <span class="panel__label">Denoise</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Reduce steady noise (fan, AC, hiss). Start with Light or Medium — Strong can dull speech. Up to 10MB.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Reduce steady noise (fan, AC, hiss), or run Studio mode for real AI speech enhancement. Up to 10MB.</p>
     <input type="file" class="file-input" id="denoise-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,audio/wav,audio/mpeg,audio/ogg,audio/mp4,audio/flac" style="margin-bottom:12px;">
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Strength: <span id="denoise-strength-label">Medium</span></label>
-    <input type="range" class="studio-range" id="denoise-strength" min="0.2" max="0.9" step="0.05" value="0.55" style="width:100%;margin-bottom:8px;">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-      <button type="button" class="btn btn--ghost btn--sm" data-denoise-preset="0.35">Light</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-denoise-preset="0.55">Medium</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-denoise-preset="0.8">Strong</button>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button type="button" class="btn btn--ghost btn--sm" id="denoise-engine-standard" data-active="true" style="flex:1;">Standard</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="denoise-engine-studio" style="flex:1;" {% if not is_pro_ctx %}disabled{% endif %}>Studio (AI){% if not is_pro_ctx %} — Pro{% endif %}</button>
     </div>
-    <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:var(--text-mid);margin-bottom:12px;cursor:pointer;">
-      <input type="checkbox" id="denoise-stationary" checked>
-      Stationary noise mode (better for fan / AC hum)
-    </label>
+    {% if not is_pro_ctx %}
+    <div class="limit-toast" style="margin-bottom:12px;">
+      Studio mode uses a real AI speech-enhancement model (same class as Adobe Podcast Enhance), included with Pro.
+      <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi);margin-left:6px;">See plans →</a>
+    </div>
+    {% endif %}
+
+    <div id="denoise-standard-controls">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Strength: <span id="denoise-strength-label">Medium</span></label>
+      <input type="range" class="studio-range" id="denoise-strength" min="0.2" max="0.9" step="0.05" value="0.55" style="width:100%;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button type="button" class="btn btn--ghost btn--sm" data-denoise-preset="0.35">Light</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-denoise-preset="0.55">Medium</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-denoise-preset="0.8">Strong</button>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:var(--text-mid);margin-bottom:12px;cursor:pointer;">
+        <input type="checkbox" id="denoise-stationary" checked>
+        Stationary noise mode (better for fan / AC hum)
+      </label>
+    </div>
+    <p id="denoise-studio-note" style="display:none;color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
+      Studio mode runs a full AI enhancement pass rather than a noise filter — no strength slider, it decides what's speech and what isn't. Limited to 6-minute files.
+    </p>
+
     <div class="render-bar">
       <button class="btn btn--brass" id="denoise-btn">Remove noise</button>
       <span class="render-status" data-denoise-status></span>

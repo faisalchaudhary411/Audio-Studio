@@ -1,9 +1,32 @@
   <div class="panel">
     <span class="panel__label">Normalize volume</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Raise quiet recordings or tame loud ones so peak level is consistent. Good before merging clips or uploading to YouTube. Up to 10MB.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Raise quiet recordings or tame loud ones so the level is consistent. Peak mode is a quick fix before merging clips; LUFS mode matches true perceived loudness to a streaming or broadcast target. Up to 10MB.</p>
     <input type="file" class="file-input" id="normalize-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Target peak: <span id="normalize-target-label">-3</span> dBFS</label>
-    <input type="range" class="studio-range" id="normalize-target" min="-12" max="-1" step="1" value="-3" style="width:100%;margin-bottom:12px;">
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button type="button" class="btn btn--ghost btn--sm" id="normalize-mode-peak" data-active="true" style="flex:1;">Peak</button>
+      <button type="button" class="btn btn--ghost btn--sm" id="normalize-mode-lufs" style="flex:1;">LUFS (loudness)</button>
+    </div>
+
+    <div id="normalize-peak-controls">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Target peak: <span id="normalize-target-label">-3</span> dBFS</label>
+      <input type="range" class="studio-range" id="normalize-target" min="-12" max="-1" step="1" value="-3" style="width:100%;margin-bottom:12px;">
+    </div>
+
+    <div id="normalize-lufs-controls" style="display:none;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Loudness target</label>
+      <select id="normalize-lufs-preset" class="studio-select" style="margin-bottom:8px;">
+        <option value="-14">Streaming (Spotify / YouTube) — −14 LUFS</option>
+        <option value="-16" selected>Podcast — −16 LUFS</option>
+        <option value="-23">Broadcast (EBU R128) — −23 LUFS</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <div id="normalize-lufs-custom-row" style="display:none;margin-bottom:8px;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Custom target: <span id="normalize-lufs-custom-label">-16</span> LUFS</label>
+        <input type="range" class="studio-range" id="normalize-lufs-custom" min="-30" max="-6" step="1" value="-16" style="width:100%;">
+      </div>
+    </div>
+
     <select id="normalize-format" class="studio-select" style="margin-bottom:12px;">
       <option value="mp3">MP3</option><option value="wav">WAV</option>
     </select>
