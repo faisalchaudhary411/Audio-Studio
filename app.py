@@ -3922,6 +3922,7 @@ def api_denoise():
     file = request.files.get("file")
     strength = float(request.form.get("strength", 0.5))
     stationary = request.form.get("stationary", "1") not in ("0", "false", "False")
+    preserve_stereo = request.form.get("preserve_stereo", "0") in ("1", "true", "True")
     engine = request.form.get("engine", "standard")
     if engine not in ("standard", "studio"):
         engine = "standard"
@@ -3937,7 +3938,8 @@ def api_denoise():
                 return jsonify({"error": "Studio-quality denoise (AI speech enhancement) is a Pro/Pro+ feature. Upgrade, or use standard Denoise."}), 402
             out_bytes = audio_tools.denoise_studio(file.read(), file.filename)
         else:
-            out_bytes = audio_tools.denoise(file.read(), file.filename, strength, stationary=stationary)
+            out_bytes = audio_tools.denoise(file.read(), file.filename, strength,
+                                            stationary=stationary, preserve_stereo=preserve_stereo)
         _bump_counter("usage_denoise")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                          "filename": f"VoxCraft-Denoised-{int(time.time())}.mp3",

@@ -506,11 +506,20 @@ MAX_DENOISE_DURATION_SEC = 20 * 60
 
 
 def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
-            stationary: bool = True) -> bytes:
+            stationary: bool = True, preserve_stereo: bool = False) -> bytes:
     """Reduce steady background noise.
 
     strength: 0.0–1.0 (UI: Light≈0.35, Medium≈0.55, Strong≈0.8)
     stationary: True works better for fan/AC hum; False for more varying noise
+    preserve_stereo: previously this always downmixed to mono before
+    denoising, even for stereo input (silent quality/format loss --
+    a stereo interview or music bed came back mono with no way to opt
+    out). Default False keeps the old behavior for API/back-compat;
+    when True and the source is stereo, noisereduce runs independently
+    on each channel and the result is remuxed back to stereo instead of
+    being downmixed. Roughly 2x the compute of the mono path since it's
+    two independent reduce_noise() calls -- still well inside
+    MAX_DENOISE_DURATION_SEC at typical file sizes.
     """
     check_file_size(file_bytes)
     import numpy as np
@@ -525,6 +534,23 @@ def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
             f"{MAX_DENOISE_DURATION_SEC // 60:.0f} minutes. Studio denoise has its own "
             f"(shorter) limit already."
         )
+
+    if preserve_stereo and audio.channels == 2:
+        samples = np.array(audio.get_array_of_samples()).astype(np.float32).reshape((-1, 2))
+        left = nr.reduce_noise(y=samples[:, 0], sr=audio.frame_rate,
+                                prop_decrease=strength, stationary=stationary)
+        right = nr.reduce_noise(y=samples[:, 1], sr=audio.frame_rate,
+                                 prop_decrease=strength, stationary=stationary)
+        n = min(len(left), len(right))
+        interleaved = np.empty(n * 2, dtype=np.float32)
+        interleaved[0::2] = left[:n]
+        interleaved[1::2] = right[:n]
+        reduced_int16 = np.clip(interleaved, -32768, 32767).astype(np.int16)
+        reduced_audio = AudioSegment(
+            reduced_int16.tobytes(), frame_rate=audio.frame_rate, sample_width=2, channels=2
+        )
+        return _export_bytes(reduced_audio, "mp3")
+
     samples = np.array(audio.get_array_of_samples()).astype(np.float32)
     if audio.channels == 2:
         samples = samples.reshape((-1, 2)).mean(axis=1)
@@ -870,25 +896,20 @@ MAX_EQ_DURATION_SEC = 20 * 60
 
 def simple_eq(file_bytes: bytes, filename: str, bass_db: float = 0.0,
               treble_db: float = 0.0, output_format: str = "mp3") -> bytes:
-    """Very simple 2-band EQ using one-pole low/high shelf filters.
+    """2-band EQ: proper low-shelf (bass) + high-shelf (treble) biquad filters.
 
-    Perf note (2026-09): the one-pole filter used to be a plain Python
-    for-loop over every sample (y[i] = y[i-1] + a*(x[i]-y[i-1])) run twice
-    per channel. For a 5-10min stereo file that's tens of millions of
-    pure-Python iterations inside a synchronous gunicorn request -- same
-    risk class as the transcribe worker-timeout incidents, except this
-    route had no duration guard at all (measured: ~30s projected for an
-    8min stereo file on the old loop, vs <5ms with the fix, on this
-    sandbox's CPU). The recursion is a standard one-pole IIR
-    (b=[a], a_coef=[1, -(1-a)]), so it's now computed with
-    scipy.signal.lfilter (compiled loop) -- same steady-state filter
-    response, orders of magnitude faster. One inaudible behavior change:
-    the old loop left y[0] forced to 0 (an artifact of starting the loop
-    at i=1) instead of the filter's actual first-sample output, i.e. a
-    single-sample (22μs at 44.1kHz) startup discontinuity on every run
-    that lfilter's correct initial condition no longer introduces.
-    Duration guard added as defense-in-depth now that this is cheap
-    enough to not need one under normal use.
+    Redesign note (2026-09): the previous version wasn't a real shelf
+    filter -- it built "bass"/"treble" bands by subtracting two one-pole
+    lowpass residuals from the signal (low = LP(sig), high = sig - LP(sig,
+    3000), mid = sig - low - high) and gaining each band separately. That's
+    a rough tilt-EQ hack with no real stopband control, a soft/undefined
+    corner, and no Q. Replaced with the standard RBJ Audio EQ Cookbook
+    low-shelf / high-shelf biquad design (the same formulas behind most
+    real shelving EQs) -- gives an actual flat shelf with a defined corner
+    frequency and standard Butterworth-ish slope (Q=0.707), applied via
+    scipy.signal.lfilter same as the earlier EQ perf fix. Same bass_db/
+    treble_db knobs and 250Hz/3000Hz corners as before, so no UI change
+    needed -- just cleaner, more predictable sound.
     """
     import numpy as np
     from scipy.signal import lfilter
@@ -914,29 +935,44 @@ def simple_eq(file_bytes: bytes, filename: str, bass_db: float = 0.0,
     else:
         x = samples.reshape((n, 1))
 
-    # Crude shelf EQ: low-pass residual for bass boost, high-pass residual for treble
-    # One-pole filter, vectorized via scipy.signal.lfilter instead of a
-    # per-sample Python loop (see perf note above). Same recursion:
-    # y[n] = a*x[n] + (1-a)*y[n-1]  <=>  b=[a], a_coef=[1, -(1-a)]
     sr = float(audio.frame_rate)
-    def one_pole_lp(sig, cutoff):
-        rc = 1.0 / (2 * np.pi * cutoff)
-        dt = 1.0 / sr
-        a = dt / (rc + dt)
-        b_coef = [a]
-        a_coef = [1.0, -(1.0 - a)]
-        return lfilter(b_coef, a_coef, sig)
+
+    def shelf_coeffs(f0, gain_db, shelf_type, Q=0.707):
+        """RBJ Audio EQ Cookbook low-shelf / high-shelf biquad coefficients."""
+        A = 10 ** (gain_db / 40.0)
+        w0 = 2 * np.pi * f0 / sr
+        cos_w0 = np.cos(w0)
+        sin_w0 = np.sin(w0)
+        alpha = sin_w0 / (2 * Q)
+        sqrt_A = np.sqrt(A)
+
+        if shelf_type == "low":
+            b0 = A * ((A + 1) - (A - 1) * cos_w0 + 2 * sqrt_A * alpha)
+            b1 = 2 * A * ((A - 1) - (A + 1) * cos_w0)
+            b2 = A * ((A + 1) - (A - 1) * cos_w0 - 2 * sqrt_A * alpha)
+            a0 = (A + 1) + (A - 1) * cos_w0 + 2 * sqrt_A * alpha
+            a1 = -2 * ((A - 1) + (A + 1) * cos_w0)
+            a2 = (A + 1) + (A - 1) * cos_w0 - 2 * sqrt_A * alpha
+        else:  # high
+            b0 = A * ((A + 1) + (A - 1) * cos_w0 + 2 * sqrt_A * alpha)
+            b1 = -2 * A * ((A - 1) + (A + 1) * cos_w0)
+            b2 = A * ((A + 1) + (A - 1) * cos_w0 - 2 * sqrt_A * alpha)
+            a0 = (A + 1) - (A - 1) * cos_w0 + 2 * sqrt_A * alpha
+            a1 = 2 * ((A - 1) - (A + 1) * cos_w0)
+            a2 = (A + 1) - (A - 1) * cos_w0 - 2 * sqrt_A * alpha
+
+        return np.array([b0, b1, b2]) / a0, np.array([a0, a1, a2]) / a0
 
     out = np.zeros_like(x)
     for c in range(channels):
         sig = x[:, c]
-        low = one_pole_lp(sig, 250.0)
-        high = sig - one_pole_lp(sig, 3000.0)
-        mid = sig - low - high
-        # Apply gains
-        low_g = 10 ** (bass_db / 20.0)
-        high_g = 10 ** (treble_db / 20.0)
-        y = low * low_g + mid + high * high_g
+        y = sig
+        if abs(bass_db) >= 0.1:
+            b, a = shelf_coeffs(250.0, bass_db, "low")
+            y = lfilter(b, a, y)
+        if abs(treble_db) >= 0.1:
+            b, a = shelf_coeffs(3000.0, treble_db, "high")
+            y = lfilter(b, a, y)
         out[:, c] = y
 
     flat = out.reshape(-1)
@@ -1162,8 +1198,8 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
                    end_sec: float = None) -> bytes:
     check_file_size(file_bytes, max_mb=50)
     output_format = (output_format or "mp3").lower().strip()
-    if output_format not in ("mp3", "wav", "ogg"):
-        raise UserFacingError("Output format must be mp3, wav, or ogg.")
+    if output_format not in ("mp3", "wav", "ogg", "m4a"):
+        raise UserFacingError("Output format must be mp3, wav, ogg, or m4a.")
     try:
         quality_kbps = int(quality_kbps)
     except (TypeError, ValueError):
@@ -1206,6 +1242,11 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
             cmd.extend(["-vn", "-acodec", "libmp3lame", "-ab", f"{quality_kbps}k", output_path])
         elif output_format == "wav":
             cmd.extend(["-vn", "-acodec", "pcm_s16le", output_path])
+        elif output_format == "m4a":
+            # ffmpeg's built-in native AAC encoder — no extra library
+            # dependency (libfdk_aac isn't in the default Ubuntu ffmpeg
+            # build) — into an M4A/MP4 container.
+            cmd.extend(["-vn", "-acodec", "aac", "-b:a", f"{quality_kbps}k", output_path])
         else:  # ogg
             cmd.extend(["-vn", "-acodec", "libvorbis", "-aq", "4", output_path])
 
