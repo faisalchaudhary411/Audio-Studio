@@ -30,7 +30,7 @@ TOOL_PAGES = {
         "h1": "Transcribe Urdu, Hindi, or English audio to text — free",
         "sub": "Upload a recording and get a text transcript back, with Urdu and Hindi as first-choice languages. No install, no account required for free-tier use.",
         "intro": [
-            "Transcription turns spoken audio into readable, searchable text. It's the step between \"I have a recording\" and \"I have something I can edit, quote, or publish\" — useful for turning an interview into an article, a lecture into study notes, or a voice memo into a to-do list.",
+            "Transcribe Urdu, Hindi, or English audio to text online for free with VoxCraft. Upload a WAV, MP3, M4A, OGG or FLAC recording and get a readable transcript back — no install and no account required on the free tier.",
             "Urdu and Hindi sit at the top of the language list rather than buried in a long dropdown — most general-purpose transcription tools treat South Asian languages as an afterthought, but they're first-choice options here.",
             "VoxCraft's transcriber accepts WAV, MP3, M4A, OGG and FLAC files up to 10MB, and processes longer recordings in chunks so a 20-minute interview works the same way as a 30-second clip.",
         ],
@@ -69,7 +69,7 @@ TOOL_PAGES = {
         "h1": "Convert audio format online — free",
         "sub": "Change format and bitrate in one step — useful when a platform, editor, or device only accepts a specific file type.",
         "intro": [
-            "Different tools and platforms expect different audio formats — a video editor might want WAV, a podcast host might want MP3 at a specific bitrate, and an archival copy might call for lossless FLAC. This tool converts between the five most common formats in one step.",
+            "Convert audio format online for free with VoxCraft. Change between MP3, WAV, OGG, FLAC and other common formats in the browser — pick an output type and bitrate, then download. No install or signup required on the free tier. A video editor might want WAV, a podcast host might want MP3 at a specific bitrate, and an archival copy might call for lossless FLAC — this tool converts between the five most common formats in one step.",
             "You also control bitrate for lossy formats (64–320 kbps), so you can trade file size against audio quality depending on where the file is going.",
         ],
         "how_it_works": [
@@ -180,7 +180,7 @@ TOOL_PAGES = {
         "h1": "Remove background noise from audio online — free",
         "sub": "Standard spectral noise reduction with a strength slider, or Studio AI speech enhancement (Pro) for a real model-based clean-up pass.",
         "intro": [
-            "Standard mode uses spectral noise reduction to pull down steady, continuous background noise — fan hum, room tone, air conditioning, light hiss — while leaving speech as intact as possible. It's built for consistent background noise, not sudden one-off sounds like a door slam or a dog bark, which spectral methods can't reliably distinguish from the wanted signal.",
+            "Remove background noise from audio online for free with VoxCraft. Upload a recording, choose Standard or Studio (AI) mode, and download a cleaner version in seconds — no account required. Standard mode uses spectral noise reduction to pull down steady background noise (fan hum, room tone, AC, light hiss) while keeping speech intact. It's built for consistent background noise, not sudden one-off sounds like a door slam or a dog bark, which spectral methods can't reliably distinguish from the wanted signal.",
             "Studio mode (Pro/Pro+) runs DeepFilterNet, a genuine deep-learning speech-enhancement model rather than a bigger noise filter — the same class of AI behind tools like Adobe Podcast Enhance. It doesn't just subtract a noise profile from the spectrum; it reconstructs what the speech should sound like, which handles roomy, low-quality, or non-stationary recordings that spectral gating alone can't clean up.",
         ],
         "how_it_works": [
@@ -255,7 +255,7 @@ TOOL_PAGES = {
         "h1": "Extract audio from video online — free",
         "sub": "Pull the soundtrack out of MP4, AVI, MOV, MKV or WEBM — up to 50MB, since video files run larger.",
         "intro": [
-            "This tool separates the audio track from a video file so you can edit, convert, or reuse it independently — for example, pulling narration out of a screen recording, or getting a podcast-ready audio file from a recorded video interview. Because video files are naturally larger than audio-only files, this tool allows uploads up to 50MB, higher than VoxCraft's other short-audio tools.",
+            "Extract audio from video online for free with VoxCraft. Upload an MP4, MOV, WebM or similar file and download the audio track as MP3 or WAV — no install, no account required on the free tier. Use it to pull narration out of a screen recording or get a podcast-ready audio file from a video interview. Because video files are naturally larger than audio-only files, this tool allows uploads up to 50MB, higher than VoxCraft's other short-audio tools.",
         ],
         "how_it_works": [
             "Upload your video (MP4, AVI, MOV, MKV or WEBM, up to 50MB).",
