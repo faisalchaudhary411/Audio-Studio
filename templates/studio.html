@@ -302,6 +302,34 @@
       <summary style="font-weight:600;cursor:pointer;">Do I need an account to try Voice Studio?</summary>
       <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">No. The free tier works immediately with no signup. Create an account only if you want Pro limits or Pro+ features like voice cloning.</p>
     </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">How good is Urdu and Hindi compared to English?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Urdu and Hindi are first-class in the product, not buried add-ons. Always preview a line that includes names and numbers from your niche. See <a href="/urdu-text-to-speech" style="color:var(--brass-hi)">Urdu TTS</a> and <a href="/hindi-text-to-speech" style="color:var(--brass-hi)">Hindi TTS</a>.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">Studio vs voice cloning — which should I use?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Use Studio for stock neural voices and fast multilingual narration. Use <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">voice cloning</a> when you need a specific reference voice identity (Pro+).</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">Can I redub an existing video instead of typing a script?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Yes — <a href="{{ url_for('video_redub') }}" style="color:var(--brass-hi)">Video redub</a> (Pro) transcribes, translates, and replaces the spoken track while keeping the picture.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">What should I do after generating audio?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Common next steps: <a href="{{ url_for('tool_page', slug='normalize-audio-volume') }}" style="color:var(--brass-hi)">normalize loudness</a>, <a href="{{ url_for('tool_page', slug='trim-cut-audio') }}" style="color:var(--brass-hi)">trim</a>, <a href="{{ url_for('tool_page', slug='merge-audio-files') }}" style="color:var(--brass-hi)">merge</a> sections, or <a href="{{ url_for('tool_page', slug='convert-audio-format') }}" style="color:var(--brass-hi)">convert format</a> for your editor.</p>
+    </details>
+  </div>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Related VoxCraft pages</h2>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+    <a href="{{ url_for('voice_cloning') }}" class="btn btn--sm btn--ghost">Voice cloning</a>
+    <a href="{{ url_for('video_redub') }}" class="btn btn--sm btn--ghost">Video redub</a>
+    <a href="/urdu-text-to-speech" class="btn btn--sm btn--ghost">Urdu TTS</a>
+    <a href="/hindi-text-to-speech" class="btn btn--sm btn--ghost">Hindi TTS</a>
+    <a href="/free-text-to-speech" class="btn btn--sm btn--ghost">Free TTS</a>
+    <a href="/text-to-speech-for-youtube" class="btn btn--sm btn--ghost">TTS for YouTube</a>
+    <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" class="btn btn--sm btn--ghost">Denoise</a>
+    <a href="{{ url_for('tools_hub') }}" class="btn btn--sm btn--ghost">All tools</a>
   </div>
 </section>
 
@@ -327,7 +355,9 @@
     {"@type": "Question", "name": "Is the free tier enough for regular use?", "acceptedAnswer": {"@type": "Answer", "text": "The free tier includes a daily generation limit and monthly character quota. It is enough for occasional use; frequent creators typically move to Pro."}},
     {"@type": "Question", "name": "What's the difference between Pro and Pro+?", "acceptedAnswer": {"@type": "Answer", "text": "Pro raises TTS quota and removes daily caps. Pro+ adds higher quota plus voice cloning and AI music generation."}},
     {"@type": "Question", "name": "Can I use generated narration commercially?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Narration you generate is yours to use in your own videos, courses, or projects, subject to the Terms of Service."}},
-    {"@type": "Question", "name": "Do I need an account to try Voice Studio?", "acceptedAnswer": {"@type": "Answer", "text": "No. The free tier works immediately with no signup."}}
+    {"@type": "Question", "name": "Do I need an account to try Voice Studio?", "acceptedAnswer": {"@type": "Answer", "text": "No. The free tier works immediately with no signup."}},
+    {"@type": "Question", "name": "Studio vs voice cloning — which should I use?", "acceptedAnswer": {"@type": "Answer", "text": "Use Studio for stock neural voices. Use voice cloning when you need a specific reference voice identity (Pro+)."}},
+    {"@type": "Question", "name": "Can I redub an existing video instead of typing a script?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Video redub (Pro) transcribes, translates, and replaces the spoken track while keeping the picture."}}
   ]
 }
 </script>

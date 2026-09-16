@@ -82,7 +82,7 @@
   <div class="panel" style="margin-top:8px;">
     <details style="margin-top:10px;" open>
       <summary style="font-weight:600;cursor:pointer;">Is voice cloning free?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">No — voice cloning is a Pro+ feature. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">pricing</a> for plans.</p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">No — voice cloning is a Pro+ feature. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">pricing</a> for plans. Free users can still use stock voices in <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a>.</p>
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">What languages can I generate in?</summary>
@@ -100,13 +100,29 @@
       <summary style="font-weight:600;cursor:pointer;">Is my reference clip stored?</summary>
       <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">See our <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi)">privacy policy</a> for exactly how uploaded reference audio is handled and retained.</p>
     </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">Clone vs stock Voice Studio voices?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Studio uses a library of neural voices with no reference upload. Cloning captures a specific reference identity from your sample. Most creators start in Studio and clone only when they need continuity with a real voice.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">Can I use a cloned voice for video redub?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Phase-1 <a href="{{ url_for('video_redub') }}" style="color:var(--brass-hi)">video redub</a> uses stock Studio voices. Cloning is for generating new lines from a reference clip; combine outputs in your editor if needed.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">What are the consent rules?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Only clone voices you own or have explicit permission to use. Impersonation, fraud, and non-consensual use violate the <a href="{{ url_for('terms') }}" style="color:var(--brass-hi)">Terms</a> and can lead to account action.</p>
+    </details>
   </div>
 
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Related VoxCraft tools</h2>
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
     <a href="{{ url_for('studio') }}" class="btn btn--sm btn--ghost">AI Voice Studio (text-to-speech)</a>
+    <a href="{{ url_for('video_redub') }}" class="btn btn--sm btn--ghost">Video redub</a>
     <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" class="btn btn--sm btn--ghost">AI Music Generator</a>
     <a href="{{ url_for('tool_page', slug='voice-changer') }}" class="btn btn--sm btn--ghost">Voice Changer</a>
+    <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" class="btn btn--sm btn--ghost">Denoise reference audio</a>
+    <a href="/urdu-text-to-speech" class="btn btn--sm btn--ghost">Urdu TTS</a>
+    <a href="/hindi-text-to-speech" class="btn btn--sm btn--ghost">Hindi TTS</a>
   </div>
 </section>
 
@@ -130,11 +146,13 @@
   "@context": "https://schema.org",
   "@type": "FAQPage",
   "mainEntity": [
-    {"@type": "Question", "name": "Is voice cloning free?", "acceptedAnswer": {"@type": "Answer", "text": "No, voice cloning is a Pro+ feature. See the pricing page for plans."}},
-    {"@type": "Question", "name": "What languages can I generate in?", "acceptedAnswer": {"@type": "Answer", "text": "English, Hindi (Devanagari script), and Urdu (Nastaliq script, converted to Hindi pronunciation internally)."}},
+    {"@type": "Question", "name": "Is voice cloning free?", "acceptedAnswer": {"@type": "Answer", "text": "No, voice cloning is a Pro+ feature. Free users can still use stock voices in Voice Studio."}},
+    {"@type": "Question", "name": "What languages can I generate in?", "acceptedAnswer": {"@type": "Answer", "text": "English, Hindi (Devanagari script), and Urdu (Nastaliq script)."}},
     {"@type": "Question", "name": "How long does generation take?", "acceptedAnswer": {"@type": "Answer", "text": "Typically 30 to 90 seconds depending on script length and current GPU load."}},
     {"@type": "Question", "name": "How long does the reference clip need to be?", "acceptedAnswer": {"@type": "Answer", "text": "5 to 10 seconds of clean, single-speaker audio is the sweet spot."}},
-    {"@type": "Question", "name": "Is my reference clip stored?", "acceptedAnswer": {"@type": "Answer", "text": "See the VoxCraft privacy policy for exactly how uploaded reference audio is handled and retained."}}
+    {"@type": "Question", "name": "Is my reference clip stored?", "acceptedAnswer": {"@type": "Answer", "text": "See the VoxCraft privacy policy for retention details."}},
+    {"@type": "Question", "name": "Clone vs stock Voice Studio voices?", "acceptedAnswer": {"@type": "Answer", "text": "Studio uses a library of neural voices. Cloning captures a specific reference identity from your sample."}},
+    {"@type": "Question", "name": "What are the consent rules?", "acceptedAnswer": {"@type": "Answer", "text": "Only clone voices you own or have explicit permission to use. Non-consensual impersonation violates the Terms."}}
   ]
 }
 </script>
