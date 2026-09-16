@@ -19,9 +19,8 @@ SEO_PAGES = {
         "use_cases": [('YouTube narration', 'Faceless and explainer channels that need steady Urdu voiceover without daily studio time.'), ('Learning content', 'Turn written Urdu lessons or notes into audio for listening practice.'), ('Creator drafts', 'Hear a script before hiring talent or recording yourself.'), ('Localization', 'Produce Urdu versions of English outlines when you already have the written translation.')],
         "faq": [('Is Urdu text to speech free on VoxCraft?', 'Yes. You can try Urdu voices on the free tier without creating an account, within published usage limits. See pricing for Pro limits.'), ('Which Urdu voice should I pick?', 'Preview with a line from your actual niche (news, education, story). The “best” voice depends on audience age and formality.'), ('Can I mix English words in an Urdu script?', 'Yes, but mixed lines need testing. Generate a short sample that includes the English terms you care about.'), ('Nastaliq vs Roman Urdu — what should I type?', 'Native script usually produces more reliable pronunciation than pure Roman Urdu. If you only have Roman, test carefully.'), ('Can I use the audio on monetized YouTube?', 'Audio you generate is yours to use commercially under current Terms — confirm the Terms page for details.'), ('How do I avoid robotic delivery?', 'Use natural punctuation, shorter sentences, and section-by-section generation instead of one giant block.'), ('Where do I go after generating audio?', 'Common next steps: trim, merge, denoise, or convert format in the free toolset, then drop into your editor.'), ('How is this different from global TTS sites?', 'Many tools add Urdu late. VoxCraft prioritizes South Asian creator workflows alongside English, with tools around the voiceover, not only a single generate button.')],
         "cta_label": "Try Urdu voices in Voice Studio",
-    },
         "related_links": [('Open Voice Studio', '/studio'), ('Free text to speech', '/free-text-to-speech'), ('Text to speech for YouTube', '/text-to-speech-for-youtube'), ('Hindi text to speech', '/hindi-text-to-speech'), ('Remove background noise', '/tools/remove-background-noise'), ('Convert audio format', '/tools/convert-audio-format')],
-    
+    },
     "hindi-text-to-speech": {
         "title": "Hindi Text to Speech — Create Hindi AI Voice Online | VoxCraft",
         "meta_description": "Create Hindi AI voiceovers from text online with VoxCraft. Select a Hindi voice, adjust delivery, and generate narration for videos and other projects.",
@@ -31,9 +30,8 @@ SEO_PAGES = {
         "use_cases": [('YouTube explainers', 'Hindi narration for educational and product videos.'), ('Courses', 'Audio versions of written lessons.'), ('Drafting', 'Hear pacing before a live record session.')],
         "faq": [('Is Hindi TTS free?', 'Yes within free-tier limits, no account required to start.'), ('Should I use Devanagari?', 'Yes when you can — native script usually improves pronunciation versus pure Roman Hindi.'), ('Commercial use?', 'Allowed under current Terms for audio you generate; check Terms for full rules.'), ('Can I combine with voice cloning?', 'Voice cloning is a separate Pro+ workflow. Stock Hindi neural voices are available in Studio on free/Pro tiers as published.'), ('How long should test samples be?', '20–40 seconds of real script beats a single marketing demo line.'), ('What if numbers sound wrong?', 'Rewrite numbers as words or restructure the sentence and regenerate that clause only.'), ('Where is the full voice list?', 'Inside Voice Studio’s language and voice selectors — the live list is authoritative.')],
         "cta_label": "Try Hindi voices in Voice Studio",
-    },
         "related_links": [('Voice Studio', '/studio'), ('Urdu text to speech', '/urdu-text-to-speech'), ('Free TTS', '/free-text-to-speech'), ('YouTube voiceover guide', '/how-to-create-youtube-voiceover'), ('Normalize volume', '/tools/normalize-audio-volume')],
-    
+    },
     "punjabi-text-to-speech": {
         "title": "Punjabi Text to Speech — Create Punjabi AI Voice Online | VoxCraft",
         "meta_description": "Create Punjabi AI voiceovers from text online with VoxCraft. Explore the available voice options and generate narration for creator projects.",
@@ -83,9 +81,8 @@ SEO_PAGES = {
         "use_cases": [('Faceless YouTube', 'Consistent narration without daily recording.'), ('Explainers', 'Steady educational delivery.'), ('Multilingual channels', 'Urdu/Hindi/English variants of the same outline.')],
         "faq": [('Is TTS allowed on monetized YouTube?', 'YouTube allows AI-assisted content under its policies when you follow their rules; also follow VoxCraft Terms. Policies evolve — verify on YouTube Help.'), ('Should I generate the whole video at once?', 'Section-by-section is safer for quality control and easier retakes.'), ('What loudness should I aim for?', 'Many creators normalize toward platform expectations; use the <a href="/tools/normalize-audio-volume">normalize tool</a> and check on multiple devices.'), ('Urdu or Hindi for my audience?', 'Match the audience language; test both if your channel is bilingual.'), ('Free tier enough for weekly uploads?', 'Depends on length and frequency. Watch in-product limits; upgrade when caps block your schedule.'), ('How do I make TTS less obvious?', 'Natural punctuation, moderate speed, and human editing of the script matter more than any single “emotion” toggle.'), ('Can I combine TTS with my real voice?', 'Yes — common hybrid: AI for drafts or secondary languages, human for flagship episodes.')],
         "cta_label": "Create a YouTube voiceover",
-    },
         "related_links": [('Voice Studio', '/studio'), ('How to create a YouTube voiceover', '/how-to-create-youtube-voiceover'), ('Audio tools for YouTubers', '/audio-tools-for-youtubers'), ('Normalize volume', '/tools/normalize-audio-volume'), ('Merge audio', '/tools/merge-audio-files')],
-    
+    },
     "free-text-to-speech": {
         "title": "Free Text to Speech Online — Try AI Voice Generation | VoxCraft",
         "meta_description": "Try VoxCraft's free text-to-speech workflow online. Choose an available voice, enter text, and generate narration within the current free-tier limits.",
@@ -95,9 +92,8 @@ SEO_PAGES = {
         "use_cases": [('Quick tests', 'Compare voices on the same paragraph.'), ('Small projects', 'Ship short videos within free limits.'), ('Education', 'Teachers and students testing narration ideas.')],
         "faq": [('Do I need a credit card for free TTS?', 'No. Free tier does not require signup or a card to start.'), ('Is free audio commercial-friendly?', 'Generated audio is usable commercially under current Terms — always read the live Terms page.'), ('What are the free limits?', 'Limits can change. The Studio UI and pricing page show current daily/monthly allowances.'), ('Free vs Pro — when to upgrade?', 'Upgrade when you hit caps, need batch volume, or want Pro+ features such as voice cloning.'), ('Which languages are free?', 'Free tier includes access to the Studio voice library subject to usage caps; Urdu and Hindi are first-class options.'), ('Can I remove watermarks?', 'VoxCraft does not market TTS downloads as watermarked promo files; you get the generated audio file under the plan rules.'), ('How does this compare to TTSMaker or browser read-aloud?', 'Browser read-aloud is for listening, not always for exportable creator workflows. VoxCraft focuses on downloadable narration plus editing tools.')],
         "cta_label": "Try text to speech",
-    },
         "related_links": [('Voice Studio', '/studio'), ('Urdu TTS', '/urdu-text-to-speech'), ('Hindi TTS', '/hindi-text-to-speech'), ('YouTube TTS workflow', '/text-to-speech-for-youtube'), ('All tools', '/tools')],
-    
+    },
     "how-to-create-youtube-voiceover": {
         "title": "How to Create a YouTube Voiceover — Step-by-Step Workflow | VoxCraft",
         "meta_description": "Learn a practical YouTube voiceover workflow from script preparation and voice testing to audio review, editing and final export.",
