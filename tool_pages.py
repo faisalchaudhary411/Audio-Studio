@@ -106,7 +106,7 @@ TOOL_PAGES = {
         "h1": "Merge audio files online — free",
         "sub": "Stitch clips together in order, with a configurable gap between them — no editing software required.",
         "intro": [
-            "Merging combines two or more separate audio files into a single continuous track, in the order you add them, with a configurable silence gap between each clip — the same job an \"audio joiner\" does on other sites. It's the fastest way to stitch together intro + main content + outro, or combine several voice memos into one file, without opening a full editor.",
+            "Merge audio files online for free with VoxCraft. Combine multiple MP3, WAV or OGG clips into one continuous track with an optional silence gap between them — no install or signup required. Merging is the fastest way to stitch together intro + main content + outro, or combine several voice memos into one file, without opening a full editor.",
             "Add files one at a time or in batches — each pick adds to your list rather than replacing it, so you can build up a queue before merging.",
         ],
         "how_it_works": [
@@ -143,7 +143,7 @@ TOOL_PAGES = {
         "h1": "Trim and cut audio online — free",
         "sub": "Cut down to exactly the range you need, or split one file into two at a chosen point.",
         "intro": [
-            "The Cutter does two related jobs: trimming a clip down to a specific start/end range, and splitting one file into two separate files at a chosen timestamp. Upload a file and the tool reads its duration automatically, so you can see exactly how much room you have to work with before setting your times.",
+            "Trim or cut audio online for free with VoxCraft. Set a start and end time to keep only the part you need, or split one file into two at a chosen timestamp — no desktop editor required. Upload a file and the tool reads its duration automatically, so you can see exactly how much room you have to work with before setting your times.",
         ],
         "how_it_works": [
             "Upload your file — its duration is detected automatically.",
@@ -219,7 +219,7 @@ TOOL_PAGES = {
         "h1": "Voice changer online — free pitch & effects",
         "sub": "Pitch shift, robot, echo, chipmunk or deep voice — five effects with adjustable parameters.",
         "intro": [
-            "The Voice Changer applies a deliberate effect to a voice recording rather than trying to make it sound more natural. Pitch Shift changes pitch while keeping speaking speed the same, which is different from Chipmunk and Deep Voice, which intentionally change both pitch and speed together for a more exaggerated character effect. Robot and Echo layer processing effects on top of the original voice.",
+            "Change voice online for free with VoxCraft. Apply pitch shift, chipmunk, deep voice and other effects to a recording in the browser — no account required on the free tier. The Voice Changer applies a deliberate effect rather than trying to make speech sound more natural. Pitch Shift changes pitch while keeping speaking speed the same, which is different from Chipmunk and Deep Voice, which intentionally change both pitch and speed together for a more exaggerated character effect. Robot and Echo layer processing effects on top of the original voice.",
         ],
         "how_it_works": [
             "Upload a voice clip (WAV, MP3, OGG or M4A, up to 10MB).",
@@ -291,7 +291,7 @@ TOOL_PAGES = {
         "h1": "AI music generator — text to music online",
         "sub": "Describe genre, mood and instruments; get a real instrumental or vocal track back in under a minute. Pro+ feature.",
         "intro": [
-            "VoxCraft's music generator is powered by ACE-Step, an Apache 2.0-licensed model, which means tracks generated here are safe for commercial use — always double-check the current licensing details before publishing anything commercially. Describe the style you want as comma-separated tags (genre, mood, instruments, tempo), optionally add structured lyrics, and get back a track between 10 and 120 seconds.",
+            "Generate AI music online with VoxCraft. Describe a style in plain text and get an instrumental track you can use in videos and projects — powered by ACE-Step (Apache 2.0). Always double-check current licensing details before publishing commercially. Describe the style you want as comma-separated tags (genre, mood, instruments, tempo), optionally add structured lyrics, and get back a track between 10 and 120 seconds.",
         ],
         "how_it_works": [
             "Describe your track using style tags — e.g. \"lofi, chill, piano, 90 bpm, warm.\"",
@@ -328,7 +328,7 @@ TOOL_PAGES = {
         "h1": "Normalize audio volume online — free",
         "sub": "Bring quiet clips up and tame loud peaks — quick peak normalize, or true LUFS loudness matching to a streaming, podcast or broadcast target.",
         "intro": [
-            "Two ways to level out audio, in one tool. Peak normalize is the fast option: gain is set so the loudest sample reaches a target dBFS. LUFS mode measures true perceived loudness per ITU-R BS.1770 / EBU R128 — the same standard Spotify, YouTube and podcast platforms use to decide whether to turn your upload up or down — and matches it to a target so two files with different dynamics still sound equally loud.",
+            "Normalize audio volume online for free with VoxCraft. Level a clip with peak normalize or true loudness (LUFS) so it matches streaming and podcast targets — no account required. Peak normalize is the fast option: gain is set so the loudest sample reaches a target dBFS. LUFS mode measures perceived loudness per ITU-R BS.1770 / EBU R128 — the same standard Spotify, YouTube and podcast platforms use to decide whether to turn your upload up or down — and matches it to a target so two files with different dynamics still sound equally loud.",
             "Unlike a simple volume slider, both modes analyze the file and calculate the right gain automatically rather than asking you to guess.",
         ],
         "how_it_works": [
@@ -366,7 +366,7 @@ TOOL_PAGES = {
         "h1": "Adjust audio volume online — free",
         "sub": "Raise or lower an entire clip by a fixed amount in decibels.",
         "intro": [
-            "Use this when you already know you want “about +3 dB more” or “turn this bed down a bit.” For automatic leveling across files, prefer Normalize.",
+            "Adjust audio volume online for free with VoxCraft. Raise or lower gain by a fixed amount when you already know you want about +3 dB more or need to turn a bed down — no install required. For automatic leveling across files, prefer the Normalize tool.",
         ],
         "how_it_works": [
             "Upload your file.",
@@ -396,7 +396,7 @@ TOOL_PAGES = {
         "h1": "Change audio speed online — free",
         "sub": "Make a clip faster or slower in your browser — 0.5× to 2×.",
         "intro": [
-            "Speeding up shortens duration; slowing down stretches it. By default pitch is preserved (time-stretch), so speech still sounds like the same person — better for voiceovers and Shorts.",
+            "Change audio speed online for free with VoxCraft. Speed up or slow down a clip while optionally preserving pitch — ideal for voiceovers and Shorts. Speeding up shortens duration; slowing down stretches it. By default pitch is preserved (time-stretch), so speech still sounds like the same person.",
         ],
         "how_it_works": [
             "Upload an audio file up to 10MB.",
@@ -429,7 +429,7 @@ TOOL_PAGES = {
         "h1": "Fade in fade out audio online — free",
         "sub": "Smooth the start and end of a clip so it doesn't click in a video or merge.",
         "intro": [
-            "Hard starts and stops are noticeable in videos and podcasts. A short fade-in and fade-out is one of the easiest polish steps before publish.",
+            "Add fade in and fade out to audio online for free with VoxCraft. Soften hard starts and stops before you publish a video or podcast — one of the easiest polish steps, no editor install required.",
         ],
         "how_it_works": [
             "Upload your clip.",
@@ -460,7 +460,7 @@ TOOL_PAGES = {
         "h1": "Split audio by silence online — free",
         "sub": "Cut a long file into separate parts wherever there's a pause.",
         "intro": [
-            "When you've recorded several takes in one file, or an interview with natural gaps, splitting on silence saves manual scrubbing in a full editor.",
+            "Split audio by silence online for free with VoxCraft. Automatically cut a long recording into separate clips at quiet gaps — useful when you've recorded several takes in one file or an interview with natural pauses.",
         ],
         "how_it_works": [
             "Upload a recording up to 10MB.",
@@ -492,7 +492,7 @@ TOOL_PAGES = {
         "eyebrow": "Reverse",
         "h1": "Reverse audio online — free",
         "sub": "Play a clip backwards in one click.",
-        "intro": ["Useful for effects, transitions, or checking material in reverse. Simple and fast."],
+        "intro": ["Reverse audio online for free with VoxCraft. Flip a clip backwards for effects, transitions, or a quick reverse check — simple, fast, and browser-based."],
         "how_it_works": ["Upload a file (up to 10MB).", "Tap Reverse.", "Download the result."],
         "use_cases": [("Effects", "Create reverse reverb tails or transition stingers."), ("Checking edits", "Spot issues by hearing material backwards.")],
         "tips": ["Works on any mono or stereo clip under the size limit."],
@@ -508,7 +508,7 @@ TOOL_PAGES = {
         "eyebrow": "Mono",
         "h1": "Stereo to mono converter online — free",
         "sub": "Collapse left and right into one mono channel.",
-        "intro": ["Mono is often better for voice-only uploads, phone playback, and smaller file sizes."],
+        "intro": ["Convert stereo to mono online for free with VoxCraft. Collapse a stereo file to mono for voice-only uploads, phone playback, and smaller file sizes — no install required."],
         "how_it_works": ["Upload a stereo file.", "Tap Convert to mono.", "Download."],
         "use_cases": [("Voiceover", "Simplify a dual-channel VO to mono."), ("Compatibility", "Some platforms prefer mono speech.")],
         "tips": ["If one side is silent, mono still keeps the active side."],
@@ -524,7 +524,7 @@ TOOL_PAGES = {
         "eyebrow": "Loop",
         "h1": "Loop audio online — free",
         "sub": "Repeat a short clip two to ten times.",
-        "intro": ["Handy when a short bed or stinger needs to cover a longer section without opening a full DAW."],
+        "intro": ["Loop audio online for free with VoxCraft. Repeat a short bed or stinger to cover a longer section without opening a full DAW — browser-based and free to try."],
         "how_it_works": ["Upload a short clip.", "Choose how many repeats (2–10).", "Download the looped file."],
         "use_cases": [("Music beds", "Extend a short instrumental under a longer VO."), ("Intros", "Repeat a sting for a longer bumper.")],
         "tips": ["For seamless music loops, start with a clip that already ends cleanly on a beat."],
@@ -540,7 +540,7 @@ TOOL_PAGES = {
         "eyebrow": "EQ",
         "h1": "Simple audio EQ online — free",
         "sub": "Adjust bass and treble with two controls.",
-        "intro": ["A light two-band EQ for quick fixes — not a replacement for a full studio parametric EQ."],
+        "intro": ["Apply a simple audio EQ online for free with VoxCraft. Use a light two-band EQ for quick bass/treble fixes — not a replacement for a full studio parametric EQ, but fast for everyday polish."],
         "how_it_works": ["Upload audio.", "Move Bass and Treble sliders.", "Apply and download."],
         "use_cases": [("Voice clarity", "Add a little treble so speech cuts through."), ("Warmth", "Add a touch of bass on thin recordings.")],
         "tips": ["Small moves (±3 dB) are usually enough. Large boosts can muddy or hiss."],
@@ -557,7 +557,7 @@ TOOL_PAGES = {
         "h1": "Video redub online — AI translate & re-voice",
         "sub": "Upload a video, pick a target language and voice, get a new dubbed track muxed back onto the original picture. Pro plan.",
         "intro": [
-            "Audio-only redub keeps the original picture and replaces the spoken track. The pipeline extracts audio, transcribes speech, translates the script, re-voices it with a stock neural voice, then muxes the new audio onto the video — all without needing a cloned voice or GPU time.",
+            "Redub video audio online with VoxCraft. Keep the original picture and replace the spoken track: extract audio, transcribe, translate, re-voice with a neural voice, then mux back onto the video — without needing a cloned voice or local GPU.",
             "This is the practical path for creators who want an Urdu, Hindi, Tamil, or English version of an existing clip without re-recording. Phase 1 uses the same neural voices as Studio; voice-cloning the original speaker is a later option under Pro+.",
         ],
         "how_it_works": [
