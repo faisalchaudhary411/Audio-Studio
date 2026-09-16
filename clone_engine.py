@@ -76,7 +76,7 @@ def _preprocess_reference_once(reference_audio_path: str) -> tuple:
 
 JOB_DB_PATH = os.environ.get("CLONE_JOB_DB_PATH", "/tmp/voxcraft_clone_jobs.db")
 JOB_MAX_AGE_SECONDS = 1200
-MAX_PARALLEL_SEGMENT_WORKERS = 2
+MAX_PARALLEL_SEGMENT_WORKERS = 3
 
 _db_lock = threading.Lock()
 
@@ -274,14 +274,36 @@ def _is_silent_audio(wav_bytes: bytes, silence_thresh_dbfs: float = -45.0) -> bo
         return False  # can't analyze it -- don't block the job on this check
 
 
+def _is_duration_ok(wav_bytes: bytes, text: str, min_ratio: float = 0.55) -> bool:
+    """
+    True if the generated audio is long enough to plausibly contain all
+    of `text`. Catches the same class of bug _is_silent_audio does NOT:
+    a technically valid, technically non-silent WAV that's still short
+    because the model collapsed or skipped part of the segment's content.
+    Fails open (returns True) if duration can't be measured -- must never
+    be the reason a job fails outright.
+    """
+    try:
+        from pydub import AudioSegment
+        import io
+        seg = AudioSegment.from_file(io.BytesIO(wav_bytes), format="wav")
+        actual_sec = len(seg) / 1000.0
+    except Exception:
+        return True
+    expected_sec = max(0.6, len(text) * 0.05)
+    return actual_sec >= expected_sec * min_ratio
+
+
 def _generate_chatterbox_segment(seg_text: str, ref_b64: str, language_id: str,
                                   already_processed: bool, max_silence_retries: int = 1) -> dict:
     """
-    Wraps modal_client.generate() with a silence check on top of its
-    existing network-failure retries. A segment that HTTP-succeeds but
-    comes back silent doesn't raise an exception or a non-success result,
-    so modal_clone.py's retry logic never sees it -- this catches that
-    case specifically and retries in-place before giving up.
+    Wraps modal_client.generate() with silence + duration checks on top
+    of its existing network-failure retries. A segment that HTTP-succeeds
+    but comes back silent OR too short for its text doesn't raise an
+    exception or a non-success result, so modal_clone.py's retry logic
+    never sees it -- this catches both cases specifically and retries
+    in-place before giving up. Silence catches dead air; duration catches
+    a segment that's audible but had content collapsed/skipped mid-chunk.
     """
     result = None
     for attempt in range(max_silence_retries + 1):
@@ -290,14 +312,17 @@ def _generate_chatterbox_segment(seg_text: str, ref_b64: str, language_id: str,
         if not result.get("success"):
             return result
         audio = base64.b64decode(result["audio_b64"])
-        if not _is_silent_audio(audio):
+        silent = _is_silent_audio(audio)
+        too_short = (not silent) and (not _is_duration_ok(audio, seg_text))
+        if not silent and not too_short:
             return result
         if attempt < max_silence_retries:
-            print(f"[CLONE] Segment came back silent, retrying (attempt {attempt + 1}): {seg_text[:60]}...")
-    # Exhausted retries and it's still silent -- surface this as a clear
+            reason = "silent" if silent else "too short for its text"
+            print(f"[CLONE] Segment came back {reason}, retrying (attempt {attempt + 1}): {seg_text[:60]}...")
+    # Exhausted retries and it's still bad -- surface this as a clear
     # failure naming the offending text, rather than silently shipping
-    # dead air in the middle of the final audio.
-    return {"success": False, "error": f"Segment produced silent audio after retries: \"{seg_text[:80]}...\""}
+    # dead air or dropped content in the middle of the final audio.
+    return {"success": False, "error": f"Segment produced silent or too-short audio after retries: \"{seg_text[:80]}...\""}
 
 
 def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
@@ -376,14 +401,44 @@ def _split_for_stable_generation(text: str, max_chars: int = 280) -> list:
                         if len(sent) <= max_chars:
                             piece = sent
                         else:
-                            # a single sentence longer than max_chars by
-                            # itself -- only now fall back to word-level
-                            word_pieces = _word_split(sent, max_chars)
-                            if word_pieces:
-                                segments.extend(word_pieces[:-1])
-                                piece = word_pieces[-1]
+                            # A single sentence longer than max_chars by
+                            # itself -- try comma / secondary-punctuation
+                            # splitting before ever falling back to blind
+                            # word-level cutting (mirrors modal_f5tts.py's
+                            # sentence -> comma -> hard-wrap degradation).
+                            # A mid-word or mid-clause cut gives the model
+                            # no natural pause to land on, which is a
+                            # common cause of dropped/mumbled content
+                            # right at the cut point.
+                            comma_pieces = [x.strip() for x in re.split(r"(?<=[,،])\s+", sent) if x.strip()]
+                            if len(comma_pieces) > 1:
+                                cpiece = ""
+                                for cp in comma_pieces:
+                                    ccand = (cpiece + " " + cp).strip() if cpiece else cp
+                                    if len(ccand) <= max_chars:
+                                        cpiece = ccand
+                                    else:
+                                        if cpiece:
+                                            segments.append(cpiece)
+                                        if len(cp) <= max_chars:
+                                            cpiece = cp
+                                        else:
+                                            word_pieces = _word_split(cp, max_chars)
+                                            if word_pieces:
+                                                segments.extend(word_pieces[:-1])
+                                                cpiece = word_pieces[-1]
+                                            else:
+                                                cpiece = ""
+                                piece = cpiece
                             else:
-                                piece = ""
+                                # No commas either -- only now fall back
+                                # to word-level splitting.
+                                word_pieces = _word_split(sent, max_chars)
+                                if word_pieces:
+                                    segments.extend(word_pieces[:-1])
+                                    piece = word_pieces[-1]
+                                else:
+                                    piece = ""
                 current = piece
     if current:
         segments.append(current)

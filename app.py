@@ -492,7 +492,7 @@ def _auto_restore_pro_session():
 # (machine-to-machine, not a page view), and misc crawler/infra paths.
 _TRAFFIC_EXCLUDED_PREFIXES = (
     "/static/", "/admin", "/api/", "/webhook/", "/ads/", "/ads.txt",
-    "/robots.txt", "/sitemap", "/favicon", "/.well-known/",
+    "/robots.txt", "/sitemap", "/favicon", "/.well-known/", "/llms.txt",
 )
 
 # Substrings matched case-insensitively against User-Agent. Covers crawlers,
@@ -1797,6 +1797,61 @@ Disallow: /api/
 Sitemap: {base}/sitemap.xml
 """
     return app.response_class(content, mimetype="text/plain")
+
+
+@app.route("/llms.txt")
+def llms_txt():
+    """
+    llms.txt — an emerging (not yet formally standardized) convention
+    that gives LLM-based crawlers and answer engines (ChatGPT, Gemini,
+    Perplexity, Claude, etc.) a concise, structured summary of the site
+    instead of making them infer one from rendered HTML. This is the
+    concrete AEO/GEO gap identified in the SEO review: robots.txt already
+    allows every crawler (`User-agent: *`), so nothing was ever blocking
+    AI crawlers -- there just wasn't a purpose-built summary for them to
+    read. Generated dynamically (like sitemap.xml/robots.txt) so it can't
+    silently drift out of sync with the actual page/tool list.
+    """
+    base = CANONICAL_HOST
+    lines = [
+        "# VoxCraft",
+        "",
+        "> VoxCraft is a browser-based, multilingual text-to-speech and AI "
+        "audio platform: 130+ neural voices across 40+ languages, voice "
+        "cloning, AI music generation, and free audio editing tools. No "
+        "signup required to start. Strong support for Urdu, Hindi, and "
+        "other South Asian languages.",
+        "",
+        "## Core product",
+        f"- [Studio]({base}/studio): text-to-speech, voice cloning, and AI music generation in one workspace",
+        f"- [Voice Cloning]({base}/voice-cloning): clone a voice from a short reference clip (Chatterbox and F5-TTS engines)",
+        f"- [Pricing]({base}/pricing): free tier plus Pro/Pro+ paid plans",
+        f"- [Developer API]({base}/developers): self-serve API keys, curl/Python/Node.js examples",
+        "",
+        "## Free audio tools",
+    ]
+    for slug, page in sorted(tool_pages.TOOL_PAGES.items()):
+        h1 = page.get("h1", slug)
+        lines.append(f"- [{h1}]({base}/tools/{slug})")
+
+    lines += ["", "## Language & use-case guides"]
+    for slug, page in sorted(seo_pages.SEO_PAGES.items()):
+        h1 = page.get("h1", slug)
+        lines.append(f"- [{h1}]({base}/{slug})")
+
+    lines += [
+        "",
+        "## Other",
+        f"- [Blog]({base}/blog): guides and updates on TTS, voice cloning, and audio production",
+        f"- [About]({base}/about)",
+        f"- [Contact]({base}/contact)",
+        "",
+        "## Notes for automated readers",
+        "- All tools listed above are free and require no signup.",
+        "- Pricing and plan details should be read from /pricing directly rather than assumed, since they change.",
+        f"- Full page list: {base}/sitemap.xml",
+    ]
+    return app.response_class("\n".join(lines), mimetype="text/plain")
 
 
 @app.route("/privacy")
@@ -3684,8 +3739,8 @@ _RESERVED_ROOT_SLUGS = {
     "developers", "favicon.ico", "forgot-password", "fs-callback",
     "healthz", "how-we-test", "login", "logout", "pricing", "privacy",
     "redeem", "request-status", "resend-key", "robots.txt", "sitemap.xml",
-    "static", "studio", "terms", "tools", "unlock-device", "upgrade",
-    "voice-cloning", "voices",
+    "llms.txt", "static", "studio", "terms", "tools", "unlock-device",
+    "upgrade", "voice-cloning", "voices",
     # not actual @app.route paths, but reserve them anyway since a slug
     # here would be confusing/wrong even though Werkzeug wouldn't collide:
     "api",

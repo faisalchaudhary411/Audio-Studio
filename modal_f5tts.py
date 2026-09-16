@@ -48,6 +48,33 @@ MAX_RETRIES = 2
 # model "spends" the blur on the pause; the real first word arrives after
 # the boundary and survives. Current value is the practical sweet spot.
 F5_CHUNK_LEADING_PAUSE = "۔ ۔ "
+
+# Experimental trailing buffer — mirrors the leading-pause fix above but
+# for the END of a chunk. F5 crops the model's output using only
+# `ref_audio_len` (see infer_batch_process), with no signal for where the
+# real content actually ends; if the model's transition blur lands late,
+# the last word(s) of the chunk can get cut before the stitch/crossfade
+# ever sees them. A short trailing pause gives the blur something
+# disposable to consume instead of real words. Unverified without a live
+# GPU listening test — toggle to "" to disable if it doesn't help.
+F5_CHUNK_TRAILING_PAUSE = " ۔"
+
+# Duration-vs-text validation (see clone-quality investigation).
+#
+# _is_valid_wav only checks the WAV header — it happily passes a
+# perfectly well-formed file that's simply too short for the text it was
+# supposed to speak. That's the actual mechanism behind "middle lines
+# missing": F5 emits a valid, non-silent WAV, but the model truncated or
+# skipped part of the chunk's content. Silence detection alone can't
+# catch this since the audio isn't silent, just short.
+#
+# Heuristic: expected_sec scales with character count (~0.06s/char, tuned
+# for Hindi/Urdu Devanagari speech), floored at 0.8s so tiny chunks don't
+# false-positive. A chunk is rejected (and retried by the caller) if its
+# actual duration comes in under 55% of that expectation.
+F5_MIN_DURATION_RATIO = 0.55
+F5_SEC_PER_CHAR = 0.06
+
 logger = logging.getLogger(__name__)
 
 # Reuse connections across requests for lower latency
@@ -167,19 +194,38 @@ _SHORT_ONSET_WORDS = {
 }
 
 def _protect_chunk_onset(chunk_text: str) -> str:
-    """Prepend leading pause; if chunk starts with a fragile short word,
-    add a tiny extra neutral buffer so the real word survives the crop."""
+    """Prepend leading pause (+ extra buffer for fragile short onset
+    words) and append a trailing pause, so the real content on both ends
+    of the chunk survives F5's crop-boundary blur."""
     t = (chunk_text or "").strip()
     if not t:
         return t
     pause = F5_CHUNK_LEADING_PAUSE or ""
+    trailing = F5_CHUNK_TRAILING_PAUSE or ""
     first = t.split()[0] if t.split() else ""
     # strip trailing punct from first token for lookup
     first_core = first.rstrip("।.,!?؟،")
     if first_core in _SHORT_ONSET_WORDS:
         # Extra buffer only for short onset words
-        return f"{pause}ह् {t}" if pause else f"ह् {t}"
-    return f"{pause}{t}" if pause else t
+        body = f"{pause}ह् {t}" if pause else f"ह् {t}"
+    else:
+        body = f"{pause}{t}" if pause else t
+    return f"{body}{trailing}" if trailing else body
+
+
+def _duration_ok(audio_bytes: bytes, original_text: str) -> bool:
+    """True if the generated audio is long enough to plausibly contain
+    all of original_text. Catches valid-but-truncated/collapsed WAVs that
+    _is_valid_wav's header-only check can't see. Fails open (returns True)
+    if duration can't be measured — this must never be the reason a job
+    fails outright."""
+    try:
+        seg = AudioSegment.from_file(io.BytesIO(audio_bytes), format="wav")
+        actual_sec = len(seg) / 1000.0
+    except Exception:
+        return True
+    expected_sec = max(0.8, len(original_text) * F5_SEC_PER_CHAR)
+    return actual_sec >= expected_sec * F5_MIN_DURATION_RATIO
 
 
 def _process_f5tts_chunk(chunk_tuple):
@@ -201,6 +247,12 @@ def _process_f5tts_chunk(chunk_tuple):
                 if not _is_valid_wav(audio_bytes):
                     logger.error(f"Chunk {index}: Invalid WAV from worker (len={len(audio_bytes)})")
                     return (index, False, f"Invalid WAV data from worker (len={len(audio_bytes)})", ref_text)
+                if not _duration_ok(audio_bytes, chunk_text):
+                    logger.warning(
+                        f"Chunk {index}: audio too short for text length "
+                        f"({len(chunk_text)} chars) — likely collapsed/skipped content"
+                    )
+                    return (index, False, "Audio too short for its text — likely collapsed or skipped content.", ref_text)
                 return (index, True, audio_bytes, res.get("ref_text", ref_text))
             err = res.get("error", "Empty chunk output")
             logger.warning(f"Chunk {index}: Worker reported failure: {err}")
