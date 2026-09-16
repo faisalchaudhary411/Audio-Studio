@@ -819,6 +819,8 @@
     form.append('strength', denoiseStrength ? denoiseStrength.value : '0.5');
     const st = document.getElementById('denoise-stationary');
     form.append('stationary', st && st.checked ? '1' : '0');
+    const ps = document.getElementById('denoise-preserve-stereo');
+    form.append('preserve_stereo', ps && ps.checked ? '1' : '0');
     try {
       const res = await fetch('/api/tools/denoise', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
