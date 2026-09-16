@@ -1,0 +1,61 @@
+# Keeps the F5-TTS (Hindi/Urdu clone) Modal container warm during active
+# hours, same pattern as warm-clone-worker.yml for Chatterbox.
+#
+# How it works: modal_workers/f5tts/app.py has scaledown_window=300,
+# meaning Modal kills the container after 5 minutes with no requests. This
+# workflow sends a request every 5 minutes so the container never sees
+# that idle gap and never has to cold-start the model again. The ping
+# payload is deliberately empty (chunk_text="") so the worker's own
+# "Missing chunk text or reference audio" check returns instantly --
+# you're paying for a few milliseconds of container time per ping, not a
+# real generation.
+#
+# Previously only Chatterbox was warmed (see warm-clone-worker.yml's own
+# comment, which explicitly called F5 "lower-traffic, not worth
+# double-warming on a zero-budget setup"). Added this once F5 traffic
+# picked up, since cold start is the single biggest "cloning feels slow"
+# complaint and F5's scaledown_window (300s) is actually shorter/more
+# aggressive than Chatterbox's (480s).
+#
+# One-time setup:
+#   1. In this GitHub repo: Settings -> Secrets and variables -> Actions ->
+#      New repository secret.
+#   2. Add: MODAL_F5TTS_ENDPOINT_URL = <same URL you set on your VPS as
+#      MODAL_F5TTS_ENDPOINT_URL, e.g. the modal.run URL from the deploy
+#      workflow's log>
+#
+# Tune the `cron` schedule below to your actual active hours, same as
+# warm-clone-worker.yml -- don't run this 24/7, that defeats the point of
+# not paying for 24/7 keep-warm.
+
+name: Warm F5-TTS worker
+
+on:
+  schedule:
+    # Every 5 minutes during active hours (GitHub's documented minimum
+    # reliable interval for `schedule` triggers -- see
+    # warm-clone-worker.yml's comment on why */4 silently never fires).
+    #
+    # Below covers 10:00-24:00 PKT (UTC+5), i.e. 05:00-19:00 UTC -- same
+    # window as warm-clone-worker.yml. Adjust to match your actual
+    # traffic/analytics if it differs from Chatterbox's.
+    - cron: "*/5 5-18 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping F5-TTS worker to keep it warm
+        env:
+          MODAL_F5TTS_ENDPOINT_URL: ${{ secrets.MODAL_F5TTS_ENDPOINT_URL }}
+        run: |
+          if [ -z "$MODAL_F5TTS_ENDPOINT_URL" ]; then
+            echo "MODAL_F5TTS_ENDPOINT_URL secret not set — skipping ping."
+            exit 0
+          fi
+          curl -sS -m 30 -o /dev/null -w "ping status: %{http_code}\n" \
+            -X POST "$MODAL_F5TTS_ENDPOINT_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"chunk_text":"","reference_audio_b64":"","ref_text":""}' \
+            || echo "Ping request failed (network/timeout) — container may still cold-start next real request."
