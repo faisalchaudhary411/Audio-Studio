@@ -2,12 +2,32 @@
 {% block title %}Free Online Audio Tools — Transcribe, Convert, Merge & More{% endblock %}
 {% block meta_description %}Free online audio tools: transcribe, convert, merge, trim, denoise, normalize, speed, fade, split, and more. Simple browser tools for creators.{% endblock %}
 
+{% macro tool_icon(cat) %}
+{%- if cat == "Speech & text" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M6 11v1a6 6 0 0 0 12 0v-1"/><path d="M12 18v3"/></svg>
+{%- elif cat == "Edit & clean" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8.6 7.4 19 18M19 6 8.6 16.6"/></svg>
+{%- elif cat == "Volume & tone" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8v8M10 5v14M15 9v6M20 6v12"/></svg>
+{%- elif cat == "Format & channels" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13M17 8l-3-3M17 8l-3 3"/><path d="M20 16H7M7 16l3-3M7 16l3 3"/></svg>
+{%- elif cat == "Time & effects" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+{%- elif cat == "Create" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><path d="M7 7l2 2M17 7l-2 2M7 17l2-2M17 17l-2-2"/></svg>
+{%- elif cat == "Featured" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.3 3.4 5.3 3.4 8.5s-1.2 6.2-3.4 8.5c-2.2-2.3-3.4-5.3-3.4-8.5S9.8 5.8 12 3.5Z"/></svg>
+{%- else -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+{%- endif -%}
+{% endmacro %}
+
 {% block content %}
 <div class="section" style="padding-bottom:8px;">
   <div class="section__head">
     <span class="section__eyebrow">Toolkit</span>
     <h1 class="section__title">Audio tools</h1>
-    <p class="section__sub">Pick a tool, upload a file, download the result. No install.</p>
+    <p class="section__sub">Eighteen free, single-purpose tools. Search by name, or filter by what you're trying to do.</p>
   </div>
 </div>
 
@@ -16,16 +36,17 @@
 {% endif %}
 
 <div class="section" style="padding-top:0;">
-  <div class="tools-group" style="margin-bottom:8px;">
-    <div class="tool-grid tool-grid--compact">
-      <a href="{{ url_for('video_redub') }}" class="tool-card tool-card--compact">
-        <span class="tool-card__tag">Pro · Featured</span>
-        <h3 class="tool-card__title">Video redub</h3>
-        <p class="tool-card__sub">Translate &amp; re-voice a video’s spoken track — dedicated studio page.</p>
-        <span class="tool-card__cta">Open →</span>
-      </a>
-    </div>
-  </div>
+
+  <a href="{{ url_for('video_redub') }}" class="tool-hero">
+    <span class="tool-hero__icon">{{ tool_icon("Featured") }}</span>
+    <span class="tool-hero__body">
+      <span class="tool-hero__tag">Pro · Featured</span>
+      <span class="tool-hero__title">Video redub</span>
+      <span class="tool-hero__sub">Translate and re-voice a video's spoken track, start to finish, on its own studio page.</span>
+    </span>
+    <span class="tool-hero__cta">Open →</span>
+  </a>
+
   {# Group tools into simple categories for a cleaner library #}
   {% set groups = [
     ("Speech & text", ["transcribe-audio-to-text", "voice-changer", "video-audio-redub"]),
@@ -40,14 +61,28 @@
     {% set _ = by_slug.update({t.slug: t}) %}
   {% endfor %}
 
+  <div class="tools-filterbar">
+    <label class="tools-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tools-search__icon"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="tools-search" placeholder="Search tools — denoise, transcribe, merge…" autocomplete="off">
+      <button type="button" class="tools-search__clear" id="tools-search-clear" aria-label="Clear search" hidden>&times;</button>
+    </label>
+    <div class="tools-chips" id="tools-chips">
+      <button type="button" class="tools-chip is-active" data-cat="all">All</button>
+      {% for group_name, slugs in groups %}
+      <button type="button" class="tools-chip" data-cat="{{ group_name }}">{{ group_name }}</button>
+      {% endfor %}
+    </div>
+  </div>
+
   {% for group_name, slugs in groups %}
-  <div class="tools-group">
-    <h2 class="tools-group__title">{{ group_name }}</h2>
+  <div class="tools-group" data-category="{{ group_name }}">
+    <h2 class="tools-group__title"><span class="tools-group__icon">{{ tool_icon(group_name) }}</span>{{ group_name }}</h2>
     <div class="tool-grid tool-grid--compact">
       {% for slug in slugs %}
         {% set tool = by_slug.get(slug) %}
         {% if tool %}
-        <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact">
+        <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ (tool.eyebrow ~ ' ' ~ tool.h1 ~ ' ' ~ tool.sub) | lower }}">
           <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
           <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
           <p class="tool-card__sub">{{ tool.sub }}</p>
@@ -69,11 +104,11 @@
     {% if t.slug not in listed %}{% set _ = extras.append(t) %}{% endif %}
   {% endfor %}
   {% if extras %}
-  <div class="tools-group">
+  <div class="tools-group" data-category="More">
     <h2 class="tools-group__title">More</h2>
     <div class="tool-grid tool-grid--compact">
       {% for tool in extras %}
-      <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact">
+      <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ (tool.eyebrow ~ ' ' ~ tool.h1 ~ ' ' ~ tool.sub) | lower }}">
         <span class="tool-card__tag">{{ tool.eyebrow }}</span>
         <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
         <p class="tool-card__sub">{{ tool.sub }}</p>
@@ -85,10 +120,10 @@
   {% endif %}
 
   {% if filedesk_url %}
-  <div class="tools-group">
+  <div class="tools-group" data-category="More">
     <h2 class="tools-group__title">Also from us</h2>
     <div class="tool-grid tool-grid--compact">
-      <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="tool-card tool-card--compact">
+      <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="tool-card tool-card--compact" data-search="filedesk pdf merge split compress">
         <span class="tool-card__tag">PDF</span>
         <h3 class="tool-card__title">FileDesk</h3>
         <p class="tool-card__sub">Merge, split, and compress PDFs — opens in a new tab.</p>
@@ -97,6 +132,11 @@
     </div>
   </div>
   {% endif %}
+
+  <div class="tools-empty" id="tools-empty" hidden>
+    <p>No tools match that search.</p>
+    <button type="button" class="btn btn--ghost btn--sm" id="tools-empty-clear">Clear search</button>
+  </div>
 </div>
 
 <section class="section" style="padding-top:8px;max-width:720px;">
@@ -109,4 +149,72 @@
     </ul>
   </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var search = document.getElementById('tools-search');
+  var clearBtn = document.getElementById('tools-search-clear');
+  var emptyClearBtn = document.getElementById('tools-empty-clear');
+  var chipsWrap = document.getElementById('tools-chips');
+  var empty = document.getElementById('tools-empty');
+  if (!search || !chipsWrap) return;
+
+  var activeCat = 'all';
+
+  function applyFilter() {
+    var q = search.value.trim().toLowerCase();
+    clearBtn.hidden = q.length === 0;
+    var anyVisible = false;
+
+    document.querySelectorAll('.tools-group').forEach(function (group) {
+      var cat = group.dataset.category;
+      var catMatches = activeCat === 'all' || cat === activeCat;
+      var groupHasVisible = false;
+
+      group.querySelectorAll('.tool-card').forEach(function (card) {
+        var text = card.dataset.search || '';
+        var searchMatches = !q || text.indexOf(q) !== -1;
+        var visible = catMatches && searchMatches;
+        card.style.display = visible ? '' : 'none';
+        if (visible) groupHasVisible = true;
+      });
+
+      group.style.display = groupHasVisible ? '' : 'none';
+      if (groupHasVisible) anyVisible = true;
+    });
+
+    empty.hidden = anyVisible;
+  }
+
+  search.addEventListener('input', applyFilter);
+  clearBtn.addEventListener('click', function () {
+    search.value = '';
+    applyFilter();
+    search.focus();
+  });
+  if (emptyClearBtn) {
+    emptyClearBtn.addEventListener('click', function () {
+      search.value = '';
+      setActiveChip('all');
+      applyFilter();
+    });
+  }
+
+  function setActiveChip(cat) {
+    activeCat = cat;
+    chipsWrap.querySelectorAll('.tools-chip').forEach(function (chip) {
+      chip.classList.toggle('is-active', chip.dataset.cat === cat);
+    });
+  }
+
+  chipsWrap.addEventListener('click', function (e) {
+    var chip = e.target.closest('.tools-chip');
+    if (!chip) return;
+    setActiveChip(chip.dataset.cat);
+    applyFilter();
+  });
+})();
+</script>
 {% endblock %}
