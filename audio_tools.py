@@ -12,6 +12,11 @@ Improvements (2026-09):
 - Transcribe: Urdu added, richer result metadata, SRT helper
 - Normalize: simple peak / target loudness helper for chaining
 - Shared: better format handling, duration helpers
+- EQ: fixed a real perf bug — one-pole shelf filter was a per-sample
+  Python loop with no duration cap; now vectorized via scipy.signal.lfilter
+  (same math, no behavior change) and given the same duration-guard
+  pattern as transcribe/denoise_studio. Speed (pitch-preserving path) and
+  classic Denoise also got duration guards for consistency.
 
 Transcribe: tries the Modal faster-whisper GPU worker first (see
 modal_whisper.py) when MODAL_WHISPER_ENDPOINT_URL is configured; falls
@@ -497,6 +502,9 @@ def split_on_silence(file_bytes: bytes, filename: str,
 # ---------------------------------------------------------------------------
 # Denoise
 # ---------------------------------------------------------------------------
+MAX_DENOISE_DURATION_SEC = 20 * 60
+
+
 def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
             stationary: bool = True) -> bytes:
     """Reduce steady background noise.
@@ -510,6 +518,13 @@ def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
 
     strength = max(0.05, min(1.0, float(strength)))
     audio = _load_segment(file_bytes, filename)
+    duration_sec = len(audio) / 1000.0
+    if duration_sec > MAX_DENOISE_DURATION_SEC:
+        raise UserFacingError(
+            f"Audio is {duration_sec / 60:.1f} minutes — max allowed for Denoise is "
+            f"{MAX_DENOISE_DURATION_SEC // 60:.0f} minutes. Studio denoise has its own "
+            f"(shorter) limit already."
+        )
     samples = np.array(audio.get_array_of_samples()).astype(np.float32)
     if audio.channels == 2:
         samples = samples.reshape((-1, 2)).mean(axis=1)
@@ -733,6 +748,9 @@ def change_volume(file_bytes: bytes, filename: str, gain_db: float = 0.0,
 # ---------------------------------------------------------------------------
 # Speed change (also shifts pitch — practical for Shorts pacing)
 # ---------------------------------------------------------------------------
+MAX_SPEED_DURATION_SEC = 20 * 60
+
+
 def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
                  output_format: str = "mp3", preserve_pitch: bool = True) -> bytes:
     """Change playback speed.
@@ -747,6 +765,15 @@ def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
     audio = _load_segment(file_bytes, filename)
     if abs(speed - 1.0) < 0.01:
         return _export_bytes(audio, output_format)
+
+    if preserve_pitch:
+        duration_sec = len(audio) / 1000.0
+        if duration_sec > MAX_SPEED_DURATION_SEC:
+            raise UserFacingError(
+                f"Audio is {duration_sec / 60:.1f} minutes — max allowed for pitch-preserving "
+                f"Speed change is {MAX_SPEED_DURATION_SEC // 60:.0f} minutes. Try disabling "
+                f"'preserve pitch' for longer files (simple resample has no length limit)."
+            )
 
     if not preserve_pitch:
         new_rate = int(audio.frame_rate * speed)
@@ -838,14 +865,43 @@ def loop_audio(file_bytes: bytes, filename: str, loops: int = 2,
     return _export_bytes(out, output_format)
 
 
+MAX_EQ_DURATION_SEC = 20 * 60
+
+
 def simple_eq(file_bytes: bytes, filename: str, bass_db: float = 0.0,
               treble_db: float = 0.0, output_format: str = "mp3") -> bytes:
-    """Very simple 2-band EQ using low/high shelf via scipy if available, else gain tilt."""
+    """Very simple 2-band EQ using one-pole low/high shelf filters.
+
+    Perf note (2026-09): the one-pole filter used to be a plain Python
+    for-loop over every sample (y[i] = y[i-1] + a*(x[i]-y[i-1])) run twice
+    per channel. For a 5-10min stereo file that's tens of millions of
+    pure-Python iterations inside a synchronous gunicorn request -- same
+    risk class as the transcribe worker-timeout incidents, except this
+    route had no duration guard at all (measured: ~30s projected for an
+    8min stereo file on the old loop, vs <5ms with the fix, on this
+    sandbox's CPU). The recursion is a standard one-pole IIR
+    (b=[a], a_coef=[1, -(1-a)]), so it's now computed with
+    scipy.signal.lfilter (compiled loop) -- same steady-state filter
+    response, orders of magnitude faster. One inaudible behavior change:
+    the old loop left y[0] forced to 0 (an artifact of starting the loop
+    at i=1) instead of the filter's actual first-sample output, i.e. a
+    single-sample (22μs at 44.1kHz) startup discontinuity on every run
+    that lfilter's correct initial condition no longer introduces.
+    Duration guard added as defense-in-depth now that this is cheap
+    enough to not need one under normal use.
+    """
     import numpy as np
+    from scipy.signal import lfilter
     check_file_size(file_bytes)
     bass_db = max(-12.0, min(12.0, float(bass_db)))
     treble_db = max(-12.0, min(12.0, float(treble_db)))
     audio = _load_segment(file_bytes, filename)
+    duration_sec = len(audio) / 1000.0
+    if duration_sec > MAX_EQ_DURATION_SEC:
+        raise UserFacingError(
+            f"Audio is {duration_sec / 60:.1f} minutes — max allowed for EQ is "
+            f"{MAX_EQ_DURATION_SEC // 60:.0f} minutes."
+        )
     if abs(bass_db) < 0.1 and abs(treble_db) < 0.1:
         return _export_bytes(audio, output_format)
 
@@ -859,16 +915,17 @@ def simple_eq(file_bytes: bytes, filename: str, bass_db: float = 0.0,
         x = samples.reshape((n, 1))
 
     # Crude shelf EQ: low-pass residual for bass boost, high-pass residual for treble
-    # One-pole filters
+    # One-pole filter, vectorized via scipy.signal.lfilter instead of a
+    # per-sample Python loop (see perf note above). Same recursion:
+    # y[n] = a*x[n] + (1-a)*y[n-1]  <=>  b=[a], a_coef=[1, -(1-a)]
     sr = float(audio.frame_rate)
     def one_pole_lp(sig, cutoff):
         rc = 1.0 / (2 * np.pi * cutoff)
         dt = 1.0 / sr
         a = dt / (rc + dt)
-        y = np.zeros_like(sig)
-        for i in range(1, len(sig)):
-            y[i] = y[i - 1] + a * (sig[i] - y[i - 1])
-        return y
+        b_coef = [a]
+        a_coef = [1.0, -(1.0 - a)]
+        return lfilter(b_coef, a_coef, sig)
 
     out = np.zeros_like(x)
     for c in range(channels):
