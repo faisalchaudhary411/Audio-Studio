@@ -18,8 +18,26 @@ soundfile==0.12.1
 psutil==6.0.0
 sentry-sdk[flask]>=2.0.0
 pyloudnorm==0.1.1
-# Studio-quality denoise (DeepFilterNet AI speech enhancement). CPU-only
-# torch is much smaller than the CUDA build -- if this VPS has no GPU,
-# prefer: pip install torch --index-url https://download.pytorch.org/whl/cpu
+# Studio-quality denoise (DeepFilterNet AI speech enhancement).
+# TWO one-time VPS setup steps are REQUIRED before `pip install -r
+# requirements.txt` will succeed here -- do both, in order, every time
+# this is set up on a fresh VPS/venv:
+#
+# 1. Install Rust (deepfilternet's DeepFilterLib component has no
+#    pre-built wheel for most Linux/Python combos -- pip has to compile
+#    it from source, which needs cargo on PATH):
+#      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+#      source "$HOME/.cargo/env"
+#
+# 2. Install CPU-only torch BEFORE running this file. This VPS has no
+#    GPU, but plain `pip install torch` from PyPI pulls the full CUDA
+#    build (cublas, cudnn, triton, nccl... several GB of dead weight).
+#    Installing the CPU build first satisfies the torch>=2.0.0 pin below
+#    without ever touching the CUDA packages:
+#      pip install torch --index-url https://download.pytorch.org/whl/cpu
+#
+# Skip step 1 and deepfilternet's build fails with "Cargo ... is not
+# installed". Skip step 2 and a plain `pip install -r requirements.txt`
+# silently drags in ~5GB of unused CUDA packages.
 torch>=2.0.0
 deepfilternet>=0.5.6
