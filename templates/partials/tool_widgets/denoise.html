@@ -26,6 +26,10 @@
         <input type="checkbox" id="denoise-stationary" checked>
         Stationary noise mode (better for fan / AC hum)
       </label>
+      <label style="display:flex;gap:8px;align-items:center;font-size:0.85rem;color:var(--text-mid);margin-bottom:12px;cursor:pointer;">
+        <input type="checkbox" id="denoise-preserve-stereo">
+        Preserve stereo (default downmixes to mono)
+      </label>
     </div>
     <p id="denoise-studio-note" style="display:none;color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
       Studio mode runs a full AI enhancement pass rather than a noise filter — no strength slider, it decides what's speech and what isn't. Limited to 6-minute files.
