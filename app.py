@@ -1055,7 +1055,30 @@ def landing():
 @app.route("/voices")
 def voices_page():
     """Full voice catalogue — filterable by language. Replaces the old
-    redirect to landing#voices so the page is indexable and useful on its own."""
+    redirect to landing#voices so the page is indexable and useful on its own.
+
+    Redesign note (2026-09): the old page rendered a bare golden "▶ Tap to
+    preview" button on every one of the 133 voice cards, but only 3 preview
+    mp3s actually exist on disk (static/audio/previews/). The other ~130
+    looked identically interactive and only revealed they were dead after a
+    tap (main.js's error handler disables them and shows "Preview coming
+    soon", but only post-click). Now each card only gets the real play
+    button if a preview file for it actually exists; every other card gets
+    an honest "Try in Studio" (free voices) or "Get Pro" (Pro-only voices)
+    link instead, deep-linking into /studio?lang=&voice= so it's functional
+    on click 100% of the time instead of ~2%.
+    """
+    import os as _os
+    preview_dir = _os.path.join(app.static_folder, "audio", "previews")
+    try:
+        available_previews = {
+            f[:-4].lower() for f in _os.listdir(preview_dir) if f.lower().endswith(".mp3")
+        }
+    except OSError:
+        available_previews = set()
+
+    free_voice_ids = {vid for vs in FREE_VOICES.values() for vid in vs.values()}
+
     all_voices = []
     for lang, voices in VOICES.items():
         for name, voice_id in voices.items():
@@ -1068,6 +1091,8 @@ def voices_page():
                 "language": lang,
                 "voice_id": voice_id,
                 "audio_slug": voice_id.lower(),
+                "has_preview": voice_id.lower() in available_previews,
+                "is_pro_only": voice_id not in free_voice_ids,
             })
     languages = list(VOICES.keys())
     voice_count = len(all_voices)
