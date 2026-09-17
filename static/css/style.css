@@ -2263,6 +2263,74 @@ main{min-height:50vh;}
   font-family:var(--mono);font-size:0.78rem;color:var(--text-dim);margin:0;
 }
 
+/* ===== Voices page: search box ===== */
+.voices-search{
+  display:flex;align-items:center;gap:10px;
+  background:var(--ink-panel);border:1px solid var(--line);
+  border-radius:999px;padding:10px 16px;
+  margin-bottom:14px;max-width:480px;
+  transition:border-color .2s ease;
+}
+.voices-search:focus-within{border-color:rgba(232,169,60,0.45);}
+.voices-search__icon{width:17px;height:17px;flex-shrink:0;color:var(--text-dim);}
+.voices-search input{
+  flex:1;background:none;border:none;outline:none;
+  color:var(--text-hi);font-size:0.95rem;font-family:inherit;min-width:0;
+}
+.voices-search input::placeholder{color:var(--text-dim);}
+.voices-search__clear{
+  flex-shrink:0;background:none;border:none;color:var(--text-dim);
+  font-size:1.3rem;line-height:1;cursor:pointer;padding:0 2px;
+}
+.voices-search__clear:hover{color:var(--text-hi);}
+
+/* ===== Voices page: expandable language chips ===== */
+.filter-chip--extra[hidden]{display:none;}
+.voices-more-toggle{
+  font-family:var(--mono);font-size:0.75rem;letter-spacing:0.02em;
+  padding:8px 14px;border-radius:999px;cursor:pointer;
+  background:transparent;border:1px dashed var(--line-strong);
+  color:var(--text-dim);
+  transition:border-color .15s ease, color .15s ease;
+}
+.voices-more-toggle:hover{color:var(--text-hi);border-color:var(--text-dim);}
+
+/* ===== Voices page: "Try in Studio" / "Get Pro" card CTAs (replace a dead
+   preview button on the ~98% of cards with no sample file on disk) ===== */
+.voice-card__try{
+  margin-top:auto;align-self:flex-start;
+  font-family:var(--mono);font-size:0.78rem;font-weight:600;
+  color:var(--jade-hi);text-decoration:none;
+  border:1px solid rgba(79,166,156,0.4);border-radius:999px;
+  padding:7px 14px;
+  transition:border-color .15s ease, background .15s ease;
+}
+.voice-card__try:hover{border-color:rgba(79,166,156,0.7);background:var(--jade-glow);}
+.voice-card__try--pro{
+  color:var(--brass-hi);border-color:rgba(232,169,60,0.4);
+}
+.voice-card__try--pro:hover{border-color:rgba(232,169,60,0.7);background:var(--brass-glow);}
+
+.voices-empty{text-align:center;padding:40px 20px;color:var(--text-mid);}
+.voices-empty p{margin:0 0 12px;font-size:0.95rem;}
+
+@media (max-width:640px){
+  .voices-search{max-width:none;}
+}
+
+/* Studio: brief highlight flash when a voice arrives preselected from a
+   /voices "Try in Studio" deep link, so the change doesn't happen silently */
+.studio-voice-panel.is-highlighted{
+  animation:studio-voice-flash 1.6s ease-out;
+}
+@keyframes studio-voice-flash{
+  0%{box-shadow:0 0 0 2px rgba(79,166,156,0.55);}
+  100%{box-shadow:0 0 0 0 rgba(79,166,156,0);}
+}
+@media (prefers-reduced-motion: reduce){
+  .studio-voice-panel.is-highlighted{animation:none;border-color:var(--jade);}
+}
+
 /* ===== News / discount ticker ===== */
 .announce-banner{
   position:fixed;
