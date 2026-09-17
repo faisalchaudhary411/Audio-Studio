@@ -1,0 +1,56 @@
+# Keeps the ACE-Step music Modal container warm during active hours,
+# WITHOUT paying for Modal's min_containers keep-warm feature.
+#
+# How it works: modal_workers/ace_step/app.py has scaledown_window=480,
+# meaning Modal kills the container after 8 minutes with no requests. This
+# workflow sends a request every 5 minutes so the container never sees that
+# idle gap and never has to cold-start the DiT + LM models again.
+#
+# The ping payload uses an empty prompt so the worker's own validation
+# returns immediately ("No prompt provided") — you pay for a few
+# milliseconds of container time per ping, not a real generation.
+#
+# Cold start is the single biggest "music generation feels slow" complaint.
+# Generation itself (turbo DiT) is often under a minute on a warm L40S;
+# loading both models after scale-to-zero is what takes several minutes.
+#
+# One-time setup:
+#   1. In this GitHub repo: Settings -> Secrets and variables -> Actions ->
+#      New repository secret.
+#   2. Add: MODAL_MUSIC_ENDPOINT_URL = <same URL you set on your VPS as
+#      MODAL_MUSIC_ENDPOINT_URL, e.g. the modal.run URL from the deploy
+#      workflow's log>
+#
+# Tune the `cron` schedule below to your actual active hours — don't run
+# this 24/7, that defeats the point of not paying for 24/7 keep-warm.
+
+name: Warm music worker
+
+on:
+  schedule:
+    # Every 5 minutes during active hours (GitHub's documented minimum
+    # reliable interval for `schedule` triggers — */4 silently never fires).
+    #
+    # Below covers 10:00-24:00 PKT (UTC+5), i.e. 05:00-19:00 UTC — same
+    # window as warm-clone-worker.yml / warm-f5tts-worker.yml.
+    - cron: "*/5 5-18 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping ACE-Step music worker to keep it warm
+        env:
+          MODAL_MUSIC_ENDPOINT_URL: ${{ secrets.MODAL_MUSIC_ENDPOINT_URL }}
+        run: |
+          if [ -z "$MODAL_MUSIC_ENDPOINT_URL" ]; then
+            echo "MODAL_MUSIC_ENDPOINT_URL secret not set — skipping ping."
+            exit 0
+          fi
+          # Empty prompt short-circuits in the worker before any GPU work.
+          curl -sS -m 30 -o /dev/null -w "ping status: %{http_code}\n" \
+            -X POST "$MODAL_MUSIC_ENDPOINT_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"prompt":"","lyrics":"","duration":10,"thinking":false}' \
+            || echo "Ping request failed (network/timeout) — container may still cold-start next real request."
