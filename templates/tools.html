@@ -17,6 +17,8 @@
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><path d="M7 7l2 2M17 7l-2 2M7 17l2-2M17 17l-2-2"/></svg>
 {%- elif cat == "Featured" -%}
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.2 2.3 3.4 5.3 3.4 8.5s-1.2 6.2-3.4 8.5c-2.2-2.3-3.4-5.3-3.4-8.5S9.8 5.8 12 3.5Z"/></svg>
+{%- elif cat == "PDF" -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v4h4"/></svg>
 {%- else -%}
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
 {%- endif -%}
@@ -87,8 +89,11 @@
         {% set tool = by_slug.get(slug) %}
         {% if tool %}
         <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ tool_search_text(tool) }}">
-          <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
-          <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
+          <div class="tool-card__head">
+            <span class="tool-card__icon">{{ tool_icon(group_name) }}</span>
+            <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
+          </div>
+          <h3 class="tool-card__title">{{ tool.h1 | replace(' online — free', '') | replace(' — free', '') }}</h3>
           <p class="tool-card__sub">{{ tool.sub }}</p>
           <span class="tool-card__cta">Open →</span>
         </a>
@@ -113,8 +118,11 @@
     <div class="tool-grid tool-grid--compact">
       {% for tool in extras %}
       <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ tool_search_text(tool) }}">
-        <span class="tool-card__tag">{{ tool.eyebrow }}</span>
-        <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
+        <div class="tool-card__head">
+          <span class="tool-card__icon">{{ tool_icon('') }}</span>
+          <span class="tool-card__tag">{{ tool.eyebrow }}</span>
+        </div>
+        <h3 class="tool-card__title">{{ tool.h1 | replace(' online — free', '') | replace(' — free', '') }}</h3>
         <p class="tool-card__sub">{{ tool.sub }}</p>
         <span class="tool-card__cta">Open →</span>
       </a>
@@ -128,7 +136,10 @@
     <h2 class="tools-group__title">Also from us</h2>
     <div class="tool-grid tool-grid--compact">
       <a href="{{ filedesk_url }}" target="_blank" rel="noopener" class="tool-card tool-card--compact" data-search="filedesk pdf merge split compress">
-        <span class="tool-card__tag">PDF</span>
+        <div class="tool-card__head">
+          <span class="tool-card__icon">{{ tool_icon('PDF') }}</span>
+          <span class="tool-card__tag">PDF</span>
+        </div>
         <h3 class="tool-card__title">FileDesk</h3>
         <p class="tool-card__sub">Merge, split, and compress PDFs — opens in a new tab.</p>
         <span class="tool-card__cta">Open ↗</span>
@@ -153,6 +164,46 @@
     </ul>
   </div>
 </section>
+
+{# ---- Structured data (SEO review, 2026-09): /tools had zero JSON-LD
+   despite being the highest-intent page on the site — every individual
+   tool page already carries Breadcrumb/HowTo/FAQ schema, the hub itself
+   had nothing. Breadcrumb matches the same pattern tool_page.html already
+   uses; ItemList gives search engines and AI answer engines a clean,
+   ready-made list of every tool + URL instead of having to parse it out
+   of the card grid. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Home", "item": "{{ canonical_url|replace(request.path, '/') }}"},
+    {"@type": "ListItem", "position": 2, "name": "Tools", "item": "{{ canonical_url }}"}
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "Audio tools",
+  "description": "Free, single-purpose audio tools — transcribe, convert, merge, trim, denoise, normalize, and more.",
+  "url": "{{ canonical_url }}",
+  "mainEntity": {
+    "@type": "ItemList",
+    "itemListElement": [
+      {% for t in ordered_tools %}
+      {
+        "@type": "ListItem",
+        "position": {{ loop.index }},
+        "name": {{ t.h1|tojson }},
+        "url": "{{ url_for('tool_page', slug=t.slug, _external=True) }}"
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+  }
+}
+</script>
 {% endblock %}
 
 {% block scripts %}

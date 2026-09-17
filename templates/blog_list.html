@@ -75,4 +75,46 @@
     <a href="{{ url_for('how_we_test') }}" class="btn btn--ghost btn--sm">Read our testing methodology</a>
   </div>
 </section>
+
+{# ---- Structured data (SEO review, 2026-09): individual posts already
+   carry Article schema (blog_detail.html) but the list page itself had
+   none. Blog + BreadcrumbList gives search/answer engines the collection
+   structure without needing to crawl-and-infer it, and lets a "recent
+   posts" or "guides on X" answer cite the list page itself. Only the
+   current page's posts are listed (whatever `posts` holds — respects the
+   same tag filter the page itself is showing) rather than the full
+   archive, so this never claims to represent guides that aren't actually
+   rendered on this page. #}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {"@type": "ListItem", "position": 1, "name": "Home", "item": "{{ canonical_url|replace(request.path, '/') }}"},
+    {"@type": "ListItem", "position": 2, "name": "Guides", "item": "{{ canonical_url }}"}
+  ]
+}
+</script>
+{% if posts %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Blog",
+  "name": "VoxCraft Guides",
+  "description": "Practical VoxCraft guides covering text-to-speech, audio editing, transcription, multilingual voice workflows and creator production tips.",
+  "url": "{{ canonical_url }}",
+  "blogPost": [
+    {% for post in posts %}
+    {
+      "@type": "BlogPosting",
+      "headline": {{ post.title|tojson }},
+      "url": "{{ url_for('blog_detail', identifier=post._slug, _external=True) }}"{% if post.date %},
+      "datePublished": {{ post.date|tojson }}{% endif %}{% if post.excerpt %},
+      "description": {{ post.excerpt|tojson }}{% endif %}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endif %}
 {% endblock %}
