@@ -21,6 +21,11 @@
   });
 
   const musicProgressBar = document.getElementById('music-progress');
+  // Align with music_client 12-min ceiling + job max age. Cold starts after
+  // scale-to-zero can take several minutes; give the GPU worker room before
+  // the UI gives up.
+  const POLL_TIMEOUT_MS = 12 * 60 * 1000;
+  const pollDeadline = { value: 0 };
 
   async function pollJob(jobId) {
     const res = await fetch(`/api/music/status/${jobId}`);
@@ -97,7 +102,20 @@
       voxShowProgress(musicProgressBar, false);
       return;
     }
-    const labels = { queued: 'Queued…', starting: 'Starting…', generating: 'Generating (usually 30-60s)…' };
+    if (Date.now() > pollDeadline.value) {
+      status.textContent = 'Timed out after 12 minutes. Cold starts can be slow — try Generate again; a warm run is usually much faster.';
+      voxSetBusy(generateBtn, false);
+      voxShowProgress(musicProgressBar, false);
+      return;
+    }
+    const elapsedMin = Math.floor((Date.now() - (pollDeadline.value - POLL_TIMEOUT_MS)) / 60000);
+    const labels = {
+      queued: 'Queued…',
+      starting: 'Starting GPU worker…',
+      generating: elapsedMin >= 2
+        ? `Still generating (${elapsedMin} min) — cold starts can take several minutes…`
+        : 'Generating… (warm runs ~1 min; first run after idle may take longer)',
+    };
     status.textContent = labels[data.status] || data.status;
     setTimeout(() => pollJob(jobId), 2500);
   }
@@ -111,6 +129,7 @@
     voxShowProgress(musicProgressBar, true);
     result.innerHTML = '';
     status.textContent = 'Starting…';
+    pollDeadline.value = Date.now() + POLL_TIMEOUT_MS;
     try {
       const res = await fetch('/api/music/generate', {
         method: 'POST',
