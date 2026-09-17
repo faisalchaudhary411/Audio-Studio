@@ -21,20 +21,50 @@
     populateVoices();
     try { localStorage.setItem('vox_lang', langSelect.value); } catch (e) {}
   });
-  // Restore last language + voice
+  // Restore last language + voice. URL params (from a /voices "Try in
+  // Studio" deep link) take priority over the saved localStorage
+  // selection for this load, since they express explicit intent for this
+  // visit — then get written back to localStorage so the next visit
+  // (with no params) still remembers it.
+  const urlParams = new URLSearchParams(window.location.search);
+  const qLang = urlParams.get('lang');
+  const qVoice = urlParams.get('voice');
   try {
-    const savedLang = localStorage.getItem('vox_lang');
-    if (savedLang && VOICES[savedLang]) langSelect.value = savedLang;
+    if (qLang && VOICES[qLang]) {
+      langSelect.value = qLang;
+    } else {
+      const savedLang = localStorage.getItem('vox_lang');
+      if (savedLang && VOICES[savedLang]) langSelect.value = savedLang;
+    }
   } catch (e) {}
   populateVoices();
   try {
-    const savedVoice = localStorage.getItem('vox_voice');
-    if (savedVoice) {
+    // Falls back to the dropdown's own default (first option) if qVoice
+    // doesn't exist in this session's voice list -- e.g. a Pro-only voice
+    // deep-linked by a free-tier visitor. No dead end, just a nearby voice
+    // in the same language instead of the exact one.
+    const wantVoice = qVoice || localStorage.getItem('vox_voice');
+    if (wantVoice) {
       for (const opt of voiceSelect.options) {
-        if (opt.value === savedVoice) { voiceSelect.value = savedVoice; break; }
+        if (opt.value === wantVoice) { voiceSelect.value = wantVoice; break; }
       }
     }
   } catch (e) {}
+  if (qLang || qVoice) {
+    try {
+      localStorage.setItem('vox_lang', langSelect.value);
+      localStorage.setItem('vox_voice', voiceSelect.value);
+    } catch (e) {}
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    const voicePanel = document.querySelector('.studio-voice-panel');
+    if (voicePanel) {
+      voicePanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      voicePanel.classList.add('is-highlighted');
+      setTimeout(() => voicePanel.classList.remove('is-highlighted'), 1600);
+    }
+  }
   voiceSelect.addEventListener('change', () => {
     try { localStorage.setItem('vox_voice', voiceSelect.value); } catch (e) {}
   });
