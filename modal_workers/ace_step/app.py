@@ -101,7 +101,7 @@ image = image.env(
 
 app = modal.App("voxcraft-music-worker", image=image)
 
-LM_MODEL_NAME = "acestep-5Hz-lm-4B"
+LM_MODEL_NAME = "acestep-5Hz-lm-1.7B"  # was 4B — 1.7B is the upstream default: faster CoT + colder load, still strong on style tags
 # Sanity cap independent of MUSIC_MAX_DURATION_SEC in the main app's app.py —
 # belt-and-suspenders in case this worker is ever called directly.
 MAX_DURATION_SEC = 240
@@ -113,6 +113,10 @@ class MusicRequest(BaseModel):
     duration: float = 60.0
     seed: Optional[int] = None  # was `int = None` — Pydantic v2 rejected an incoming null; see module docstring
     audio_format: str = "wav"  # "wav" or "mp3" — kept "wav" by default to match the frontend's <audio> mime type
+    # thinking=True runs the 5Hz LM (caption refine + BPM/key). Disable for a
+    # pure DiT path when the user already wrote specific tags — shaves CoT
+    # latency on warm runs. Empty prompt still short-circuits before this.
+    thinking: bool = True
 
 
 class MusicResponse(BaseModel):
@@ -127,7 +131,7 @@ class MusicResponse(BaseModel):
     image=image,
     volumes={checkpoints_dir: model_cache},
     timeout=900,  # generous — covers first-ever cold start incl. model download
-    scaledown_window=300,
+    scaledown_window=480,  # 8 min — warm cron pings every 5 min keep it alive
 )
 class ACEStepWorker:
     @modal.enter()
@@ -182,7 +186,7 @@ class ACEStepWorker:
                 caption=prompt,
                 lyrics=lyrics,
                 duration=duration,
-                thinking=True,  # let the LM stage enhance the prompt / infer BPM+key
+                thinking=bool(req.thinking),  # False = skip LM CoT for faster pure-DiT runs
             )
             config = GenerationConfig(
                 audio_format=audio_format,
