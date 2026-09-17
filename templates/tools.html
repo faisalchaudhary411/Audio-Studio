@@ -22,6 +22,10 @@
 {%- endif -%}
 {% endmacro %}
 
+{% macro tool_search_text(tool) -%}
+{{- (tool.eyebrow ~ ' ' ~ tool.h1 ~ ' ' ~ tool.sub ~ ' ' ~ (tool.blog_keywords | default([]) | join(' ')) ~ ' ' ~ (tool.slug | replace('-', ' '))) | lower -}}
+{%- endmacro %}
+
 {% block content %}
 <div class="section" style="padding-bottom:8px;">
   <div class="section__head">
@@ -82,7 +86,7 @@
       {% for slug in slugs %}
         {% set tool = by_slug.get(slug) %}
         {% if tool %}
-        <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ (tool.eyebrow ~ ' ' ~ tool.h1 ~ ' ' ~ tool.sub) | lower }}">
+        <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ tool_search_text(tool) }}">
           <span class="tool-card__tag">{{ tool.eyebrow }}{% if tool.slug == 'ai-music-generator' and not is_pro_ctx %} · Pro+{% endif %}</span>
           <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
           <p class="tool-card__sub">{{ tool.sub }}</p>
@@ -108,7 +112,7 @@
     <h2 class="tools-group__title">More</h2>
     <div class="tool-grid tool-grid--compact">
       {% for tool in extras %}
-      <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ (tool.eyebrow ~ ' ' ~ tool.h1 ~ ' ' ~ tool.sub) | lower }}">
+      <a href="{{ url_for('tool_page', slug=tool.slug) }}" class="tool-card tool-card--compact" data-search="{{ tool_search_text(tool) }}">
         <span class="tool-card__tag">{{ tool.eyebrow }}</span>
         <h3 class="tool-card__title">{{ tool.eyebrow }}</h3>
         <p class="tool-card__sub">{{ tool.sub }}</p>
@@ -215,6 +219,35 @@
     setActiveChip(chip.dataset.cat);
     applyFilter();
   });
+
+  // Self-check (2026-09): logs straight to the console if a chip's
+  // data-cat never matches any group's data-category (or vice versa) --
+  // e.g. from a stale/partial file replacement leaving mismatched or
+  // duplicated markup. On a correctly deployed page this logs nothing.
+  (function selfCheck() {
+    var chipCats = Array.prototype.map.call(
+      chipsWrap.querySelectorAll('.tools-chip'),
+      function (c) { return c.dataset.cat; }
+    ).filter(function (c) { return c !== 'all'; });
+    var groupCats = Array.prototype.map.call(
+      document.querySelectorAll('.tools-group'),
+      function (g) { return g.dataset.category; }
+    );
+    var scriptBlocks = document.querySelectorAll('#tools-chips').length;
+    if (scriptBlocks !== 1) {
+      console.warn('[tools hub] Expected exactly one #tools-chips element, found ' + scriptBlocks + ' — likely a duplicated/partial page paste.');
+    }
+    chipCats.forEach(function (cat) {
+      if (groupCats.indexOf(cat) === -1) {
+        console.warn('[tools hub] Chip "' + cat + '" has no matching .tools-group[data-category] — clicking it will always show 0 results.');
+      }
+    });
+    groupCats.forEach(function (cat) {
+      if (cat !== 'More' && chipCats.indexOf(cat) === -1) {
+        console.warn('[tools hub] Group "' + cat + '" has no matching chip — its tools are only reachable via "All" or search.');
+      }
+    });
+  })();
 })();
 </script>
 {% endblock %}

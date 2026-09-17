@@ -8,33 +8,63 @@
   <div class="section__head" style="margin-bottom:28px;">
     <span class="section__eyebrow">Voice library</span>
     <h1 class="section__title">{{ voice_count }} neural voices. South Asian languages first-class.</h1>
-    <p class="section__sub">Every voice available in Studio — filter by language, preview the ones we have samples for, then generate with any of them. No signup required to start.</p>
+    <p class="section__sub">Search or filter by language. Voices with a real audio sample play right here — every other voice opens Studio with that exact voice already picked.</p>
   </div>
+
+  {# ---- Priority languages shown as chips by default; the rest are one tap away #}
+  {% set priority_langs = ["Urdu", "Hindi", "Punjabi", "Bengali", "Tamil", "Telugu", "US English", "UK English", "Indian English", "Arabic"] %}
+  {% set extra_langs = languages | reject("in", priority_langs) | list %}
 
   {# ---- Filters ---- #}
   <div class="voices-filters" id="voices-filters">
-    <div class="voices-filters__row">
+    <label class="voices-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="voices-search__icon"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="voices-search" placeholder="Search by voice or language — Jenny, Urdu, Spanish…" autocomplete="off">
+      <button type="button" class="voices-search__clear" id="voices-search-clear" aria-label="Clear search" hidden>&times;</button>
+    </label>
+
+    <div class="voices-filters__row" id="voices-chips">
       <button type="button" class="filter-chip is-active" data-lang="all">All languages</button>
-      {% for lang in languages %}
+      {% for lang in priority_langs %}
+      {% if lang in languages %}
       <button type="button" class="filter-chip" data-lang="{{ lang }}">{{ lang }}</button>
+      {% endif %}
       {% endfor %}
+      {% for lang in extra_langs %}
+      <button type="button" class="filter-chip filter-chip--extra" data-lang="{{ lang }}" hidden>{{ lang }}</button>
+      {% endfor %}
+      {% if extra_langs %}
+      <button type="button" class="voices-more-toggle" id="voices-more-toggle" aria-expanded="false">+{{ extra_langs | length }} more languages ▾</button>
+      {% endif %}
     </div>
+
     <p class="voices-filters__count" id="voices-count">Showing {{ voice_count }} voices</p>
   </div>
 
   {# ---- Voice grid ---- #}
   <div class="voice-grid" id="voices-grid">
     {% for v in all_voices %}
-    <div class="voice-card voice-card--premium" data-lang="{{ v.language }}">
+    <div class="voice-card voice-card--premium" data-lang="{{ v.language }}" data-search="{{ (v.name ~ ' ' ~ v.language ~ ' ' ~ v.gender) | lower }}">
       <div class="voice-card__top">
         <span class="voice-card__name">{{ v.name }}</span>
         <span class="voice-card__tag">{{ v.gender }}</span>
       </div>
-      <div class="voice-card__meta">{{ v.language }} · Neural</div>
+      <div class="voice-card__meta">{{ v.language }} · Neural{% if v.is_pro_only %} · Pro{% endif %}</div>
+      {% if v.has_preview %}
       <button type="button" class="voice-card__play" data-audio="/static/audio/previews/{{ v.audio_slug }}.mp3" aria-label="Preview {{ v.name }}, {{ v.language }}">▶</button>
       <span class="voice-card__hint">Tap to preview</span>
+      {% elif v.is_pro_only %}
+      <a href="{{ url_for('upgrade', plan='pro') }}" class="voice-card__try voice-card__try--pro">Get Pro <span aria-hidden="true">→</span></a>
+      {% else %}
+      <a href="{{ url_for('studio') }}?lang={{ v.language | urlencode }}&amp;voice={{ v.voice_id | urlencode }}" class="voice-card__try">Try in Studio <span aria-hidden="true">→</span></a>
+      {% endif %}
     </div>
     {% endfor %}
+  </div>
+
+  <div class="voices-empty" id="voices-empty" hidden>
+    <p>No voices match that search.</p>
+    <button type="button" class="btn btn--ghost btn--sm" id="voices-empty-clear">Clear search</button>
   </div>
 
   <div class="voices-cta" style="margin-top:36px;">
@@ -79,29 +109,76 @@
 
 <script>
 (function(){
-  const chips = document.querySelectorAll('.filter-chip');
+  const chipsWrap = document.getElementById('voices-chips');
+  const moreToggle = document.getElementById('voices-more-toggle');
+  const search = document.getElementById('voices-search');
+  const clearBtn = document.getElementById('voices-search-clear');
+  const empty = document.getElementById('voices-empty');
+  const emptyClearBtn = document.getElementById('voices-empty-clear');
   const cards = document.querySelectorAll('#voices-grid .voice-card');
   const countEl = document.getElementById('voices-count');
-  if(!chips.length || !cards.length) return;
+  if(!chipsWrap || !cards.length) return;
 
-  chips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      chips.forEach(c => c.classList.remove('is-active'));
-      chip.classList.add('is-active');
-      const lang = chip.getAttribute('data-lang');
-      let visible = 0;
-      cards.forEach(card => {
-        const match = lang === 'all' || card.getAttribute('data-lang') === lang;
-        card.style.display = match ? '' : 'none';
-        if(match) visible++;
-      });
-      if(countEl){
-        countEl.textContent = lang === 'all'
-          ? 'Showing ' + visible + ' voices'
-          : 'Showing ' + visible + ' voice' + (visible === 1 ? '' : 's') + ' · ' + lang;
-      }
+  let activeLang = 'all';
+
+  function applyFilter(){
+    const q = search.value.trim().toLowerCase();
+    if(clearBtn) clearBtn.hidden = q.length === 0;
+    let visible = 0;
+
+    cards.forEach(card => {
+      const langMatches = activeLang === 'all' || card.getAttribute('data-lang') === activeLang;
+      const text = card.getAttribute('data-search') || '';
+      const searchMatches = !q || text.indexOf(q) !== -1;
+      const show = langMatches && searchMatches;
+      card.style.display = show ? '' : 'none';
+      if(show) visible++;
     });
+
+    if(countEl){
+      countEl.textContent = (activeLang === 'all' && !q)
+        ? 'Showing ' + visible + ' voices'
+        : 'Showing ' + visible + ' voice' + (visible === 1 ? '' : 's')
+          + (activeLang !== 'all' ? ' · ' + activeLang : '')
+          + (q ? ' matching "' + search.value.trim() + '"' : '');
+    }
+    if(empty) empty.hidden = visible !== 0;
+  }
+
+  chipsWrap.addEventListener('click', (e) => {
+    const chip = e.target.closest('.filter-chip');
+    if(!chip) return;
+    chipsWrap.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('is-active'));
+    chip.classList.add('is-active');
+    activeLang = chip.getAttribute('data-lang');
+    applyFilter();
   });
+
+  if(moreToggle){
+    moreToggle.addEventListener('click', () => {
+      const expanding = moreToggle.getAttribute('aria-expanded') !== 'true';
+      chipsWrap.querySelectorAll('.filter-chip--extra').forEach(chip => { chip.hidden = !expanding; });
+      moreToggle.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+      moreToggle.textContent = expanding ? 'Show fewer languages ▴' : moreToggle.dataset.collapsedLabel;
+    });
+    moreToggle.dataset.collapsedLabel = moreToggle.textContent;
+  }
+
+  if(search){
+    search.addEventListener('input', applyFilter);
+  }
+  if(clearBtn){
+    clearBtn.addEventListener('click', () => { search.value = ''; applyFilter(); search.focus(); });
+  }
+  if(emptyClearBtn){
+    emptyClearBtn.addEventListener('click', () => {
+      search.value = '';
+      activeLang = 'all';
+      chipsWrap.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('is-active'));
+      chipsWrap.querySelector('[data-lang="all"]').classList.add('is-active');
+      applyFilter();
+    });
+  }
 })();
 </script>
 {% endblock %}
