@@ -1765,27 +1765,52 @@ def sitemap():
     """Dynamically generated — includes every public page plus every
     published blog post, using whatever domain the request actually came in
     on (so it's correct whether you're on Render's default domain or your
-    real one, without needing a hardcoded base URL)."""
+    real one, without needing a hardcoded base URL).
+
+    lastmod note (2026-09, SEO review follow-up): tool and language/use-case
+    pages now get a real <lastmod> too, not just blog posts. Rather than
+    inventing per-page dates we don't actually track, this uses the source
+    file's own mtime (tool_pages.py / seo_pages.py) as an honest, self-
+    maintaining proxy -- it updates automatically whenever that file is next
+    edited and deployed, with zero manual upkeep, and never claims a more
+    precise date than what's actually known. The other static pages
+    (home, studio, pricing, etc.) still have no lastmod, deliberately --
+    there's no single source file whose mtime would honestly represent
+    "last content change" for a Jinja template, and a wrong/stale lastmod
+    is worse for SEO than an absent one.
+    """
+    import os as _os
     base = CANONICAL_HOST
+
+    def _file_lastmod(path):
+        try:
+            ts = _os.path.getmtime(path)
+            return dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc).strftime("%Y-%m-%d")
+        except OSError:
+            return None
+
+    tool_pages_lastmod = _file_lastmod(tool_pages.__file__)
+    seo_pages_lastmod = _file_lastmod(seo_pages.__file__)
+
     static_paths = [
-        ("/", "1.0", "weekly"),
-        ("/studio", "0.9", "weekly"),
-        ("/voice-cloning", "0.85", "monthly"),
-        ("/tools", "0.9", "weekly"),
-        *[(f"/tools/{slug}", "0.75", "monthly") for slug in tool_pages.TOOL_PAGES],
-        *[(f"/{slug}", "0.75", "monthly") for slug in seo_pages.SEO_PAGES],
-        ("/pricing", "0.8", "monthly"),
-        ("/developers", "0.7", "monthly"),
-        ("/blog", "0.7", "weekly"),
+        ("/", "1.0", "weekly", None),
+        ("/studio", "0.9", "weekly", None),
+        ("/voice-cloning", "0.85", "monthly", None),
+        ("/tools", "0.9", "weekly", None),
+        *[(f"/tools/{slug}", "0.75", "monthly", tool_pages_lastmod) for slug in tool_pages.TOOL_PAGES],
+        *[(f"/{slug}", "0.75", "monthly", seo_pages_lastmod) for slug in seo_pages.SEO_PAGES],
+        ("/pricing", "0.8", "monthly", None),
+        ("/developers", "0.7", "monthly", None),
+        ("/blog", "0.7", "weekly", None),
         # /activate and /upgrade intentionally omitted — utility pages, noindex
-        ("/privacy", "0.3", "yearly"),
-        ("/terms", "0.3", "yearly"),
-        ("/about", "0.4", "yearly"),
-        ("/how-we-test", "0.4", "yearly"),
-        ("/contact", "0.4", "yearly"),
+        ("/privacy", "0.3", "yearly", None),
+        ("/terms", "0.3", "yearly", None),
+        ("/about", "0.4", "yearly", None),
+        ("/how-we-test", "0.4", "yearly", None),
+        ("/contact", "0.4", "yearly", None),
     ]
-    urls = [{"loc": f"{base}{path}", "priority": priority, "changefreq": freq}
-            for path, priority, freq in static_paths]
+    urls = [{"loc": f"{base}{path}", "priority": priority, "changefreq": freq, "lastmod": lastmod}
+            for path, priority, freq, lastmod in static_paths]
 
     for post in persistence.load_blogs():
         if _blog_is_public(post):
