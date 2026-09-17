@@ -2674,9 +2674,25 @@ select.script-input:focus{
   flex-direction:column;
   min-height:0;
 }
+.tool-card--compact .tool-card__head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:10px;
+}
+.tool-card__icon{
+  width:32px;height:32px;border-radius:9px;flex-shrink:0;
+  background:var(--jade-glow);color:var(--jade-hi);
+  display:flex;align-items:center;justify-content:center;
+  transition:background .2s ease, transform .2s ease;
+}
+.tool-card__icon svg{width:17px;height:17px;}
+.tool-card--compact:hover .tool-card__icon{
+  background:var(--brass-glow);color:var(--brass-hi);
+  transform:scale(1.06);
+}
+.tool-card--compact .tool-card__tag{margin-bottom:0;}
 .tool-card--compact .tool-card__title{
   font-size:1.05rem;
-  margin:6px 0 6px;
+  margin:0 0 6px;
 }
 .tool-card--compact .tool-card__sub{
   font-size:0.85rem;
