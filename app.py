@@ -5204,6 +5204,13 @@ def api_music_generate():
     lyrics = (data.get("lyrics") or "").strip()
     duration = int(data.get("duration", 60))
     instrumental = bool(data.get("instrumental", True))
+    # Fast path: instrumental beds with user-written tags skip LM CoT
+    # (thinking=False). Sung tracks still use thinking so structure/BPM help.
+    # Client can force either way via "thinking": true/false.
+    if "thinking" in data:
+        thinking = bool(data.get("thinking"))
+    else:
+        thinking = not instrumental
 
     if not tags:
         return jsonify({"error": "Describe the style (e.g. 'lofi, chill, piano, 90 bpm')."}), 400
@@ -5211,7 +5218,8 @@ def api_music_generate():
         return jsonify({"error": f"Duration must be between 10 and {MUSIC_MAX_DURATION_SEC} seconds."}), 400
 
     result = music_engine.start_music_job(
-        tags, "" if instrumental else lyrics, duration, license_key=license_key or ""
+        tags, "" if instrumental else lyrics, duration,
+        license_key=license_key or "", thinking=thinking,
     )
     if result.get("error"):
         return jsonify(result), 503

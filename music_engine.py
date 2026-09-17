@@ -34,7 +34,7 @@ import music_client
 # ── SQLite job store (same pattern as clone_engine.py) ─────────────────────
 
 JOB_DB_PATH = os.environ.get("MUSIC_JOB_DB_PATH", "/tmp/voxcraft_music_jobs.db")
-JOB_MAX_AGE_SECONDS = 600
+JOB_MAX_AGE_SECONDS = 900
 _db_lock = threading.Lock()
 
 
@@ -172,14 +172,16 @@ def _fetch_job(job_id: str):
 
 # ── Core music logic ───────────────────────────────────────────────────────
 
-def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int, seed: int = None):
+def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int,
+                   seed: int = None, thinking: bool = True):
     _update_job(job_id, status="generating")
     try:
         # "wav" matches static/js/music.js, which hardcodes
         # `data:audio/wav;base64,...` for the <audio> src and download link —
         # keeping wav here avoids touching the frontend.
         result = music_client.generate(
-            prompt, lyrics, duration=float(duration), seed=seed, audio_format="wav"
+            prompt, lyrics, duration=float(duration), seed=seed,
+            audio_format="wav", thinking=thinking,
         )
         if not result.get("success"):
             _update_job(job_id, status="error", error=result.get("error", "Generation failed."))
@@ -256,11 +258,15 @@ def claim_quota_bill(job_id: str) -> str:
 
 
 def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int = None,
-                    license_key: str = "") -> dict:
+                    license_key: str = "", thinking: bool = True) -> dict:
     """Queue a music generation job and return its ID immediately.
 
     NOTE: parameter is still called 'tags' for backward compatibility with
     app.py — it's mapped to ACE-Step's 'prompt'/caption field.
+
+    thinking=False skips the LM CoT stage for a faster pure-DiT run (good when
+    style tags are already specific). thinking=True is better for sparse prompts
+    or when generating sung tracks from lyrics.
     """
     job_id = uuid.uuid4().hex
     _insert_job(job_id, license_key=license_key)
@@ -281,7 +287,7 @@ def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int =
 
     thread = threading.Thread(
         target=_run_music_job,
-        args=(job_id, prompt, lyrics, duration, seed),
+        args=(job_id, prompt, lyrics, duration, seed, thinking),
         daemon=True,
     )
     thread.start()

@@ -23,7 +23,7 @@ MODAL_MUSIC_ENDPOINT_URL = os.environ.get("MODAL_MUSIC_ENDPOINT_URL", "").strip(
 # from-scratch container, may still be finishing a multi-GB weight download
 # into the Modal Volume the very first time. Subsequent calls to an
 # already-warm container are much faster than this ceiling.
-_TIMEOUT_SEC = 420
+_TIMEOUT_SEC = 720
 
 
 def is_configured() -> bool:
@@ -31,9 +31,14 @@ def is_configured() -> bool:
 
 
 def generate(prompt: str, lyrics: str = "", duration: float = 60.0,
-             seed: int = None, audio_format: str = "wav") -> dict:
+             seed: int = None, audio_format: str = "wav",
+             thinking: bool = True) -> dict:
     """Blocking call. Returns {"success": True, "audio_b64": ..., "audio_format": ...}
-    or {"success": False, "error": ...}."""
+    or {"success": False, "error": ...}.
+
+    thinking=False skips the 5Hz LM CoT stage (faster pure-DiT). Use when the
+    prompt already has specific tags; keep True when lyrics need structure help.
+    """
     if not MODAL_MUSIC_ENDPOINT_URL:
         return {
             "success": False,
@@ -49,6 +54,7 @@ def generate(prompt: str, lyrics: str = "", duration: float = 60.0,
                 "duration": duration,
                 "seed": seed,
                 "audio_format": audio_format,
+                "thinking": bool(thinking),
             },
             timeout=_TIMEOUT_SEC,
         )
@@ -65,7 +71,7 @@ def generate(prompt: str, lyrics: str = "", duration: float = 60.0,
             "audio_format": audio_format,
         }
     except requests.exceptions.Timeout:
-        return {"success": False, "error": f"Timed out after {_TIMEOUT_SEC}s waiting for the GPU worker."}
+        return {"success": False, "error": f"Timed out after {_TIMEOUT_SEC // 60} minutes waiting for the GPU worker. Cold starts can be slow — try again; a warm run is usually much faster."}
     except Exception as e:
         print(f"[music_client] unexpected error: {e}")
         return {"success": False, "error": "Unexpected error calling the music worker."}
