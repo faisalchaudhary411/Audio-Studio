@@ -37,9 +37,13 @@
       const fname = `VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav`;
       // Shared handoff so Ace-Step music can be sent to Trim/Denoise/etc.
       if (typeof voxAudioPlayerHtml === 'function') {
-        // Normal path: main.js loaded fine, this already hydrates off the
-        // main thread via the audio worker (see voxHydrateAudioResult).
+        // Normal path: main.js loaded fine. voxAudioPlayerHtml() only inserts
+        // a placeholder shell — voxHydrateAudioResult() does the actual
+        // decode-off-main-thread and wires up the real download link.
         result.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, 'audio/wav');
+        if (typeof voxHydrateAudioResult === 'function') {
+          voxHydrateAudioResult(result, data.audio_b64, fname, 'audio/wav');
+        }
       } else {
         // Defensive fallback only — main.js failed to load/define the
         // helper. Still avoid freezing the main thread on a big base64
