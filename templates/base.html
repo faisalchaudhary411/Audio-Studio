@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
 <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
 <meta name="theme-color" content="#0c1117">
-<meta name="description" content="{% block meta_description %}VoxCraft is a multilingual text-to-speech and AI audio platform — 130+ neural voices across 40+ languages, voice cloning, music generation, and 18 free audio tools. No signup needed.{% endblock %}">
+<meta name="description" content="{% block meta_description %}Free AI text to speech and voice generator — neural voices in Urdu, Hindi, English & 45+ languages, voice cloning, AI music, and free audio tools. No signup needed to start.{% endblock %}">
 
 <!-- Open Graph / Twitter Card — controls how links look when shared on
      WhatsApp, Facebook, LinkedIn, X/Twitter, Slack, iMessage, etc. This
@@ -27,8 +27,8 @@
 <meta property="og:site_name" content="VoxCraft">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{ request.url }}">
-<meta property="og:title" content="{% block og_title %}VoxCraft — Multilingual Text-to-Speech & AI Audio Tools{% endblock %}">
-<meta property="og:description" content="{% block og_description %}130+ neural voices across 40+ languages, voice cloning, music generation, and 18 free audio tools. No signup needed to start.{% endblock %}">
+<meta property="og:title" content="{% block og_title %}VoxCraft — AI Voice Generator & Multilingual Text-to-Speech{% endblock %}">
+<meta property="og:description" content="{% block og_description %}Generate natural AI voices in Urdu, Hindi & more. Free text to speech, voice cloning, AI music generator, and audio tools — no signup to start.{% endblock %}">
 <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='favicons/android-chrome-512x512.png', _external=True) }}{% endblock %}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ self.og_title() }}">
