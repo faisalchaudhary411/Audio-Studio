@@ -1,0 +1,16 @@
+  <div class="panel">
+    <span class="panel__label">Compress</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Shrink a file's size for email, upload limits, or storage. Supports MP3, WAV, OGG, M4A, FLAC — up to 10MB.</p>
+    <input type="file" class="file-input" id="compress-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.aac,.wma,audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/ogg,audio/mp4,audio/x-m4a,audio/flac,audio/x-flac" style="margin-bottom:12px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:6px;">Compression level</label>
+    <select id="compress-level" class="studio-select" style="margin-bottom:12px;">
+      <option value="light">Light — smaller, minimal quality loss (128 kbps)</option>
+      <option value="medium" selected>Medium — good balance (96 kbps)</option>
+      <option value="max">Maximum — smallest file, more noticeable loss (64 kbps)</option>
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="compress-btn">Compress</button>
+      <span class="render-status" data-compress-status></span>
+    </div>
+    <div id="compress-result" style="margin-top:14px;"></div>
+  </div>
