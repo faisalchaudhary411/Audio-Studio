@@ -521,6 +521,88 @@
     }
   }
 
+  // ---- Compress ----
+  const compressBtn = document.getElementById('compress-btn');
+  const compressStatus = document.querySelector('[data-compress-status]');
+  const compressResult = document.getElementById('compress-result');
+  const compressProgress = ensureProgress(compressResult);
+  if (compressBtn) {
+    compressBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runCompress);
+    });
+  }
+  async function runCompress() {
+    const file = document.getElementById('compress-file').files[0];
+    if (!file) {
+      if (compressStatus) compressStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(compressBtn, true);
+    showProgress(compressProgress, true);
+    if (compressStatus) compressStatus.textContent = 'Compressing…';
+    if (compressResult) compressResult.innerHTML = '';
+    const form = new FormData();
+    form.append('file', file);
+    form.append('level', document.getElementById('compress-level').value);
+    try {
+      const res = await fetch('/api/tools/compress', { method: 'POST', body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToolError(compressResult, compressStatus, data, 'Compression failed.');
+        return;
+      }
+      const savedMsg = (typeof data.saved_pct === 'number')
+        ? `${data.original_size_mb}MB → ${data.output_size_mb}MB (${data.saved_pct}% smaller)`
+        : 'Compressed';
+      if (compressStatus) compressStatus.textContent = savedMsg;
+      if (compressResult) setAudioResult(compressResult, data.audio_b64, data.filename, mimeFor(data.format));
+    } catch (e) {
+      setToolError(compressResult, compressStatus, null, 'Network error — check your connection and try again.');
+    } finally {
+      setLoading(compressBtn, false);
+      showProgress(compressProgress, false);
+    }
+  }
+
+  // ---- Decompress ----
+  const decompressBtn = document.getElementById('decompress-btn');
+  const decompressStatus = document.querySelector('[data-decompress-status]');
+  const decompressResult = document.getElementById('decompress-result');
+  const decompressProgress = ensureProgress(decompressResult);
+  if (decompressBtn) {
+    decompressBtn.addEventListener('click', () => {
+      window.VoxCraftAds.showInterstitial(runDecompress);
+    });
+  }
+  async function runDecompress() {
+    const file = document.getElementById('decompress-file').files[0];
+    if (!file) {
+      if (decompressStatus) decompressStatus.textContent = 'Choose a file first.';
+      return;
+    }
+    setLoading(decompressBtn, true);
+    showProgress(decompressProgress, true);
+    if (decompressStatus) decompressStatus.textContent = 'Decompressing…';
+    if (decompressResult) decompressResult.innerHTML = '';
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/tools/decompress', { method: 'POST', body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToolError(decompressResult, decompressStatus, data, 'Decompression failed.');
+        return;
+      }
+      if (decompressStatus) decompressStatus.textContent = `${data.original_size_mb}MB → ${data.output_size_mb}MB (WAV)`;
+      if (decompressResult) setAudioResult(decompressResult, data.audio_b64, data.filename, mimeFor(data.format));
+    } catch (e) {
+      setToolError(decompressResult, decompressStatus, null, 'Network error — check your connection and try again.');
+    } finally {
+      setLoading(decompressBtn, false);
+      showProgress(decompressProgress, false);
+    }
+  }
+
   // ---- Merge ----
   const mergeGap = document.getElementById('merge-gap');
   const mergeAddBtn = document.getElementById('merge-add-btn');
