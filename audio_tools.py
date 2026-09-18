@@ -88,7 +88,19 @@ def check_file_size(file_bytes: bytes, max_mb: int = MAX_UPLOAD_MB):
 
 
 def _load_segment(file_bytes: bytes, filename: str) -> AudioSegment:
-    suffix = "." + filename.rsplit(".", 1)[-1].lower()
+    """Decode audio bytes into an AudioSegment.
+
+    Prefer in-memory BytesIO for common formats (avoids a temp-file write/read
+    on every tool request — material on a small VPS under concurrent load).
+    Fall back to a NamedTemporaryFile when the format needs a real path.
+    """
+    suffix = "." + (filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else "wav")
+    memory_ok = suffix in (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".webm", ".mp4")
+    if memory_ok:
+        try:
+            return AudioSegment.from_file(io.BytesIO(file_bytes), format=suffix.lstrip("."))
+        except Exception:
+            pass  # fall through to temp-file path
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
@@ -574,6 +586,9 @@ def split_on_silence(file_bytes: bytes, filename: str,
 # Denoise
 # ---------------------------------------------------------------------------
 MAX_DENOISE_DURATION_SEC = 20 * 60
+# Stereo denoise runs noisereduce twice — cap shorter on a 2GB VPS to avoid
+# stacking two full-file float buffers under concurrent load.
+MAX_DENOISE_STEREO_DURATION_SEC = 8 * 60
 
 
 def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
@@ -582,15 +597,10 @@ def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
 
     strength: 0.0–1.0 (UI: Light≈0.35, Medium≈0.55, Strong≈0.8)
     stationary: True works better for fan/AC hum; False for more varying noise
-    preserve_stereo: previously this always downmixed to mono before
-    denoising, even for stereo input (silent quality/format loss --
-    a stereo interview or music bed came back mono with no way to opt
-    out). Default False keeps the old behavior for API/back-compat;
-    when True and the source is stereo, noisereduce runs independently
-    on each channel and the result is remuxed back to stereo instead of
-    being downmixed. Roughly 2x the compute of the mono path since it's
-    two independent reduce_noise() calls -- still well inside
-    MAX_DENOISE_DURATION_SEC at typical file sizes.
+    preserve_stereo: when True and source is stereo, runs per-channel (2x CPU/RAM).
+    Default False downmixes to mono first (safer default on small VPS).
+    Long stereo + preserve_stereo is forced to mono past
+    MAX_DENOISE_STEREO_DURATION_SEC to bound peak memory.
     """
     check_file_size(file_bytes)
     import numpy as np
@@ -606,7 +616,14 @@ def denoise(file_bytes: bytes, filename: str, strength: float = 0.5,
             f"(shorter) limit already."
         )
 
-    if preserve_stereo and audio.channels == 2:
+    # Stereo path is ~2x RAM/CPU — only allow on shorter clips
+    use_stereo = (
+        preserve_stereo
+        and audio.channels == 2
+        and duration_sec <= MAX_DENOISE_STEREO_DURATION_SEC
+    )
+
+    if use_stereo:
         samples = np.array(audio.get_array_of_samples()).astype(np.float32).reshape((-1, 2))
         left = nr.reduce_noise(y=samples[:, 0], sr=audio.frame_rate,
                                 prop_decrease=strength, stationary=stationary)
@@ -845,7 +862,9 @@ def change_volume(file_bytes: bytes, filename: str, gain_db: float = 0.0,
 # ---------------------------------------------------------------------------
 # Speed change (also shifts pitch — practical for Shorts pacing)
 # ---------------------------------------------------------------------------
-MAX_SPEED_DURATION_SEC = 20 * 60
+# Pitch-preserving path uses librosa STFT — much heavier than simple resample.
+# Keep a tight cap on the 2GB VPS; non-pitch path stays unlimited by duration.
+MAX_SPEED_PITCH_DURATION_SEC = 8 * 60
 
 
 def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
@@ -855,6 +874,9 @@ def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
     preserve_pitch=True (default): time-stretch with librosa so pitch stays the same.
     preserve_pitch=False: classic resample (pitch moves with speed).
     Range 0.5x–2.0x.
+
+    Pitch-preserving stereo is downmixed to mono before stretch (half the
+    RAM/CPU of per-channel STFT) — appropriate for voice tools on a small VPS.
     """
     import numpy as np
     check_file_size(file_bytes)
@@ -865,10 +887,10 @@ def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
 
     if preserve_pitch:
         duration_sec = len(audio) / 1000.0
-        if duration_sec > MAX_SPEED_DURATION_SEC:
+        if duration_sec > MAX_SPEED_PITCH_DURATION_SEC:
             raise UserFacingError(
                 f"Audio is {duration_sec / 60:.1f} minutes — max allowed for pitch-preserving "
-                f"Speed change is {MAX_SPEED_DURATION_SEC // 60:.0f} minutes. Try disabling "
+                f"Speed change is {MAX_SPEED_PITCH_DURATION_SEC // 60:.0f} minutes. Disable "
                 f"'preserve pitch' for longer files (simple resample has no length limit)."
             )
 
@@ -878,29 +900,20 @@ def change_speed(file_bytes: bytes, filename: str, speed: float = 1.0,
         sped = sped.set_frame_rate(audio.frame_rate)
         return _export_bytes(sped, output_format)
 
-    # Pitch-preserving time stretch via librosa
+    # Pitch-preserving time stretch via librosa — mono only (downmix if needed)
     try:
         import librosa
-        samples = np.array(audio.get_array_of_samples()).astype(np.float32)
         if audio.channels > 1:
-            samples = samples.reshape((-1, audio.channels)).T  # (channels, samples)
-            stretched_ch = []
-            for ch in samples:
-                y = ch / 32768.0
-                y_st = librosa.effects.time_stretch(y, rate=speed)
-                stretched_ch.append(y_st)
-            # Match lengths
-            min_len = min(len(c) for c in stretched_ch)
-            interleaved = np.stack([c[:min_len] for c in stretched_ch], axis=1).reshape(-1)
-        else:
-            y = samples / 32768.0
-            interleaved = librosa.effects.time_stretch(y, rate=speed)
+            audio = audio.set_channels(1)
+        samples = np.array(audio.get_array_of_samples()).astype(np.float32)
+        y = samples / 32768.0
+        interleaved = librosa.effects.time_stretch(y, rate=speed)
         stretched = np.clip(interleaved * 32768.0, -32768, 32767).astype(np.int16)
         out = AudioSegment(
             stretched.tobytes(),
             frame_rate=audio.frame_rate,
-            sample_width=audio.sample_width,
-            channels=audio.channels,
+            sample_width=2,
+            channels=1,
         )
         return _export_bytes(out, output_format)
     except Exception:
@@ -952,14 +965,11 @@ def to_mono(file_bytes: bytes, filename: str, output_format: str = "mp3") -> byt
 
 def loop_audio(file_bytes: bytes, filename: str, loops: int = 2,
                output_format: str = "mp3") -> bytes:
-    """Repeat the clip N times (2–10)."""
+    """Repeat the clip N times (2–10). Uses pydub multiply to avoid O(n) copies."""
     check_file_size(file_bytes)
     loops = max(2, min(10, int(loops or 2)))
     audio = _load_segment(file_bytes, filename)
-    out = audio
-    for _ in range(loops - 1):
-        out += audio
-    return _export_bytes(out, output_format)
+    return _export_bytes(audio * loops, output_format)
 
 
 MAX_EQ_DURATION_SEC = 20 * 60
