@@ -4445,6 +4445,9 @@ def api_redub():
     target_lang = (request.form.get("target_lang") or "US English").strip()
     voice_id = (request.form.get("voice_id") or "").strip()
     voice_id_b = (request.form.get("voice_id_b") or "").strip()
+    asr_engine = (request.form.get("asr_engine") or "auto").strip().lower()
+    if asr_engine not in ("auto", "whisper", "google"):
+        asr_engine = "auto"
     try:
         speed_pct = int(request.form.get("speed_pct") or 100)
     except (TypeError, ValueError):
@@ -4483,6 +4486,7 @@ def api_redub():
             voice_id_b=voice_id_b or None,
             speed_pct=speed_pct,
             match_length=match_length,
+            asr_engine=asr_engine,
         )
     except Exception as e:
         return api_error(e, "redub this video")

@@ -29,6 +29,11 @@ from errors import UserFacingError
 from audio_tools import video_to_audio, check_file_size
 from tts_engine import tts_dispatch
 
+try:
+    import modal_whisper
+except ImportError:  # pragma: no cover
+    modal_whisper = None  # type: ignore
+
 # Fallback fixed-window when silence detection finds too few cuts.
 # Keep short so dialogue turns don't mash into one TTS blob.
 REDUB_CHUNK_MS = 5 * 1000
@@ -646,6 +651,84 @@ def _google_recognize_chunk(r, chunk, google_lang: str) -> str:
                 pass
 
 
+def whisper_transcribe_segments(
+    audio_bytes: bytes,
+    lang_code: str = "auto",
+    *,
+    timeout_sec: float = 120.0,
+) -> list[dict]:
+    """Transcribe via Modal faster-whisper; return timed segments.
+
+    Uses Whisper's own VAD segment boundaries (much better than fixed chunks
+    for dialogue). Falls back to raising so the caller can try Google.
+    """
+    if modal_whisper is None or not modal_whisper.is_configured():
+        raise UserFacingError("Whisper is not configured on this server.")
+
+    whisper_lang = None
+    if lang_code and str(lang_code).lower() not in ("auto", "none", "detect", ""):
+        whisper_lang = str(lang_code).strip().lower().split("-")[0]
+
+    # Domain hint helps numbers / hardware terms on short Hinglish reels
+    prompt = (
+        "Hindi and Hinglish conversation in a computer shop. "
+        "PC parts: RTX 5080, Intel i9 14th Gen, 32 GB RAM, 1 TB SSD. "
+        "Prices in Indian rupees and lakhs."
+    )
+
+    result = modal_whisper.transcribe_audio(
+        audio_bytes,
+        language=whisper_lang,
+        task="transcribe",
+        model_size="large-v3",
+        word_timestamps=False,
+        vad_filter=True,
+        initial_prompt=prompt,
+        timeout_sec=timeout_sec,
+        max_retries=1,
+    )
+    if not result.get("success"):
+        err = (result.get("error") or "Whisper failed").strip()[:180]
+        raise UserFacingError(f"Whisper transcription failed: {err}")
+
+    raw_segs = result.get("segments") or []
+    duration_sec = float(result.get("duration_sec") or 0.0)
+    segments: list[dict] = []
+    for s in raw_segs:
+        text = clean_asr_text((s.get("text") or "").strip())
+        if not text:
+            continue
+        start = float(s.get("start") or 0.0)
+        end = float(s.get("end") or start)
+        if end - start < 0.25:
+            end = start + 0.4
+        segments.append({
+            "start_sec": round(start, 3),
+            "end_sec": round(end, 3),
+            "text": text,
+        })
+
+    if not segments:
+        # Whole-file text only — single window
+        text = clean_asr_text((result.get("text") or "").strip())
+        if not text:
+            raise UserFacingError("Whisper returned empty speech.")
+        if duration_sec <= 0.05:
+            duration_sec = max(1.0, end if segments else 5.0)
+        segments = [{
+            "start_sec": 0.0,
+            "end_sec": round(duration_sec, 3),
+            "text": text,
+        }]
+
+    if duration_sec <= 0.05 and segments:
+        duration_sec = float(segments[-1]["end_sec"])
+    for s in segments:
+        s["_total_duration_sec"] = duration_sec
+        s["_engine"] = "whisper"
+    return segments
+
+
 def google_transcribe_segments(
     audio_bytes: bytes,
     filename: str = "extracted.mp3",
@@ -655,7 +738,7 @@ def google_transcribe_segments(
     """Transcribe with Google Speech on silence-based (or short fixed) windows.
 
     Returns list of {start_sec, end_sec, text}. Empty windows omitted.
-    No Whisper — Google only.
+    Used as fallback when Whisper is unavailable or fails.
     """
     import speech_recognition as sr
     from pydub import AudioSegment
@@ -778,6 +861,7 @@ def redub_video(
     voice_id_b: Optional[str] = None,
     speed_pct: int = 100,
     match_length: bool = True,
+    asr_engine: str = "auto",
 ) -> dict:
     """
     Full redub pipeline. Returns dict with download tokens (not base64) for
@@ -785,6 +869,11 @@ def redub_video(
 
     voice_id_b: optional second stock voice. When set, segments alternate
     voice_id / voice_id_b (cheap two-speaker approximation, no diarization).
+
+    asr_engine: "auto" | "whisper" | "google"
+      - auto: Whisper first (if configured), Google fallback
+      - whisper: Whisper only (error if unavailable)
+      - google: Google only (previous behaviour)
     """
     check_file_size(video_bytes, max_mb=MAX_VIDEO_MB)
     sweep_redub_outputs()
@@ -827,8 +916,47 @@ def redub_video(
             f"{MAX_DURATION_SEC // 60} minutes. Trim the video first, or wait for longer limits."
         )
 
-    # ---- 2. Google Speech in timed chunks (no Whisper) ----
-    segments = google_transcribe_segments(audio_bytes, "extracted.mp3", source_lang)
+    # ---- 2. Transcribe timed segments (Whisper preferred, Google fallback) ----
+    asr_engine = (asr_engine or "auto").strip().lower()
+    if asr_engine not in ("auto", "whisper", "google"):
+        asr_engine = "auto"
+
+    segments: list[dict] = []
+    used_engine = "google"
+    asr_note = None
+
+    def _try_whisper() -> list[dict]:
+        return whisper_transcribe_segments(audio_bytes, source_lang, timeout_sec=150.0)
+
+    def _try_google() -> list[dict]:
+        return google_transcribe_segments(audio_bytes, "extracted.mp3", source_lang)
+
+    if asr_engine == "google":
+        segments = _try_google()
+        used_engine = "google"
+    elif asr_engine == "whisper":
+        segments = _try_whisper()
+        used_engine = "whisper"
+    else:
+        # auto: Whisper first when Modal endpoint is set
+        whisper_ok = (
+            modal_whisper is not None
+            and modal_whisper.is_configured()
+        )
+        if whisper_ok:
+            try:
+                segments = _try_whisper()
+                used_engine = "whisper"
+            except Exception as e:
+                asr_note = f"Whisper unavailable ({str(e)[:120]}); used Google Speech."
+                print(f"[redub] Whisper failed, Google fallback: {e}", flush=True)
+                segments = _try_google()
+                used_engine = "google"
+        else:
+            segments = _try_google()
+            used_engine = "google"
+            asr_note = "Whisper not configured — using Google Speech."
+
     if segments and segments[0].get("_total_duration_sec"):
         original_dur = float(segments[0]["_total_duration_sec"]) or original_dur
     transcript = " ".join(s["text"] for s in segments).strip()
@@ -929,12 +1057,15 @@ def redub_video(
     tts_dur_final = total_dur
     silent_tail_sec = 0.0
     trimmed_sec = 0.0
+    asr_label = "Whisper (GPU)" if used_engine == "whisper" else "Google Speech"
     length_note = (
-        f"Timed dub: {len(timed_clips)} speech window(s) (silence detection + Google Speech). "
+        f"Timed dub: {len(timed_clips)} speech window(s) via {asr_label}. "
         "Natural pace preferred; light stretch only when a line overruns its window. "
         "Numbers and common Hinglish terms are cleaned before TTS. "
         "Faces are not re-animated. Set source language to Hindi (hi-IN) for best results on Indian clips."
     )
+    if asr_note:
+        length_note += f" {asr_note}"
     if dual_voice:
         length_note += f" Two voices alternated by segment ({voice_id} / {voice_id_b})."
     if tts_failures:
@@ -978,6 +1109,7 @@ def redub_video(
         "voice_note": voice_note,
         "translation_note": translation_note,
         "timed_segments": len(timed_clips),
-        "engine": "google_timed_v2",
+        "engine": f"{used_engine}_timed",
+        "asr_engine": used_engine,
         "dual_voice": dual_voice,
     }
