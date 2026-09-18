@@ -280,20 +280,45 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str, use_gpu: bool =
         chunk = audio[ci * CHUNK_MS: (ci + 1) * CHUNK_MS]
         if len(chunk) == 0:
             continue
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-            chunk.export(tmp.name, format="wav")
-            chunk_path = tmp.name
+        # chunk_path starts as None (not yet created) so the finally block
+        # below can't reference an undefined name if export() itself throws.
+        chunk_path = None
         try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                # Previously this export() call — and the temp-file creation
+                # around it — sat OUTSIDE this try/except entirely. Any
+                # transient export failure on any single chunk (of up to
+                # ~10 for an 8-minute file) crashed the whole transcription
+                # with a generic error instead of just costing one chunk,
+                # the same way a failed recognize_google() call already did.
+                chunk.export(tmp.name, format="wav")
+                chunk_path = tmp.name
             with sr.AudioFile(chunk_path) as source:
                 r.adjust_for_ambient_noise(source, duration=min(0.5, len(chunk) / 1000))
                 audio_data = r.record(source)
-            chunk_texts.append(r.recognize_google(audio_data, language=google_lang))
+            try:
+                chunk_texts.append(r.recognize_google(audio_data, language=google_lang))
+            except sr.UnknownValueError:
+                pass
+            except Exception:
+                # One retry: Google's free recognition endpoint can
+                # transiently rate-limit or hiccup on a burst of back-to-back
+                # calls — more likely the more chunks a file has. A short
+                # pause + single retry recovers most of these instead of
+                # permanently dropping that chunk's text on the first blip.
+                time.sleep(1.0)
+                try:
+                    chunk_texts.append(r.recognize_google(audio_data, language=google_lang))
+                except sr.UnknownValueError:
+                    pass
+                except Exception:
+                    chunk_failures += 1
         except sr.UnknownValueError:
             pass
         except Exception:
             chunk_failures += 1
         finally:
-            if os.path.exists(chunk_path):
+            if chunk_path and os.path.exists(chunk_path):
                 os.unlink(chunk_path)
 
     if not chunk_texts:
