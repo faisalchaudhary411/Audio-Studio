@@ -1,25 +1,21 @@
 """
-redub_engine.py — Audio-only video redub (Phase 1).
+redub_engine.py — Audio-only video redub (Phase 1 / 1.5 timed dub).
 
-Pipeline (all local / free except translation API):
-  1. Extract audio from video          (ffmpeg — already paid for on VPS)
-  2. Transcribe original audio         (existing audio_tools.transcribe)
-  3. Translate transcript              (Azure Translator preferred, Google fallback)
-  4. Re-voice with edge-tts stock voice (existing tts_engine.tts_dispatch)
-  5. Mux new audio onto original video (ffmpeg)
+Pipeline:
+  1. Extract audio from video          (ffmpeg)
+  2. Google Speech in timed chunks     (free — no Whisper)
+  3. Translate each segment            (Azure preferred, Google fallback)
+  4. TTS each segment + place on timeline at original start times
+  5. Mux new audio onto original video (ffmpeg, video stream copy)
 
-No GPU / no voice cloning. Gated to Pro (not Pro+) in the API layer.
-
-Env vars (Azure preferred):
-  AZURE_TRANSLATOR_KEY      — KEY 1 from Azure portal Keys and Endpoint
-  AZURE_TRANSLATOR_REGION   — e.g. eastus, westeurope, global (optional if global)
-Optional Google fallback:
-  GOOGLE_TRANSLATE_API_KEY
+Phase 1.5 is "timed dub" (pseudo lip-sync): speech lands in the same
+windows as the source. It does not re-animate faces.
 """
 
 from __future__ import annotations
 
 import base64
+import io
 import os
 import subprocess
 import tempfile
@@ -29,8 +25,11 @@ from typing import Optional
 import requests
 
 from errors import UserFacingError
-from audio_tools import video_to_audio, transcribe, check_file_size
+from audio_tools import video_to_audio, check_file_size
 from tts_engine import tts_dispatch
+
+# Timed Google chunks (~12s: recognition quality vs alignment granularity)
+REDUB_CHUNK_MS = 12 * 1000
 
 # Azure Translator v3 REST
 AZURE_TRANSLATE_URL = "https://api.cognitive.microsofttranslator.com/translate"
@@ -462,6 +461,123 @@ def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: b
                     pass
 
 
+def google_transcribe_segments(
+    audio_bytes: bytes,
+    filename: str = "extracted.mp3",
+    lang_code: str = "auto",
+    chunk_ms: int = REDUB_CHUNK_MS,
+) -> list[dict]:
+    """Transcribe with Google Speech in fixed time windows.
+
+    Returns list of {start_sec, end_sec, text}. Empty/failed windows are
+    omitted (timeline keeps silence there). No Whisper — Google only.
+    """
+    import speech_recognition as sr
+    from pydub import AudioSegment
+
+    google_lang = (
+        lang_code
+        if lang_code and str(lang_code).lower() not in ("auto", "none", "detect", "")
+        else "ur-PK"
+    )
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes)).set_frame_rate(16000).set_channels(1)
+    duration_sec = len(audio) / 1000.0
+    chunk_ms = max(4000, min(30000, int(chunk_ms or REDUB_CHUNK_MS)))
+    total_chunks = max(1, (len(audio) + chunk_ms - 1) // chunk_ms)
+
+    r = sr.Recognizer()
+    r.energy_threshold = 300
+    r.dynamic_energy_threshold = True
+    r.operation_timeout = 25
+
+    segments: list[dict] = []
+    for ci in range(total_chunks):
+        start_ms = ci * chunk_ms
+        end_ms = min(len(audio), (ci + 1) * chunk_ms)
+        if end_ms - start_ms < 400:
+            continue
+        chunk = audio[start_ms:end_ms]
+        chunk_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                chunk.export(tmp.name, format="wav")
+                chunk_path = tmp.name
+            with sr.AudioFile(chunk_path) as source:
+                r.adjust_for_ambient_noise(source, duration=min(0.4, len(chunk) / 1000))
+                audio_data = r.record(source)
+            text = ""
+            try:
+                text = r.recognize_google(audio_data, language=google_lang)
+            except sr.UnknownValueError:
+                text = ""
+            except Exception:
+                time.sleep(0.8)
+                try:
+                    text = r.recognize_google(audio_data, language=google_lang)
+                except Exception:
+                    text = ""
+            text = (text or "").strip()
+            if text:
+                segments.append({
+                    "start_sec": round(start_ms / 1000.0, 3),
+                    "end_sec": round(end_ms / 1000.0, 3),
+                    "text": text,
+                })
+        finally:
+            if chunk_path and os.path.exists(chunk_path):
+                try:
+                    os.unlink(chunk_path)
+                except OSError:
+                    pass
+
+    if not segments:
+        raise UserFacingError(
+            "Could not detect speech in this video. Try a clearer audio track, "
+            "or set the source language manually instead of Auto."
+        )
+    # Attach total duration for callers
+    for s in segments:
+        s["_total_duration_sec"] = duration_sec
+    return segments
+
+
+def assemble_timed_dub(
+    segment_audio: list[tuple[float, float, bytes]],
+    total_duration_sec: float,
+) -> bytes:
+    """Build one MP3 timeline: place each TTS clip at start_sec, stretched to fit window.
+
+    segment_audio: list of (start_sec, end_sec, mp3_bytes)
+    """
+    from pydub import AudioSegment
+
+    total_ms = max(1000, int(float(total_duration_sec) * 1000))
+    timeline = AudioSegment.silent(duration=total_ms, frame_rate=24000)
+
+    for start_sec, end_sec, mp3_bytes in segment_audio:
+        if not mp3_bytes:
+            continue
+        start_ms = max(0, int(float(start_sec) * 1000))
+        end_ms = max(start_ms + 200, int(float(end_sec) * 1000))
+        window_sec = max(0.25, (end_ms - start_ms) / 1000.0)
+        fitted = stretch_audio_to_duration(mp3_bytes, window_sec, audio_ext="mp3")
+        try:
+            clip = AudioSegment.from_file(io.BytesIO(fitted), format="mp3")
+        except Exception:
+            continue
+        # Don't overflow the timeline
+        if start_ms >= total_ms:
+            continue
+        max_len = total_ms - start_ms
+        if len(clip) > max_len:
+            clip = clip[:max_len]
+        timeline = timeline.overlay(clip, position=start_ms)
+
+    buf = io.BytesIO()
+    timeline.export(buf, format="mp3", bitrate="192k")
+    return buf.getvalue()
+
+
 def redub_video(
     video_bytes: bytes,
     filename: str,
@@ -494,24 +610,35 @@ def redub_video(
     # ---- 1. Extract audio ----
     audio_bytes = video_to_audio(video_bytes, filename, output_format="mp3", quality_kbps=192)
 
-    # ---- 2. Transcribe (Google primary; Whisper only if Google fails) ----
-    tr = transcribe(audio_bytes, "extracted.mp3", source_lang, use_gpu=True)
-    transcript = (tr.get("text") or "").strip()
-    if not transcript:
+    # Prefer accurate duration from extracted audio
+    original_dur = float(probed or 0)
+    tmp_a = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
+            f.write(audio_bytes)
+            tmp_a = f.name
+        d = _probe_duration_sec(tmp_a)
+        if d > 0.05:
+            original_dur = d
+    finally:
+        if tmp_a:
+            try:
+                os.unlink(tmp_a)
+            except OSError:
+                pass
+    if original_dur and original_dur > MAX_DURATION_SEC:
         raise UserFacingError(
-            "Could not detect speech in this video. Try a clearer audio track, "
-            "or set the source language manually instead of Auto."
-        )
-
-    # Secondary duration guard from transcription metadata
-    duration = float(tr.get("duration_sec") or probed or 0)
-    if duration and duration > MAX_DURATION_SEC:
-        raise UserFacingError(
-            f"Video is about {int(duration // 60)} minutes — Phase 1 redub supports up to "
+            f"Video is about {int(original_dur // 60)} minutes — Phase 1 redub supports up to "
             f"{MAX_DURATION_SEC // 60} minutes. Trim the video first, or wait for longer limits."
         )
 
-    # ---- 3. Translate ----
+    # ---- 2. Google Speech in timed chunks (no Whisper) ----
+    segments = google_transcribe_segments(audio_bytes, "extracted.mp3", source_lang)
+    if segments and segments[0].get("_total_duration_sec"):
+        original_dur = float(segments[0]["_total_duration_sec"]) or original_dur
+    transcript = " ".join(s["text"] for s in segments).strip()
+
+    # ---- 3. Translate each segment ----
     target_code = _code_for_studio_lang(target_studio_lang)
     source_code = None
     if source_lang != "auto":
@@ -519,137 +646,92 @@ def redub_video(
         if source_code == "zh":
             source_code = "zh-Hans"
 
-    # Skip translation if source and target are the same language family
     same_lang = False
     if source_code and source_code.split("-")[0] == target_code.split("-")[0]:
         same_lang = True
-    if same_lang:
-        translated = transcript
-    else:
-        translated = translate_text(transcript, target_code, source_lang_code=source_code)
 
-    if not translated:
-        raise UserFacingError("Translation returned empty text.")
-
-    # ---- 3b. Sanity-check translation completeness ----
-    # No chunking happens in translate_text() (the whole transcript goes in
-    # one API call), but the translation API itself can still come back
-    # having dropped a trailing sentence — seen concretely with a Hindi
-    # closing question ("...which government post do you want the next
-    # video on?") that never appeared anywhere in the Punjabi result. Not
-    # something this code can prevent outright since it's the external
-    # translator's behavior, not a bug in how we call it — but a translation
-    # missing a big chunk of the source is worth one automatic retry
-    # (translation APIs aren't perfectly deterministic call to call), and
-    # if that doesn't help, worth telling the customer rather than quietly
-    # shipping a dub that's missing content.
     translation_note = None
+    translated_parts: list[str] = []
+    for seg in segments:
+        src = seg["text"]
+        if same_lang:
+            seg["translated"] = src
+        else:
+            try:
+                seg["translated"] = translate_text(src, target_code, source_lang_code=source_code)
+            except UserFacingError:
+                seg["translated"] = ""
+        if not (seg.get("translated") or "").strip():
+            # Keep window silent rather than failing the whole job
+            seg["translated"] = ""
+        else:
+            translated_parts.append(seg["translated"].strip())
+
+    translated = " ".join(translated_parts).strip()
+    if not translated:
+        raise UserFacingError("Translation returned empty text for every segment.")
+
     if not same_lang:
         src_sentences = _count_sentences(transcript)
         tgt_sentences = _count_sentences(translated)
         if src_sentences >= 2 and tgt_sentences < src_sentences * 0.6:
-            retry = translate_text(transcript, target_code, source_lang_code=source_code)
-            if retry and _count_sentences(retry) > tgt_sentences:
-                translated = retry
-                tgt_sentences = _count_sentences(retry)
-        if src_sentences >= 2 and tgt_sentences < src_sentences * 0.6:
             translation_note = (
                 "The translation may be missing part of the original speech "
-                "(the source had roughly " + str(src_sentences) + " sentences, the translation came back with "
-                "about " + str(tgt_sentences) + "). Check the transcript below, and try generating again if "
-                "anything important got dropped."
+                f"(source ~{src_sentences} sentences, translation ~{tgt_sentences}). "
+                "Check the transcript below and try again if something important is missing."
             )
 
-    # ---- 4. TTS with stock edge-tts voice ----
+    # ---- 4. TTS per segment + place on timeline (timed dub) ----
     speed_pct = max(50, min(200, int(speed_pct or 100)))
     rate_str = f"{speed_pct - 100:+d}%"
     tts_meta: dict = {}
-    tts_audio = tts_dispatch(translated, voice_id, rate=rate_str, ssml_mode=False, speed_pct=speed_pct, _meta=tts_meta)
-    if not tts_audio:
-        raise UserFacingError("Could not generate the dubbed voice track. Try another voice.")
     voice_note = None
-    if tts_meta.get("engine") == "gtts_fallback":
-        voice_note = (
-            "Your selected voice was temporarily unavailable, so a substitute voice was used instead "
-            "(gender/accent may not match what you picked). Try generating again to get the requested voice."
+    timed_clips: list[tuple[float, float, bytes]] = []
+    tts_failures = 0
+
+    for seg in segments:
+        text = (seg.get("translated") or "").strip()
+        if not text:
+            continue
+        meta: dict = {}
+        clip = tts_dispatch(
+            text, voice_id, rate=rate_str, ssml_mode=False, speed_pct=speed_pct, _meta=meta
         )
+        if not clip:
+            tts_failures += 1
+            continue
+        if meta.get("engine") == "gtts_fallback":
+            voice_note = (
+                "Your selected voice was temporarily unavailable for some segments, "
+                "so a substitute voice was used (gender/accent may differ)."
+            )
+        # Optionally skip strict window fitting when match_length is off:
+        # still place at start, but use natural TTS length (may overlap next)
+        end = seg["end_sec"] if match_length else (seg["start_sec"] + max(0.5, (seg["end_sec"] - seg["start_sec"])))
+        timed_clips.append((seg["start_sec"], end, clip))
+        if not tts_meta:
+            tts_meta.update(meta)
 
-    # ---- 4b. Match length to original video (Phase 1.5) ----
-    original_dur = float(duration or 0)
-    stretched = False
+    if not timed_clips:
+        raise UserFacingError("Could not generate the dubbed voice track. Try another voice.")
+
+    total_dur = original_dur if original_dur > 0.05 else max(s["end_sec"] for s in segments)
+    tts_audio = assemble_timed_dub(timed_clips, total_dur)
+    if not tts_audio:
+        raise UserFacingError("Could not assemble the dubbed audio timeline.")
+
+    stretched = True  # per-segment fit
     stretch_ratio = 1.0
-    tts_dur_final = 0.0
-    if match_length:
-        # Prefer accurate duration from the extracted audio file
-        tmp_a = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-                f.write(audio_bytes)
-                tmp_a = f.name
-            probed = _probe_duration_sec(tmp_a)
-            if probed > 0.05:
-                original_dur = probed
-        finally:
-            if tmp_a:
-                try:
-                    os.unlink(tmp_a)
-                except OSError:
-                    pass
-
-        if original_dur > 0.05:
-            before = tts_audio
-            tts_audio = stretch_audio_to_duration(tts_audio, original_dur, audio_ext="mp3")
-            stretched = tts_audio is not before and tts_audio != before
-            # Approximate ratio for the response payload
-            tmp_t = None
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-                    f.write(tts_audio)
-                    tmp_t = f.name
-                tts_dur_final = _probe_duration_sec(tmp_t)
-                if tts_dur_final > 0 and original_dur > 0:
-                    stretch_ratio = round(original_dur / tts_dur_final, 3) if tts_dur_final else 1.0
-            finally:
-                if tmp_t:
-                    try:
-                        os.unlink(tmp_t)
-                    except OSError:
-                        pass
-
-    # ---- 4c. Report any length gap the stretch clamp couldn't close ----
-    # stretch_audio_to_duration() clamps how far it will speed up/slow down
-    # speech (see its docstring) so dubbed audio stays intelligible. When
-    # the translated speech is naturally much shorter or longer than the
-    # source (common — languages/TTS voices don't map 1:1 in speaking
-    # time), that clamp means the stretch can land short of target_sec.
-    # mux_audio_onto_video() then silently pads the remainder with silence
-    # (audio too short — video plays with no dubbed speech for the tail)
-    # or, previously, -shortest would cut the video off at the audio's
-    # length. Neither is wrong to *do* — there's no lossless way to make
-    # mismatched speech fit an exact runtime without per-segment timing
-    # data this pipeline doesn't have yet — but doing it silently is: the
-    # result looked like a bug because nothing ever told the caller it
-    # happened. Surfaced here instead so the API/UI can show an explicit
-    # note rather than a confusing silent tail.
+    tts_dur_final = total_dur
     silent_tail_sec = 0.0
     trimmed_sec = 0.0
-    length_note = None
-    if match_length and original_dur > 0.05 and tts_dur_final > 0.05:
-        gap = original_dur - tts_dur_final
-        if gap > 1.5:
-            silent_tail_sec = round(gap, 1)
-            length_note = (
-                f"The dubbed speech runs about {int(round(silent_tail_sec))}s shorter than "
-                f"the source video even after speed-matching — the last {int(round(silent_tail_sec))}s "
-                f"of the video will have no dubbed audio."
-            )
-        elif gap < -1.5:
-            trimmed_sec = round(-gap, 1)
-            length_note = (
-                f"The dubbed speech runs about {int(round(trimmed_sec))}s longer than the source "
-                f"video even after speed-matching — the dubbed audio gets cut off near the end "
-                f"to keep the video's original length."
-            )
+    length_note = (
+        f"Timed dub: {len(timed_clips)} speech window(s) aligned to the original timeline "
+        f"using Google Speech chunks (~{REDUB_CHUNK_MS // 1000}s). "
+        "This is audio alignment only — faces are not re-animated."
+    )
+    if tts_failures:
+        length_note += f" {tts_failures} segment(s) failed TTS and were left silent."
 
     # ---- 5. Mux ----
     dubbed_video = mux_audio_onto_video(
@@ -687,4 +769,6 @@ def redub_video(
         "length_note": length_note,
         "voice_note": voice_note,
         "translation_note": translation_note,
+        "timed_segments": len(timed_clips),
+        "engine": "google_timed",
     }

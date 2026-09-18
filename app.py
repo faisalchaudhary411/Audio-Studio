@@ -4525,6 +4525,8 @@ def api_redub():
         "skipped_translation": result.get("skipped_translation", False),
         "target_lang": result.get("target_lang"),
         "voice_id": result.get("voice_id"),
+        "timed_segments": result.get("timed_segments", 0),
+        "engine": result.get("engine", "google_timed"),
     })
 
 
