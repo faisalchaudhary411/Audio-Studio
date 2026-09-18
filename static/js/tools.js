@@ -202,8 +202,8 @@
       const hint = document.createElement('div');
       hint.className = 'dropzone__hint';
       hint.textContent = input.multiple
-        ? 'or tap to choose files · up to 10MB each'
-        : 'or tap to choose · usually under 10MB';
+        ? 'or tap to choose files · 15MB max each'
+        : 'or tap to choose · 15MB max';
       const name = document.createElement('div');
       name.className = 'dropzone__name';
       input.parentNode.insertBefore(zone, input);
@@ -303,7 +303,7 @@
     if (/network|fetch|failed to fetch/i.test(msg)) {
       return 'Network error — check your connection and try again.';
     }
-    if (/too large|file size|10mb|50mb/i.test(msg)) {
+    if (/too large|file size|10mb|15mb|50mb/i.test(msg)) {
       return msg + ' Try a shorter clip or compress first.';
     }
     if (/no file|choose a file|upload/i.test(msg)) {
@@ -580,12 +580,15 @@
       if (decompressStatus) decompressStatus.textContent = 'Choose a file first.';
       return;
     }
+    const presetEl = document.getElementById('decompress-preset');
+    const preset = presetEl ? (presetEl.value || 'voice') : 'voice';
     setLoading(decompressBtn, true);
     showProgress(decompressProgress, true);
     if (decompressStatus) decompressStatus.textContent = 'Decompressing…';
     if (decompressResult) decompressResult.innerHTML = '';
     const form = new FormData();
     form.append('file', file);
+    form.append('preset', preset);
     try {
       const res = await fetch('/api/tools/decompress', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
@@ -593,7 +596,14 @@
         setToolError(decompressResult, decompressStatus, data, 'Decompression failed.');
         return;
       }
-      if (decompressStatus) decompressStatus.textContent = `${data.original_size_mb}MB → ${data.output_size_mb}MB (WAV)`;
+      const ch = data.channels === 1 ? 'mono' : (data.channels === 2 ? 'stereo' : '');
+      const rate = data.sample_rate ? `${Math.round(data.sample_rate / 1000 * 10) / 10}kHz` : '';
+      const detail = [ch, rate].filter(Boolean).join(' ');
+      if (decompressStatus) {
+        decompressStatus.textContent = detail
+          ? `${data.original_size_mb}MB → ${data.output_size_mb}MB WAV (${detail})`
+          : `${data.original_size_mb}MB → ${data.output_size_mb}MB (WAV)`;
+      }
       if (decompressResult) setAudioResult(decompressResult, data.audio_b64, data.filename, mimeFor(data.format));
     } catch (e) {
       setToolError(decompressResult, decompressStatus, null, 'Network error — check your connection and try again.');
