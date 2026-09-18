@@ -1122,6 +1122,8 @@ def usage_summary() -> dict:
         "previews": {"used": usage_tracking.get_daily_counter(request, "usage_previews"), "limit": lim["FREE_PREVIEW_LIMIT"]},
         "transcribe": {"used": usage_tracking.get_daily_counter(request, "usage_transcribe"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "convert": {"used": usage_tracking.get_daily_counter(request, "usage_convert"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "compress": {"used": usage_tracking.get_daily_counter(request, "usage_compress"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "decompress": {"used": usage_tracking.get_daily_counter(request, "usage_decompress"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "merge": {"used": usage_tracking.get_daily_counter(request, "usage_merge"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "cutter": {"used": usage_tracking.get_daily_counter(request, "usage_cutter"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "denoise": {"used": usage_tracking.get_daily_counter(request, "usage_denoise"), "limit": lim["FREE_DAILY_ACTIONS"]},
@@ -1303,7 +1305,19 @@ def pricing():
         "music_mo": f"{_music_mo} tracks/mo",
         "redub": "Video audio redub",
     }
-    return render_template("pricing.html", plans=plans, compare=compare)
+    # Pricing structured data previously only existed on the homepage
+    # (landing.html) — the page actually named /pricing, which is the one a
+    # comparison shopper or an AI shopping assistant is most likely to land
+    # on directly, had zero SoftwareApplication/Offer schema of its own.
+    # Reuses the same plans list the page itself renders, so schema can
+    # never drift out of sync with the real, admin-editable prices — same
+    # principle as the landing page's offers, not a separate source of truth.
+    software_schema_offers = [
+        {"name": p["name"], "price": re.sub(r"[^\d.]", "", str(p["price"])) or "0"}
+        for p in plans
+    ]
+    return render_template("pricing.html", plans=plans, compare=compare,
+                            software_schema_offers=software_schema_offers)
 
 
 def _developers_ctx(lim):
@@ -3695,7 +3709,18 @@ def tools_hub():
     search traffic a real reason to land on, and stay on, the specific
     page that matches their query."""
     ordered_tools = [dict(slug=s, **(tool_pages.get_tool_page(s) or tool_pages.TOOL_PAGES[s])) for s in tool_pages.TOOL_ORDER]
-    return render_template("tools.html", ordered_tools=ordered_tools,
+    # The WebSite's SearchAction schema (base.html) advertises
+    # https://voxcraft.site/tools?q={search_term_string} as a working search
+    # endpoint. Previously `q` was never read at all — the query string was
+    # silently ignored and the same full page rendered regardless, which
+    # made that structured data invalid (Google requires a SearchAction's
+    # target to actually resolve to real search results). Rather than
+    # duplicate the client-side filter logic in tools.html (already
+    # verified: chip counts, search index, empty state), just pass the
+    # query through — tools.html prefills the search box with it and runs
+    # the exact same filter it already runs on every keystroke.
+    q = (request.args.get("q") or "").strip()
+    return render_template("tools.html", ordered_tools=ordered_tools, search_query=q,
                             filedesk_url=(os.environ.get("FILEDESK_URL") or "https://filedesk.site.je/").strip())
 
 
@@ -3887,6 +3912,74 @@ def api_convert():
                          "format": output_format})
     except Exception as e:
         return api_error(e, "convert this file")
+
+
+@app.route("/api/tools/compress", methods=["POST"])
+def api_compress():
+    """Shrink a file's size for sharing/upload limits. Deliberately its own
+    endpoint rather than pointing users at /tools/convert-audio-format with
+    a low bitrate preselected — "compress this" and "convert to a specific
+    format" are different intents/search terms even though they share the
+    same underlying encode step (audio_tools.convert_with_meta), and each
+    gets its own indexable page for that reason (see tool_pages.py)."""
+    lim = get_limits()
+    if not _under_limit("usage_compress", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    level = (request.form.get("level") or "medium").strip().lower()
+    # Always re-encodes to MP3 regardless of input format — the point of
+    # this tool is "make the file smaller," and MP3 at these bitrates is
+    # the standard target for that regardless of what came in (a WAV, a
+    # FLAC, even an already-MP3 file at a higher bitrate).
+    bitrate = {"light": 128, "medium": 96, "max": 64}.get(level, 96)
+    try:
+        original_mb = round(len(file.read()) / (1024 * 1024), 3)
+        file.seek(0)
+        result = audio_tools.convert_with_meta(file.read(), file.filename, "mp3", bitrate)
+        _bump_counter("usage_compress")
+        saved_pct = round((1 - (result["output_size_mb"] / original_mb)) * 100) if original_mb > 0 else 0
+        return jsonify({
+            "audio_b64": base64.b64encode(result["bytes"]).decode("ascii"),
+            "filename": f"VoxCraft-Compressed-{int(time.time())}.mp3",
+            "format": "mp3",
+            "original_size_mb": original_mb,
+            "output_size_mb": result["output_size_mb"],
+            "saved_pct": max(0, saved_pct),
+        })
+    except Exception as e:
+        return api_error(e, "compress this file")
+
+
+@app.route("/api/tools/decompress", methods=["POST"])
+def api_decompress():
+    """Turns a lossy file (MP3/OGG/M4A/etc) into an uncompressed WAV —
+    useful for feeding into editors/DAWs that want (or work better with) an
+    uncompressed source. Deliberately does NOT claim to restore quality lost
+    during the original lossy encode — decoding to WAV just stops further
+    quality loss from re-encoding, it can't recover detail that's already
+    gone. That caveat lives in the page copy/FAQ, not just here."""
+    lim = get_limits()
+    if not _under_limit("usage_decompress", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        original_mb = round(len(file.read()) / (1024 * 1024), 3)
+        file.seek(0)
+        result = audio_tools.convert_with_meta(file.read(), file.filename, "wav", None)
+        _bump_counter("usage_decompress")
+        return jsonify({
+            "audio_b64": base64.b64encode(result["bytes"]).decode("ascii"),
+            "filename": f"VoxCraft-Decompressed-{int(time.time())}.wav",
+            "format": "wav",
+            "original_size_mb": original_mb,
+            "output_size_mb": result["output_size_mb"],
+        })
+    except Exception as e:
+        return api_error(e, "decompress this file")
 
 
 @app.route("/api/tools/merge", methods=["POST"])
