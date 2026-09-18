@@ -1567,7 +1567,8 @@
           let msg = data.skipped_translation
             ? ('Done · same language, voice replaced · ' + (data.size_kb || '') + ' KB')
             : ('Done · ' + (data.char_count || 0) + ' chars · ' + (data.size_kb || '') + ' KB');
-          if (data.length_matched) msg += ' · length matched';
+          if (data.timed_segments) msg += ' · ' + data.timed_segments + ' timed segments';
+          else if (data.length_matched) msg += ' · length matched';
           status.textContent = msg;
           status.classList.add('studio-status-ready');
         }
