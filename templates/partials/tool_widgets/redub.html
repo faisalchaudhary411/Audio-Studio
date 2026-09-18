@@ -32,7 +32,7 @@
         <option value="en-US">English (US)</option>
         <option value="en-GB">English (UK)</option>
         <option value="en-IN">English (India)</option>
-        <option value="hi-IN">Hindi</option>
+        <option value="hi-IN" selected>Hindi</option>
         <option value="ur-PK">Urdu</option>
         <option value="bn-IN">Bengali</option>
         <option value="ta-IN">Tamil</option>
@@ -49,6 +49,16 @@
         <option value="zh-CN">Chinese (Mandarin)</option>
         <option value="tr-TR">Turkish</option>
         <option value="ru-RU">Russian</option>
+      </select>
+    </div>
+
+    <div class="redub-field">
+      <label class="redub-label" for="redub-asr-engine">Transcription engine</label>
+      <span class="redub-label-hint">Whisper = better Hindi / numbers</span>
+      <select id="redub-asr-engine" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
+        <option value="auto" selected>Auto (Whisper if available)</option>
+        <option value="whisper">Whisper (GPU — best quality)</option>
+        <option value="google">Google Speech (fast)</option>
       </select>
     </div>
 
