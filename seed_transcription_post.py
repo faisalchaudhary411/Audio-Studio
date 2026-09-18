@@ -37,7 +37,7 @@ Automatic speech recognition works by matching audio against a language model. P
 ## Step-by-step: transcribing Urdu or Hindi audio
 
 1. **Record or export clean audio first.** A voice memo, a Zoom recording, a WhatsApp voice note — any of these work, but background noise (traffic, fans, crosstalk) hurts accuracy more than almost anything else.
-2. **Upload the file.** WAV, MP3, M4A, OGG and FLAC are all supported, up to 10MB per file.
+2. **Upload the file.** WAV, MP3, M4A, OGG and FLAC are all supported, up to 15MB per file.
 3. **Select the language explicitly.** Choose Urdu or Hindi from the dropdown rather than leaving it on auto-detect.
 4. **Transcribe and review.** Read the output against the audio for names, numbers, and technical terms — automatic transcription gets the gist right almost always, but proper nouns are where it's most likely to guess wrong.
 5. **Download or copy the text**, then take it into whatever you're actually building — an article, subtitles, study notes, meeting minutes.

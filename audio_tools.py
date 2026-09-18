@@ -37,7 +37,7 @@ from pydub.silence import detect_nonsilent, split_on_silence as _pydub_split_on_
 import modal_whisper
 from errors import UserFacingError
 
-MAX_UPLOAD_MB = 10
+MAX_UPLOAD_MB = 15
 
 # --- Transcribe timing guards -----------------------------------------------
 # /api/tools/transcribe and /api/clone/reference/transcribe both call
