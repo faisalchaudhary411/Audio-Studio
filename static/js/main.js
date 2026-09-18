@@ -618,9 +618,16 @@ function voxBindUtf8DownloadButtons(root) {
 // so saves failed silently and "Send to …" arrived empty. We store the
 // payload in IndexedDB (much larger) and only keep a tiny pointer in
 // sessionStorage so destination pages know a transfer is waiting.
+// Keep transfers only briefly — 10 minutes is enough to hop between tools;
+// longer retention wastes browser storage on large WAVs.
 const VOX_TRANSFER_KEY = 'voxcraft_transfer_v1';
 const VOX_TRANSFER_DB = 'voxcraft_transfer_db';
 const VOX_TRANSFER_STORE = 'transfers';
+const VOX_TRANSFER_MAX_AGE_MS = 10 * 60 * 1000;  // 10 minutes
+// Audio tools reject uploads over 15MB — never stage larger files for handoff.
+const VOX_TRANSFER_MAX_BYTES = 15 * 1024 * 1024;
+// Only tools that accept audio uploads. Music / clone / TTS / redub /
+// video extract do not take audio from other tools, so they are omitted.
 const VOX_NEXT_TOOLS = [
   { slug: 'trim-cut-audio', label: 'Trim' },
   { slug: 'remove-background-noise', label: 'Denoise' },
@@ -684,9 +691,19 @@ async function voxIdbClear() {
 // Last in-flight save so "Send to …" can await it before navigating
 let _voxTransferSavePromise = null;
 
-/** Save generated audio for cross-tool handoff. Returns true on success. */
+/** Save generated audio for cross-tool handoff. Returns true on success.
+ *  Skips files at or over 15MB — destination audio tools reject those anyway. */
 function voxSaveTransfer(b64, filename, mime) {
   if (!b64) return false;
+  // Approximate decoded byte size from base64 length
+  const approxBytes = Math.floor((String(b64).replace(/^data:[^;]+;base64,/, '').length * 3) / 4);
+  if (approxBytes >= VOX_TRANSFER_MAX_BYTES) {
+    // Clear any previous staged file so a huge result doesn't leave a stale handoff
+    try { sessionStorage.removeItem(VOX_TRANSFER_KEY); } catch (e) {}
+    voxIdbClear();
+    _voxTransferSavePromise = Promise.resolve(false);
+    return false;
+  }
   const record = {
     b64: b64,
     filename: filename || 'audio.wav',
@@ -700,7 +717,7 @@ function voxSaveTransfer(b64, filename, mime) {
       filename: record.filename,
       mime: record.mime,
       ts: record.ts,
-      bytes: Math.floor((b64.length * 3) / 4),
+      bytes: approxBytes,
     }));
   } catch (e) {
     // even pointer failed — still try IDB
@@ -712,7 +729,7 @@ function voxSaveTransfer(b64, filename, mime) {
       sessionStorage.setItem(VOX_TRANSFER_KEY, full);
     }
   } catch (e) {}
-  // Always write IndexedDB (handles large clone/music WAVs)
+  // Write IndexedDB for files under the 15MB audio-tool cap
   _voxTransferSavePromise = voxIdbPut(record).catch((err) => {
     console.warn('[voxcraft] transfer IDB save failed', err);
     return false;
@@ -728,16 +745,18 @@ async function voxLoadTransferAsync() {
   // Prefer IndexedDB (handles large clone/music WAVs)
   try {
     const fromIdb = await voxIdbGet();
-    if (fromIdb && fromIdb.b64 && (Date.now() - (fromIdb.ts || 0)) <= 30 * 60 * 1000) {
+    if (fromIdb && fromIdb.b64 && (Date.now() - (fromIdb.ts || 0)) <= VOX_TRANSFER_MAX_AGE_MS) {
       return fromIdb;
     }
+    // Expired or empty — drop it so large WAVs don't linger
+    if (fromIdb) await voxIdbClear();
   } catch (e) {}
   // Fallback: full record still in sessionStorage (small files)
   try {
     const raw = sessionStorage.getItem(VOX_TRANSFER_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > 30 * 60 * 1000) {
+    if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > VOX_TRANSFER_MAX_AGE_MS) {
       sessionStorage.removeItem(VOX_TRANSFER_KEY);
       return null;
     }
@@ -753,7 +772,7 @@ function voxLoadTransfer() {
     const raw = sessionStorage.getItem(VOX_TRANSFER_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > 30 * 60 * 1000) return null;
+    if (!data || !data.b64 || (Date.now() - (data.ts || 0)) > VOX_TRANSFER_MAX_AGE_MS) return null;
     return data;
   } catch (e) {
     return null;
@@ -915,13 +934,20 @@ async function voxDownloadB64(b64, filename, mime) {
 function voxAudioPlayerHtml(b64, filename, mime) {
   mime = mime || 'audio/wav';
   filename = filename || 'audio.wav';
-  const ok = voxSaveTransfer(b64, filename, mime);
-  const links = VOX_NEXT_TOOLS.map((t) =>
-    `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
-  ).join('');
-  const handoffNote = ok
-    ? ''
-    : `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
+  const approxBytes = Math.floor((String(b64 || '').replace(/^data:[^;]+;base64,/, '').length * 3) / 4);
+  const tooLarge = approxBytes >= VOX_TRANSFER_MAX_BYTES;
+  const ok = !tooLarge && voxSaveTransfer(b64, filename, mime);
+  const links = ok
+    ? VOX_NEXT_TOOLS.map((t) =>
+        `<a class="btn btn--ghost btn--sm" data-send-tool="${t.slug}" href="/tools/${t.slug}">${t.label}</a>`
+      ).join('')
+    : '';
+  let handoffNote = '';
+  if (tooLarge) {
+    handoffNote = `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">File is over 15MB — too large for other audio tools. Download it, or use Decompress with Voice/Speech quality for a smaller WAV.</p>`;
+  } else if (!ok) {
+    handoffNote = `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
+  }
   const safeName = String(filename).replace(/[<>&"']/g, '');
   // Use a placeholder src; real blob URL is set asynchronously by voxHydrateAudioResult
   // so the huge base64 string never lands in the DOM.
@@ -946,11 +972,11 @@ function voxAudioPlayerHtml(b64, filename, mime) {
         <button type="button" class="btn btn--brass btn--sm" data-vox-download disabled>Preparing download…</button>
         <button type="button" class="btn btn--ghost btn--sm" data-vp-replay>Play again</button>
       </div>
-      <div class="result-panel__next">
-        <span class="result-panel__next-label">Send to another tool</span>
-        <div class="result-panel__next-links">${links}</div>
+      ${ok || handoffNote ? `<div class="result-panel__next">
+        ${ok ? `<span class="result-panel__next-label">Send to another tool</span>
+        <div class="result-panel__next-links">${links}</div>` : ''}
         ${handoffNote}
-      </div>
+      </div>` : ''}
     </div>
   `;
 }
