@@ -1559,7 +1559,11 @@
 
       setBusy(true);
       if (result) result.innerHTML = '';
-      if (status) status.textContent = 'Extracting · transcribing · translating · re-voicing… this can take a minute.';
+      const asrChoice = (document.getElementById('redub-asr-engine') || {}).value || 'auto';
+      const slowHint = (asrChoice === 'whisper' || asrChoice === 'auto')
+        ? 'Whisper GPU may take 30–90s on first run…'
+        : 'this can take a minute.';
+      if (status) status.textContent = 'Extracting · transcribing · translating · re-voicing… ' + slowHint;
 
       const form = new FormData();
       form.append('file', file);
@@ -1569,6 +1573,8 @@
       if (voiceSelectB && voiceSelectB.value) {
         form.append('voice_id_b', voiceSelectB.value);
       }
+      const asrEl = document.getElementById('redub-asr-engine');
+      form.append('asr_engine', asrEl ? asrEl.value : 'auto');
       form.append('speed_pct', speed ? speed.value : '100');
       const matchEl = document.getElementById('redub-match-length');
       form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
