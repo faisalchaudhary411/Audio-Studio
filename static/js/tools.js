@@ -1611,59 +1611,55 @@
               '</details>' +
             '</div>';
 
-          const toUrl = typeof voxB64ToObjectURL === 'function'
-            ? voxB64ToObjectURL
-            : async function (b64, mime) {
-                const bin = atob(b64.replace(/^data:[^;]+;base64,/, ''));
-                const bytes = new Uint8Array(bin.length);
-                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                return URL.createObjectURL(new Blob([bytes], { type: mime }));
-              };
-
-          (async function () {
-            try {
-              if (data.video_b64) {
-                const url = await toUrl(data.video_b64, 'video/mp4');
-                const vid = result.querySelector('[data-redub-video-el]');
-                const placeholder = result.querySelector('[data-redub-video-placeholder]');
-                if (vid) {
-                  vid.src = url;
-                  vid.classList.add('is-ready');
-                }
-                if (placeholder) placeholder.remove();
-                const b = result.querySelector('[data-redub-dl-video]');
-                if (b) {
-                  b.disabled = false;
-                  b.textContent = 'Download dubbed MP4';
-                  b.onclick = function () {
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = videoName;
-                    a.click();
-                  };
-                }
-              }
-              if (data.audio_b64) {
-                const url = await toUrl(data.audio_b64, 'audio/mpeg');
-                const b = result.querySelector('[data-redub-dl-audio]');
-                if (b) {
-                  b.disabled = false;
-                  b.textContent = 'Download audio only';
-                  b.onclick = function () {
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = audioName;
-                    a.click();
-                  };
-                }
-              }
-            } catch (e) {
-              console.warn('[voxcraft] redub download hydrate failed', e);
-              if (status) status.textContent = 'Ready — download may be slow on this device.';
+          // Prefer download URLs (no multi-MB base64 in the JSON response)
+          const videoUrl = data.download_video_url || null;
+          const audioUrl = data.download_audio_url || null;
+          try {
+            if (videoUrl) {
+              const vid = result.querySelector('[data-redub-video-el]');
               const placeholder = result.querySelector('[data-redub-video-placeholder]');
-              if (placeholder) placeholder.textContent = 'Preview unavailable on this device — use the download button below.';
+              if (vid) {
+                vid.src = videoUrl;
+                vid.classList.add('is-ready');
+              }
+              if (placeholder) placeholder.remove();
+              const b = result.querySelector('[data-redub-dl-video]');
+              if (b) {
+                b.disabled = false;
+                b.textContent = 'Download dubbed MP4';
+                b.onclick = function () {
+                  const a = document.createElement('a');
+                  a.href = videoUrl;
+                  a.download = videoName;
+                  a.rel = 'noopener';
+                  a.click();
+                };
+              }
             }
-          })();
+            if (audioUrl) {
+              const b = result.querySelector('[data-redub-dl-audio]');
+              if (b) {
+                b.disabled = false;
+                b.textContent = 'Download audio only';
+                b.onclick = function () {
+                  const a = document.createElement('a');
+                  a.href = audioUrl;
+                  a.download = audioName;
+                  a.rel = 'noopener';
+                  a.click();
+                };
+              }
+            }
+            if (!videoUrl && !audioUrl) {
+              const placeholder = result.querySelector('[data-redub-video-placeholder]');
+              if (placeholder) placeholder.textContent = 'Download links unavailable — please try again.';
+            }
+          } catch (e) {
+            console.warn('[voxcraft] redub download hydrate failed', e);
+            if (status) status.textContent = 'Ready — use the download buttons below.';
+            const placeholder = result.querySelector('[data-redub-video-placeholder]');
+            if (placeholder) placeholder.textContent = 'Preview unavailable — use the download button below.';
+          }
         }
       } catch (e) {
         if (status) status.textContent = 'Network error — check your connection and try again.';
