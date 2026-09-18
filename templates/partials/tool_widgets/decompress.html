@@ -1,7 +1,14 @@
   <div class="panel">
     <span class="panel__label">Decompress</span>
-    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Turn a compressed file (MP3, OGG, M4A) into an uncompressed WAV. Note: this can't restore detail already lost in the original compression — it just stops further quality loss from here on. Up to 15MB.</p>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Turn a compressed file (MP3, OGG, M4A) into an uncompressed WAV. This cannot restore detail already lost in the original compression — it only stops further quality loss. <strong>15MB max</strong>.</p>
     <input type="file" class="file-input" id="decompress-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.aac,.wma,audio/wav,audio/x-wav,audio/mpeg,audio/mp3,audio/ogg,audio/mp4,audio/x-m4a,audio/flac,audio/x-flac" style="margin-bottom:12px;">
+    <label style="display:block;color:var(--text-mid);font-size:0.85rem;margin-bottom:6px;">Quality</label>
+    <select id="decompress-preset" class="studio-input" style="width:100%;max-width:320px;margin-bottom:12px;">
+      <option value="voice" selected>Voice (mono 22.05 kHz) — smaller, ideal for speech</option>
+      <option value="speech">Speech (mono 16 kHz) — smallest</option>
+      <option value="full">Full quality (stereo / source rate) — largest files</option>
+    </select>
+    <p style="color:var(--text-dim);font-size:0.78rem;margin:-4px 0 12px;line-height:1.5;">Full quality can produce very large WAVs (tens of MB). Prefer Voice or Speech for podcasts and voiceovers.</p>
     <div class="render-bar">
       <button class="btn btn--brass" id="decompress-btn">Decompress to WAV</button>
       <span class="render-status" data-decompress-status></span>
