@@ -3959,17 +3959,21 @@ def api_decompress():
     uncompressed source. Deliberately does NOT claim to restore quality lost
     during the original lossy encode — decoding to WAV just stops further
     quality loss from re-encoding, it can't recover detail that's already
-    gone. That caveat lives in the page copy/FAQ, not just here."""
+    gone. That caveat lives in the page copy/FAQ, not just here.
+
+    Optional form field `preset`: full | voice | speech
+    (controls channels + sample rate so speech can stay small)."""
     lim = get_limits()
     if not _under_limit("usage_decompress", lim["FREE_DAILY_ACTIONS"]):
         return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     file = request.files.get("file")
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
+    preset = (request.form.get("preset") or "full").strip().lower()
     try:
         original_mb = round(len(file.read()) / (1024 * 1024), 3)
         file.seek(0)
-        result = audio_tools.convert_with_meta(file.read(), file.filename, "wav", None)
+        result = audio_tools.decompress_to_wav(file.read(), file.filename, preset=preset)
         _bump_counter("usage_decompress")
         return jsonify({
             "audio_b64": base64.b64encode(result["bytes"]).decode("ascii"),
@@ -3977,6 +3981,9 @@ def api_decompress():
             "format": "wav",
             "original_size_mb": original_mb,
             "output_size_mb": result["output_size_mb"],
+            "channels": result.get("channels"),
+            "sample_rate": result.get("sample_rate"),
+            "preset": result.get("preset"),
         })
     except Exception as e:
         return api_error(e, "decompress this file")

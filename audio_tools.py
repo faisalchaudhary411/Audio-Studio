@@ -414,6 +414,52 @@ def convert_with_meta(file_bytes: bytes, filename: str, output_format: str = "mp
     }
 
 
+# Decompress quality presets: (channels, sample_rate_hz)
+# "full" keeps source channels/rate (clamped); voice/speech downmix + downsample.
+DECOMPRESS_PRESETS = {
+    "full":   {"channels": None, "sample_rate": None, "label": "Full quality (stereo 44.1k)"},
+    "voice":  {"channels": 1,    "sample_rate": 22050, "label": "Voice (mono 22.05k)"},
+    "speech": {"channels": 1,    "sample_rate": 16000, "label": "Speech (mono 16k)"},
+}
+
+
+def decompress_to_wav(file_bytes: bytes, filename: str, preset: str = "full") -> dict:
+    """Decode any supported audio to uncompressed WAV with optional downmix / downsample.
+
+    Does NOT restore quality lost in the original lossy encode — it only stops
+    further generation loss. Presets control channels + sample rate so users
+    can avoid multi-hundred-MB WAVs for speech.
+    """
+    check_file_size(file_bytes)
+    preset = (preset or "full").lower().strip()
+    if preset not in DECOMPRESS_PRESETS:
+        preset = "full"
+    cfg = DECOMPRESS_PRESETS[preset]
+
+    audio = _load_segment(file_bytes, filename)
+    duration = len(audio) / 1000.0
+
+    if cfg["channels"] is not None:
+        audio = audio.set_channels(int(cfg["channels"]))
+    if cfg["sample_rate"] is not None:
+        audio = audio.set_frame_rate(int(cfg["sample_rate"]))
+    elif audio.frame_rate > 48000:
+        # Keep source rate for "full" but avoid absurd rates
+        audio = audio.set_frame_rate(44100)
+
+    out = _export_bytes(audio, "wav", None)
+    return {
+        "bytes": out,
+        "format": "wav",
+        "bitrate_kbps": None,
+        "duration_sec": round(duration, 2),
+        "output_size_mb": round(len(out) / (1024 * 1024), 3),
+        "channels": audio.channels,
+        "sample_rate": audio.frame_rate,
+        "preset": preset,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Merge (with optional crossfade)
 # ---------------------------------------------------------------------------
