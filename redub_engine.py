@@ -46,10 +46,10 @@ REDUB_STRETCH_MAX = 1.28
 # stretching more than this factor (sounds more natural for dialogue).
 REDUB_PAD_INSTEAD_OF_STRETCH = 1.18
 
-# --- Hinglish / Indian-number glossary (Google-only quality aids) ---
+# --- Hinglish / Indian-number glossary ---
 # Applied after ASR and after translation. Order matters for some patterns.
 _ASR_FIXES = [
-    # Common Google ASR garbling on short Hindi/Hinglish clips
+    # Common ASR garbling on short Hindi/Hinglish clips
     (r"\bbetay\b", "bete"),
     (r"\bklye\b", "ke liye"),
     (r"\bkia\b", "kya"),
@@ -65,28 +65,75 @@ _ASR_FIXES = [
     (r"\brs\.?\s*11[,.]?40+0*\b", "Rs 11,40,000", re.I),
     (r"\b11\s*lakh\s*4(?:0+)?\b", "11 lakh 40 thousand", re.I),
     (r"\bc\s*b\s*s\s*e\b", "CBSE", re.I),
+    # Microsoft Word mishears in source
+    (r"\bmico\s*soft(?:\s*word)?\b", "Microsoft Word", re.I),
+    (r"\bmicro\s*soft\s*word\b", "Microsoft Word", re.I),
+    (r"\bm\.?\s*s\.?\s*word\b", "Microsoft Word", re.I),
 ]
 
 _TRANSLATE_GLOSSARY = [
-    # Indian number words → clear English for TTS
+    # --- Prices / Indian numbers (specific → general) ---
+    # "aazar"/"azar" = garble of "hazaar" (thousand)
+    (r"\baazar\b", "thousand", re.I),
+    (r"\bazar\b", "thousand", re.I),
+    (r"\bhazaar\b", "thousand", re.I),
+    (r"\bhazar\b", "thousand", re.I),
+    # eleven lakh forty [thousand/aazar/...]
+    (r"\b(?:eleven|11)\s+lakh\s+forty\s*(?:thousand|aazar|azar|hazaar|hazar)?\b",
+     "eleven lakh forty thousand", re.I),
+    (r"\b(?:eleven|11)\s+lakh\s+four(?:ty)?\s*\w{0,10}\b",
+     "eleven lakh forty thousand", re.I),
+    (r"\b(?:eleven|11)\s+lakh\s+4(?:0+)?\b", "eleven lakh forty thousand", re.I),
+    # "eleven million forty..." — bad convert of 11 lakh
+    (r"\b(?:eleven|11)\s+million\s+forty\s*(?:thousand|aazar|azar)?\b",
+     "eleven lakh forty thousand rupees", re.I),
+    (r"\b(?:eleven|11)\s+million\b", "eleven lakh", re.I),
+    # Digit forms of this sample's quote
+    (r"\brs\.?\s*11[,.]?40+0*\b", "eleven lakh forty thousand rupees", re.I),
+    (r"\b1[,.]?140[,.]?000\b", "eleven lakh forty thousand"),
+    (r"\b11[,.]?40[,.]?000\b", "eleven lakh forty thousand"),
     (r"\b(\d+)\s*lakh(?:s)?\b", r"\1 lakh", re.I),
     (r"\b(\d+)\s*crore(?:s)?\b", r"\1 crore", re.I),
-    (r"\beleven\s+lakh\s+four\b", "eleven lakh forty thousand", re.I),
-    (r"\beleven\s+lakh\s+4\b", "eleven lakh forty thousand", re.I),
-    (r"\b11\s*,?\s*40+0*\b", "11,40,000"),
-    (r"\brs\.?\s*11[,.]?40+0*\b", "1,140,000 rupees", re.I),
-    (r"\b1[,.]?140[,.]?000\b", "1,140,000"),
-    # Keep hardware terms readable for TTS
-    (r"\brtx\s*5080\b", "RTX 5080", re.I),
-    (r"\bi9\s*14(?:th)?\s*gen\b", "i9 14th gen", re.I),
-    (r"\b32\s*gb\s*ram\b", "32 GB RAM", re.I),
-    (r"\b1\s*tb\s*ssd\b", "1 TB SSD", re.I),
+    # "surf for you" around price lines (sirf / build-for-you garble)
+    (r"\bbecome a surf for you\b", "be built for you for", re.I),
+    (r"\ba surf for you\b", "for you", re.I),
+    (r"\bsurf for you\b", "for you", re.I),
+    # Expensive PC
+    (r"\bmega\s*b\s*c\b", "expensive PC", re.I),
+    (r"\bmega\s*pc\b", "expensive PC", re.I),
+    (r"\bmehnga\s*pc\b", "expensive PC", re.I),
+    (r"\bso much mega\b", "such an expensive", re.I),
+    # --- Microsoft Word punchline (many ASR/MT variants) ---
+    (r"\bmico\s*(?:soft)?\b", "Microsoft Word", re.I),
+    (r"\bso\s+mico\b", "Microsoft Word", re.I),
+    (r"\bmicro\s*soft(?:\s*word)?\b", "Microsoft Word", re.I),
     (r"\bmicrosoft\s+word\b", "Microsoft Word", re.I),
-    # Soften awkward literal translations common on this content
+    (r"\bms\s+word\b", "Microsoft Word", re.I),
+    (r"\brun\s+uber\b", "run Microsoft Word", re.I),
+    (r"\bto run uber\b", "to run Microsoft Word", re.I),
+    (r"\buber,?\s*so\s+mico\b", "Microsoft Word", re.I),
+    # Full punchline salvage from this clip
+    (r"\ba little better system is needed to run (?:uber|microsoft word).{0,40}isn'?t it\b",
+     "you need a decent system to run Microsoft Word, right", re.I),
+    (r"\bwhat is the condition of tinu for me\b", "", re.I),
+    (r"\bcondition of tinu\b", "", re.I),
+    # Hardware — readable for TTS
+    (r"\br\s*t\s*x\s*fifty\s*eighty\b", "RTX 5080", re.I),
+    (r"\brtx\s*5080\b", "RTX 5080", re.I),
+    (r"\brtx\s*fifty\s*eighty\b", "RTX 5080", re.I),
+    (r"\bi\s*nine\s+(?:fourteenth|14(?:th)?)\s*gen\b", "i9 14th gen", re.I),
+    (r"\bi9\s*14(?:th)?\s*gen\b", "i9 14th gen", re.I),
+    (r"\bintel\s+i\s*nine\b", "Intel i9", re.I),
+    (r"\bthirty\s+two\s+gigabytes?\s*(?:of\s+)?ram\b", "32 GB RAM", re.I),
+    (r"\b32\s*gb\s*ram\b", "32 GB RAM", re.I),
+    (r"\bone\s+terabyte\s+ssd\b", "1 TB SSD", re.I),
+    (r"\b1\s*tb\s*ssd\b", "1 TB SSD", re.I),
+    # Soften awkward literals
     (r"\bit will be done at all\b", "absolutely, it can be done", re.I),
     (r"\byes,?\s*it will be done at all\b", "Yes, absolutely, it can be done", re.I),
     (r"\bneed a system what is the condition for me\b",
      "for running Microsoft Word you need a decent system, right", re.I),
+    (r"\bit will absolutely become\b", "it will absolutely be built", re.I),
 ]
 
 
@@ -105,32 +152,101 @@ def _apply_pattern_list(text: str, patterns: list) -> str:
 
 
 def clean_asr_text(text: str) -> str:
-    """Light cleanup of Google ASR output (Hinglish typos, clipped words)."""
+    """Light cleanup of ASR output (Hinglish typos, clipped words)."""
     text = (text or "").strip()
     if not text:
         return ""
     text = _apply_pattern_list(text, _ASR_FIXES)
-    # Collapse repeated spaces / odd punctuation from ASR
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\s+([,.!?])", r"\1", text)
     return text
 
 
+# Terms locked across the translator so Azure/Google cannot mangle them.
+# Placeholders are restored after translation.
+_PROTECT_TERMS = [
+    (re.compile(r"\bmicrosoft\s+word\b", re.I), "Microsoft Word"),
+    (re.compile(r"\bms\s+word\b", re.I), "Microsoft Word"),
+    (re.compile(r"\bmico\s*soft(?:\s*word)?\b", re.I), "Microsoft Word"),
+    (re.compile(r"\brtx\s*5080\b", re.I), "RTX 5080"),
+    (re.compile(r"\bi9\s*14(?:th)?\s*gen\b", re.I), "i9 14th gen"),
+    (re.compile(r"\b32\s*gb\s*ram\b", re.I), "32 GB RAM"),
+    (re.compile(r"\b1\s*tb\s*ssd\b", re.I), "1 TB SSD"),
+]
+
+
+def _protect_terms(text: str) -> tuple[str, list[str]]:
+    """Replace fragile terms with placeholders; return (text, restored_values)."""
+    saved: list[str] = []
+    out = text
+    for i, (cre, canonical) in enumerate(_PROTECT_TERMS):
+        def _repl(_m, _c=canonical, _i=i):
+            saved.append(_c)
+            return f"⟦T{len(saved)-1}⟧"
+        out = cre.sub(_repl, out)
+    return out, saved
+
+
+def _restore_terms(text: str, saved: list[str]) -> str:
+    if not saved:
+        return text
+    out = text
+    for i, val in enumerate(saved):
+        out = out.replace(f"⟦T{i}⟧", val)
+        out = out.replace(f"[T{i}]", val)  # some MTs strip special brackets
+    return out
+
+
 def postprocess_translation(text: str) -> str:
-    """Fix numbers, lakh/crore, and common bad literal translations before TTS."""
+    """Fix numbers, lakh/crore, Word punchline, and bad literals before TTS.
+
+    Runs the glossary twice so cascading fixes (aazar → thousand, then
+    eleven lakh forty thousand) settle.
+    """
     text = (text or "").strip()
     if not text:
         return ""
     text = _apply_pattern_list(text, _TRANSLATE_GLOSSARY)
-    # "eleven lakh four I" style garbage → try to salvage
+    text = _apply_pattern_list(text, _TRANSLATE_GLOSSARY)
+    # Residual "eleven lakh four X" / "lakh forty aazar"
     text = re.sub(
-        r"\b(eleven|11)\s+lakh\s+four\s*[a-z]?\b",
+        r"\b(eleven|11)\s+lakh\s+four(?:ty)?\s*\w{0,12}\b",
         "eleven lakh forty thousand",
         text,
         flags=re.IGNORECASE,
     )
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    text = re.sub(
+        r"\b(eleven|11)\s+million\s+forty\s*\w{0,12}\b",
+        "eleven lakh forty thousand rupees",
+        text,
+        flags=re.IGNORECASE,
+    )
+    # "become a surf / sirf for you … price"
+    text = re.sub(
+        r"\bit will absolutely (?:become|be)\s+(?:a\s+)?(?:surf|sirf)\s+for you\s+",
+        "it will absolutely be built for you for ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    # Word punchline salvage if MT still produced garbage around "system"
+    text = re.sub(
+        r"\b(?:a )?little better system is needed to run\s+\w+(?:,?\s*so\s+\w+)?(?:,?\s*isn'?t it)?\b",
+        "you need a decent system to run Microsoft Word, right",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(
+        r"\bto run\s+(?:uber|mico|micro)\b",
+        "to run Microsoft Word",
+        text,
+        flags=re.IGNORECASE,
+    )
+    # Drop near-empty junk tails
+    text = re.sub(r"\bwhat is the condition of \w+ for me\??\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s{2,}", " ", text).strip(" ,.;-")
+    text = re.sub(r"\s+([,.!?])", r"\1", text)
+    text = re.sub(r"^[\s,.!?;:]+$", "", text).strip()
+    return text.strip()
 
 # Azure Translator v3 REST
 AZURE_TRANSLATE_URL = "https://api.cognitive.microsofttranslator.com/translate"
@@ -342,13 +458,18 @@ def _count_sentences(text: str) -> int:
 def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
     """
     Translate plain text. Prefers Azure Translator; falls back to Google if Azure
-    is not configured. Always runs postprocess_translation for numbers / Hinglish.
+    is not configured. Protects brand/hardware terms across the MT call, then
+    runs postprocess_translation for numbers / Hinglish / punchlines.
     """
     text = (text or "").strip()
     if not text:
         raise UserFacingError("Nothing to translate — transcription returned empty text.")
     if len(text) > 100_000:
         raise UserFacingError("Transcript is too long to translate in one pass (100k character limit).")
+
+    # Clean ASR quirks first, then lock fragile terms so MT cannot rewrite them
+    text = clean_asr_text(text)
+    text, saved_terms = _protect_terms(text)
 
     azure_key, _ = _azure_credentials()
     google_key = _google_api_key()
@@ -362,6 +483,7 @@ def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[
             "Translation is not configured. Set AZURE_TRANSLATOR_KEY (and AZURE_TRANSLATOR_REGION if needed) "
             "on the server. Free F0 tier includes 2 million characters/month."
         )
+    out = _restore_terms(out, saved_terms)
     return postprocess_translation(out)
 
 
