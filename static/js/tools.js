@@ -1469,6 +1469,7 @@
     const sourceLang = document.getElementById('redub-source-lang');
     const targetLang = document.getElementById('redub-target-lang');
     const voiceSelect = document.getElementById('redub-voice');
+    const voiceSelectB = document.getElementById('redub-voice-b');
     const speed = document.getElementById('redub-speed');
     const speedLabel = document.getElementById('redub-speed-label');
     if (!btn || !fileInput) return;
@@ -1476,16 +1477,35 @@
     const VOICES = window.VOXCRAFT_VOICES || {};
 
     function populateVoices() {
-      if (!voiceSelect || !targetLang) return;
+      if (!targetLang) return;
       const lang = targetLang.value;
       const voices = VOICES[lang] || {};
-      voiceSelect.innerHTML = '';
-      Object.entries(voices).forEach(([name, id]) => {
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = name;
-        voiceSelect.appendChild(opt);
-      });
+      if (voiceSelect) {
+        voiceSelect.innerHTML = '';
+        Object.entries(voices).forEach(([name, id]) => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = name;
+          voiceSelect.appendChild(opt);
+        });
+      }
+      if (voiceSelectB) {
+        const prev = voiceSelectB.value;
+        voiceSelectB.innerHTML = '';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'Same as primary';
+        voiceSelectB.appendChild(none);
+        Object.entries(voices).forEach(([name, id]) => {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = name;
+          voiceSelectB.appendChild(opt);
+        });
+        if (prev && Array.from(voiceSelectB.options).some(o => o.value === prev)) {
+          voiceSelectB.value = prev;
+        }
+      }
     }
     if (targetLang) {
       targetLang.addEventListener('change', populateVoices);
@@ -1546,6 +1566,9 @@
       form.append('source_lang', sourceLang ? sourceLang.value : 'auto');
       form.append('target_lang', targetLang ? targetLang.value : 'US English');
       form.append('voice_id', voiceSelect.value);
+      if (voiceSelectB && voiceSelectB.value) {
+        form.append('voice_id_b', voiceSelectB.value);
+      }
       form.append('speed_pct', speed ? speed.value : '100');
       const matchEl = document.getElementById('redub-match-length');
       form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
