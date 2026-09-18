@@ -3876,11 +3876,8 @@ def api_transcribe():
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        # GPU Whisper costs real per-call money — only Pro/Pro+ get it.
-        # Free-tier callers still get a working transcript, just via the
-        # free Google Speech Recognition path (use_gpu=False skips Whisper
-        # entirely rather than letting a free user's daily-action quota
-        # spend GPU time).
+        # Google Speech is always primary. Whisper is only a Pro/Pro+ fallback
+        # when Google returns no usable text (use_gpu=False never hits GPU).
         result = audio_tools.transcribe(file.read(), file.filename, lang_code, use_gpu=is_pro())
         _bump_counter("usage_transcribe")
         resp = jsonify(result)
@@ -4507,8 +4504,10 @@ def api_redub():
             pass
 
     return jsonify({
-        "video_b64": result["video_b64"],
-        "audio_b64": result["audio_b64"],
+        "download_video_url": result.get("download_video_url"),
+        "download_audio_url": result.get("download_audio_url"),
+        "video_token": result.get("video_token"),
+        "audio_token": result.get("audio_token"),
         "filename": result["filename"],
         "audio_filename": result["audio_filename"],
         "transcript": result["transcript"],
@@ -4527,6 +4526,21 @@ def api_redub():
         "target_lang": result.get("target_lang"),
         "voice_id": result.get("voice_id"),
     })
+
+
+@app.route("/api/tools/redub/download/<token>", methods=["GET"])
+def api_redub_download(token):
+    """Serve a short-lived redub output file (video or audio). Tokens expire in ~10 min."""
+    import re as _re
+    if not token or not _re.match(r"^[0-9]+_[a-f0-9]+\.(mp4|mp3)$", token):
+        return jsonify({"error": "Invalid download token."}), 400
+    redub_engine.sweep_redub_outputs()
+    path = os.path.join(redub_engine.REDUB_OUT_DIR, token)
+    if not os.path.isfile(path):
+        return jsonify({"error": "File expired or not found. Please run redub again."}), 404
+    mime = "video/mp4" if token.endswith(".mp4") else "audio/mpeg"
+    download_name = "VoxCraft-Redub.mp4" if token.endswith(".mp4") else "VoxCraft-Redub-Audio.mp3"
+    return send_file(path, mimetype=mime, as_attachment=True, download_name=download_name)
 
 
 @app.route("/api/tts/preview", methods=["POST"])

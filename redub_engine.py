@@ -23,6 +23,7 @@ import base64
 import os
 import subprocess
 import tempfile
+import time
 from typing import Optional
 
 import requests
@@ -82,6 +83,7 @@ TRANSCRIBE_LANGS = {
     "bn-IN": "bn-IN",
     "ta-IN": "ta-IN",
     "te-IN": "te-IN",
+    "pa-IN": "pa-IN",
     "ar-SA": "ar-SA",
     "es-ES": "es-ES",
     "fr-FR": "fr-FR",
@@ -97,6 +99,12 @@ TRANSCRIBE_LANGS = {
 
 MAX_VIDEO_MB = 50
 MAX_DURATION_SEC = 10 * 60  # 10 minutes hard cap for Phase 1
+
+# Finished redub outputs live here briefly so the API can return a download
+# URL instead of a multi‑MB base64 blob (huge RAM win on the 2GB VPS).
+REDUB_OUT_DIR = os.environ.get("REDUB_OUT_DIR", "/tmp/voxcraft_redub_out")
+REDUB_OUT_MAX_AGE_SEC = 10 * 60  # 10 minutes
+os.makedirs(REDUB_OUT_DIR, exist_ok=True)
 
 
 def _azure_credentials() -> tuple[str, str]:
@@ -276,6 +284,49 @@ def _probe_duration_sec(path: str) -> float:
         return 0.0
 
 
+def probe_video_duration(video_bytes: bytes, filename: str = "video.mp4") -> float:
+    """Write bytes to a temp file and ffprobe duration. Used for early reject."""
+    path = None
+    try:
+        raw_ext = (filename or "video.mp4").rsplit(".", 1)
+        suffix = ("." + raw_ext[-1].lower()) if len(raw_ext) == 2 and raw_ext[-1] else ".mp4"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            f.write(video_bytes)
+            path = f.name
+        return _probe_duration_sec(path)
+    finally:
+        if path:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+
+
+def store_redub_output(data: bytes, ext: str = "mp4") -> str:
+    """Persist output bytes; return a token filename for the download route."""
+    import secrets
+    token = f"{int(time.time())}_{secrets.token_hex(12)}.{ext.lstrip('.')}"
+    path = os.path.join(REDUB_OUT_DIR, token)
+    with open(path, "wb") as f:
+        f.write(data)
+    return token
+
+
+def sweep_redub_outputs() -> None:
+    """Delete redub output files older than REDUB_OUT_MAX_AGE_SEC."""
+    cutoff = time.time() - REDUB_OUT_MAX_AGE_SEC
+    try:
+        for name in os.listdir(REDUB_OUT_DIR):
+            path = os.path.join(REDUB_OUT_DIR, name)
+            try:
+                if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                    os.unlink(path)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def _atempo_chain(ratio: float) -> str:
     """Build an atempo filter chain. Each atempo stage must be in [0.5, 2.0]."""
     if ratio <= 0:
@@ -422,11 +473,19 @@ def redub_video(
     match_length: bool = True,
 ) -> dict:
     """
-    Full redub pipeline. Returns dict with:
-      video_b64, audio_b64, transcript, translated, filename, size_kb,
-      source_lang_detected (optional), char_count
+    Full redub pipeline. Returns dict with download tokens (not base64) for
+    video/audio, plus transcript metadata.
     """
     check_file_size(video_bytes, max_mb=MAX_VIDEO_MB)
+    sweep_redub_outputs()
+
+    # Early duration reject — before extract/transcribe/TTS burn CPU
+    probed = probe_video_duration(video_bytes, filename)
+    if probed and probed > MAX_DURATION_SEC:
+        raise UserFacingError(
+            f"Video is about {int(probed // 60)} minutes — Phase 1 redub supports up to "
+            f"{MAX_DURATION_SEC // 60} minutes. Trim the video first, or wait for longer limits."
+        )
 
     source_lang = (source_lang or "auto").strip()
     if source_lang not in TRANSCRIBE_LANGS:
@@ -435,8 +494,8 @@ def redub_video(
     # ---- 1. Extract audio ----
     audio_bytes = video_to_audio(video_bytes, filename, output_format="mp3", quality_kbps=192)
 
-    # ---- 2. Transcribe ----
-    tr = transcribe(audio_bytes, "extracted.mp3", source_lang)
+    # ---- 2. Transcribe (Google primary; Whisper only if Google fails) ----
+    tr = transcribe(audio_bytes, "extracted.mp3", source_lang, use_gpu=True)
     transcript = (tr.get("text") or "").strip()
     if not transcript:
         raise UserFacingError(
@@ -444,8 +503,8 @@ def redub_video(
             "or set the source language manually instead of Auto."
         )
 
-    # Soft duration guard from transcription metadata if present
-    duration = float(tr.get("duration_sec") or 0)
+    # Secondary duration guard from transcription metadata
+    duration = float(tr.get("duration_sec") or probed or 0)
     if duration and duration > MAX_DURATION_SEC:
         raise UserFacingError(
             f"Video is about {int(duration // 60)} minutes — Phase 1 redub supports up to "
@@ -597,13 +656,19 @@ def redub_video(
         video_bytes, filename, tts_audio, audio_ext="mp3", match_video_length=bool(match_length),
     )
 
-    ts = __import__("time").time()
+    ts = time.time()
     out_name = f"VoxCraft-Redub-{int(ts)}.mp4"
     audio_name = f"VoxCraft-Redub-Audio-{int(ts)}.mp3"
 
+    # Store on disk — avoid returning multi‑MB base64 in the JSON response
+    video_token = store_redub_output(dubbed_video, "mp4")
+    audio_token = store_redub_output(tts_audio, "mp3")
+
     return {
-        "video_b64": base64.b64encode(dubbed_video).decode("ascii"),
-        "audio_b64": base64.b64encode(tts_audio).decode("ascii"),
+        "video_token": video_token,
+        "audio_token": audio_token,
+        "download_video_url": f"/api/tools/redub/download/{video_token}",
+        "download_audio_url": f"/api/tools/redub/download/{audio_token}",
         "filename": out_name,
         "audio_filename": audio_name,
         "transcript": transcript,

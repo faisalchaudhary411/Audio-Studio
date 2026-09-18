@@ -18,11 +18,10 @@ Improvements (2026-09):
   pattern as transcribe/denoise_studio. Speed (pitch-preserving path) and
   classic Denoise also got duration guards for consistency.
 
-Transcribe: tries the Modal faster-whisper GPU worker first (see
-modal_whisper.py) when MODAL_WHISPER_ENDPOINT_URL is configured; falls
-back to Google Speech Recognition automatically if Whisper isn't
-configured, or its call fails for any reason (network, cold start
-timeout, etc.) — so a Whisper outage never breaks the tool outright.
+Transcribe: Google Speech Recognition is primary (free, strong for
+Urdu/Hindi script). Modal faster-whisper is only a fallback when Google
+returns no usable text and use_gpu=True with MODAL_WHISPER_ENDPOINT_URL
+configured — so free tier never hits the paid GPU worker.
 """
 
 import io
@@ -147,13 +146,12 @@ def estimate_output_size_mb(duration_sec: float, fmt: str, bitrate_kbps: int = N
 # ---------------------------------------------------------------------------
 def transcribe(file_bytes: bytes, filename: str, lang_code: str, use_gpu: bool = True) -> dict:
     """
-    use_gpu controls whether the Modal GPU Whisper worker is eligible to
-    run at all for this call. It costs real per-call GPU money, unlike
-    the Google Speech Recognition fallback below it, which is free. Pass
-    use_gpu=False for free-tier callers so they always land on Google
-    regardless of whether MODAL_WHISPER_ENDPOINT_URL is configured —
-    Pro/Pro+ callers pass use_gpu=True (the default) to get Whisper's
-    better accuracy first, with Google as the fallback either way.
+    Google Speech Recognition is always tried first (free, good script
+    fidelity for Urdu/Hindi and most languages).
+
+    If Google returns no usable text and use_gpu=True with Whisper configured,
+    Modal faster-whisper is used as a paid fallback. Free-tier callers should
+    pass use_gpu=False so they never hit the GPU worker.
     """
     _start = time.monotonic()
 
@@ -169,140 +167,34 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str, use_gpu: bool =
             f"{MAX_TRANSCRIBE_DURATION_SEC // 60:.0f} minutes."
         )
 
-    # Prefer Google for Urdu/Hindi when the user explicitly picks those
-    # languages: Whisper often maps Urdu speech to incomplete Hindi
-    # Devanagari and drops large stretches of the clip. Google with
-    # ur-PK / hi-IN returns the matching script and tends to cover the
-    # full duration better for these languages.
-    lang_lc = (lang_code or "").strip().lower()
-    prefer_google_first = lang_lc in ("ur-pk", "ur", "hi-in", "hi")
-
-    whisper_note = None
-    whisper_result = None
-    if prefer_google_first:
-        whisper_note = f"skip Whisper for {lang_code} — Google first for script fidelity"
-        print(f"[transcribe] {whisper_note}", flush=True)
-    elif use_gpu and modal_whisper.is_configured():
-        print("[transcribe] MODAL_WHISPER_ENDPOINT_URL is set — calling Whisper worker", flush=True)
-        wav_buf = io.BytesIO()
-        audio.export(wav_buf, format="wav")
-        # Normalize language for Whisper (ISO-639-1). Empty/auto → let model detect.
-        whisper_lang = None
-        if lang_code and str(lang_code).strip().lower() not in ("", "auto", "none", "detect"):
-            whisper_lang = str(lang_code).strip().lower().split("-")[0]
-        whisper_result = modal_whisper.transcribe_audio(
-            wav_buf.getvalue(),
-            language=whisper_lang,
-            vad_filter=True,
-            word_timestamps=False,
-            timeout_sec=WHISPER_TIMEOUT_SEC,
-            max_retries=WHISPER_MAX_RETRIES,
-        )
-        if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
-            text = whisper_result["text"].strip()
-            # Quality gate: reject hallucinations AND incomplete coverage
-            # (e.g. 75s of speech but only ~15s worth of words).
-            lang_prob = float(whisper_result.get("language_probability") or 0.0)
-            words = text.split()
-            unique_ratio = (len(set(words)) / len(words)) if words else 0.0
-            from collections import Counter
-            top_count = Counter(words).most_common(1)[0][1] if words else 0
-            # Spoken languages average ~2–3 words/sec; <0.6 words/sec is truncated.
-            words_per_sec = (len(words) / duration_sec) if duration_sec > 1 else 0
-            looks_bad = (
-                (lang_prob and lang_prob < 0.35 and len(words) < 8)
-                or (len(words) >= 6 and unique_ratio < 0.25)
-                or (len(words) >= 8 and top_count >= max(6, int(len(words) * 0.5)))
-                or (duration_sec >= 25 and words_per_sec < 0.55 and len(words) < 40)
-                or (duration_sec >= 45 and len(text) < max(80, duration_sec * 2.5))
-            )
-            if looks_bad:
-                whisper_note = (
-                    f"low quality/incomplete (prob={lang_prob:.2f}, wps={words_per_sec:.2f}, "
-                    f"words={len(words)}, dur={duration_sec:.0f}s) — retrying Google"
-                )
-                print(f"[transcribe] Whisper REJECTED — {whisper_note}", flush=True)
-            else:
-                raw_method = whisper_result.get("method") or f"faster-whisper ({whisper_result.get('language') or lang_code})"
-                print(f"[transcribe] Whisper OK — method={raw_method} chars={len(text)}", flush=True)
-                return {
-                    "text": text,
-                    "method": "Speech recognition",
-                    "language": whisper_result.get("language") or lang_code,
-                    "word_count": len(words),
-                    "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
-                    "segments_ok": 1,
-                    "segments_total": 1,
-                    "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
-                    "segments": whisper_result.get("segments") or [],
-                    "engine": "whisper",
-                    "language_probability": lang_prob,
-                }
-        if not whisper_note:
-            whisper_note = (whisper_result.get("error") or "empty text").strip()[:180]
-        print(f"[transcribe] Whisper FAILED — {whisper_note} — falling back to Google", flush=True)
-    else:
-        whisper_note = (
-            "GPU Whisper skipped — free-tier caller" if not use_gpu
-            else "MODAL_WHISPER_ENDPOINT_URL not set in process env"
-        )
-        print(f"[transcribe] {whisper_note} — using Google Speech only", flush=True)
-
-    # If Whisper alone already ate most of the time budget (slow cold start,
-    # exhausted retries), don't compound the delay by also running the full
-    # Google fallback loop — fail fast with a clear message instead of
-    # risking a gunicorn WORKER TIMEOUT.
-    if _remaining_budget() <= 30:
-        raise UserFacingError(
-            "Transcription is taking longer than usual right now. Please try again in a moment, "
-            "or with a shorter clip."
-        )
-
     import speech_recognition as sr
     r = sr.Recognizer()
     r.energy_threshold = 300
     r.dynamic_energy_threshold = True
     r.operation_timeout = 25
 
-    # Google needs a BCP-47 code — "auto" is Whisper-only
+    # Google needs a BCP-47 code — "auto" defaults to Urdu (primary audience)
     google_lang = lang_code if lang_code and str(lang_code).lower() not in ("auto", "none", "detect", "") else "ur-PK"
-    detected = None
-    try:
-        detected = (whisper_result or {}).get("language")
-    except NameError:
-        detected = None
-    if detected:
-        _map = {"ur": "ur-PK", "hi": "hi-IN", "en": "en-US", "ar": "ar-SA"}
-        google_lang = _map.get(str(detected).lower()[:2], google_lang)
 
     CHUNK_MS = 50 * 1000
     total_chunks = max(1, math.ceil(len(audio) / CHUNK_MS))
     chunk_texts = []
     chunk_failures = 0
     stopped_early = False
+    google_note = None
+
+    print(f"[transcribe] Google Speech first (lang={google_lang}) chunks={total_chunks}", flush=True)
 
     for ci in range(total_chunks):
-        # Each chunk can take up to r.operation_timeout (25s) worst case.
-        # Bail before starting a new chunk rather than let the loop run
-        # past the overall budget — a partial transcript beats a killed
-        # gunicorn worker.
         if _remaining_budget() <= 20:
             stopped_early = True
             break
         chunk = audio[ci * CHUNK_MS: (ci + 1) * CHUNK_MS]
         if len(chunk) == 0:
             continue
-        # chunk_path starts as None (not yet created) so the finally block
-        # below can't reference an undefined name if export() itself throws.
         chunk_path = None
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                # Previously this export() call — and the temp-file creation
-                # around it — sat OUTSIDE this try/except entirely. Any
-                # transient export failure on any single chunk (of up to
-                # ~10 for an 8-minute file) crashed the whole transcription
-                # with a generic error instead of just costing one chunk,
-                # the same way a failed recognize_google() call already did.
                 chunk.export(tmp.name, format="wav")
                 chunk_path = tmp.name
             with sr.AudioFile(chunk_path) as source:
@@ -313,11 +205,6 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str, use_gpu: bool =
             except sr.UnknownValueError:
                 pass
             except Exception:
-                # One retry: Google's free recognition endpoint can
-                # transiently rate-limit or hiccup on a burst of back-to-back
-                # calls — more likely the more chunks a file has. A short
-                # pause + single retry recovers most of these instead of
-                # permanently dropping that chunk's text on the first blip.
                 time.sleep(1.0)
                 try:
                     chunk_texts.append(r.recognize_google(audio_data, language=google_lang))
@@ -333,35 +220,105 @@ def transcribe(file_bytes: bytes, filename: str, lang_code: str, use_gpu: bool =
             if chunk_path and os.path.exists(chunk_path):
                 os.unlink(chunk_path)
 
-    if not chunk_texts:
+    if chunk_texts:
+        text = " ".join(chunk_texts).strip()
+        method = "Speech recognition"
         if stopped_early:
-            raise UserFacingError("Transcription is taking longer than usual right now. Please try again in a moment, or with a shorter clip.")
+            method = "Speech recognition (partial)"
+        words = len(text.split()) if text else 0
+        print(f"[transcribe] Google OK — chars={len(text)} chunks_ok={len(chunk_texts)}/{total_chunks}", flush=True)
+        return {
+            "text": text,
+            "method": method,
+            "language": lang_code,
+            "word_count": words,
+            "duration_sec": round(duration_sec, 2),
+            "segments_ok": len(chunk_texts),
+            "segments_total": total_chunks,
+            "srt": _text_to_simple_srt(text, duration_sec) if text else "",
+            "engine": "google",
+            "partial": stopped_early,
+        }
+
+    # Google produced nothing — optional Whisper fallback (Pro / GPU path)
+    google_note = (
+        "stopped early (time budget)" if stopped_early
+        else f"empty/failed ({chunk_failures}/{total_chunks} chunk failures)"
+    )
+    print(f"[transcribe] Google failed — {google_note}", flush=True)
+
+    if not (use_gpu and modal_whisper.is_configured()):
+        if stopped_early:
+            raise UserFacingError(
+                "Transcription is taking longer than usual right now. Please try again in a moment, or with a shorter clip."
+            )
         if chunk_failures == total_chunks:
             raise UserFacingError("Speech recognition service unavailable. Please try again in a moment.")
         raise UserFacingError("Could not understand the audio. Try a clearer recording with less background noise.")
 
-    text = " ".join(chunk_texts).strip()
-    # User-facing method stays short; technical notes stay in whisper_note for logs only.
-    method = "Speech recognition"
-    if stopped_early:
-        method = "Speech recognition (partial)"
-    words = len(text.split()) if text else 0
-    if whisper_note:
-        print(f"[transcribe] google ok — internal note: {whisper_note}", flush=True)
+    if _remaining_budget() <= 40:
+        raise UserFacingError(
+            "Transcription is taking longer than usual right now. Please try again in a moment, "
+            "or with a shorter clip."
+        )
 
-    return {
-        "text": text,
-        "method": method,
-        "language": lang_code,
-        "word_count": words,
-        "duration_sec": round(duration_sec, 2),
-        "segments_ok": len(chunk_texts),
-        "segments_total": total_chunks,
-        "srt": _text_to_simple_srt(text, duration_sec) if text else "",
-        "engine": "google",
-        "whisper_note": whisper_note or "",
-        "partial": stopped_early,
-    }
+    print("[transcribe] Falling back to Whisper GPU worker", flush=True)
+    wav_buf = io.BytesIO()
+    audio.export(wav_buf, format="wav")
+    whisper_lang = None
+    if lang_code and str(lang_code).strip().lower() not in ("", "auto", "none", "detect"):
+        whisper_lang = str(lang_code).strip().lower().split("-")[0]
+    whisper_result = modal_whisper.transcribe_audio(
+        wav_buf.getvalue(),
+        language=whisper_lang,
+        vad_filter=True,
+        word_timestamps=False,
+        timeout_sec=min(WHISPER_TIMEOUT_SEC, max(30, int(_remaining_budget()) - 10)),
+        max_retries=WHISPER_MAX_RETRIES,
+    )
+    if whisper_result.get("success") and (whisper_result.get("text") or "").strip():
+        text = whisper_result["text"].strip()
+        lang_prob = float(whisper_result.get("language_probability") or 0.0)
+        words = text.split()
+        unique_ratio = (len(set(words)) / len(words)) if words else 0.0
+        from collections import Counter
+        top_count = Counter(words).most_common(1)[0][1] if words else 0
+        words_per_sec = (len(words) / duration_sec) if duration_sec > 1 else 0
+        looks_bad = (
+            (lang_prob and lang_prob < 0.35 and len(words) < 8)
+            or (len(words) >= 6 and unique_ratio < 0.25)
+            or (len(words) >= 8 and top_count >= max(6, int(len(words) * 0.5)))
+            or (duration_sec >= 25 and words_per_sec < 0.55 and len(words) < 40)
+            or (duration_sec >= 45 and len(text) < max(80, duration_sec * 2.5))
+        )
+        if not looks_bad:
+            print(f"[transcribe] Whisper fallback OK — chars={len(text)}", flush=True)
+            return {
+                "text": text,
+                "method": "Speech recognition",
+                "language": whisper_result.get("language") or lang_code,
+                "word_count": len(words),
+                "duration_sec": round(whisper_result.get("duration_sec") or duration_sec, 2),
+                "segments_ok": 1,
+                "segments_total": 1,
+                "srt": whisper_result.get("srt") or _text_to_simple_srt(text, duration_sec),
+                "segments": whisper_result.get("segments") or [],
+                "engine": "whisper",
+                "language_probability": lang_prob,
+                "google_note": google_note,
+            }
+        print(f"[transcribe] Whisper fallback rejected (quality gate)", flush=True)
+    else:
+        err = (whisper_result.get("error") or "empty text").strip()[:180]
+        print(f"[transcribe] Whisper fallback failed — {err}", flush=True)
+
+    if stopped_early:
+        raise UserFacingError(
+            "Transcription is taking longer than usual right now. Please try again in a moment, or with a shorter clip."
+        )
+    if chunk_failures == total_chunks:
+        raise UserFacingError("Speech recognition service unavailable. Please try again in a moment.")
+    raise UserFacingError("Could not understand the audio. Try a clearer recording with less background noise.")
 
 
 def _text_to_simple_srt(text: str, duration_sec: float) -> str:
