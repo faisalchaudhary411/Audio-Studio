@@ -28,8 +28,14 @@ from errors import UserFacingError
 from audio_tools import video_to_audio, check_file_size
 from tts_engine import tts_dispatch
 
-# Timed Google chunks (~12s: recognition quality vs alignment granularity)
-REDUB_CHUNK_MS = 12 * 1000
+# Fallback fixed-window when silence detection finds too few cuts.
+# Keep short so dialogue turns don't mash into one TTS blob.
+REDUB_CHUNK_MS = 5 * 1000
+REDUB_MAX_SEG_MS = 8 * 1000
+REDUB_MIN_SEG_MS = 700
+# Gentle stretch — extreme atempo made sample redubs unintelligible
+REDUB_STRETCH_MIN = 0.72
+REDUB_STRETCH_MAX = 1.35
 
 # Azure Translator v3 REST
 AZURE_TRANSLATE_URL = "https://api.cognitive.microsofttranslator.com/translate"
@@ -345,14 +351,24 @@ def _atempo_chain(ratio: float) -> str:
     return ",".join(f"atempo={s:.6f}" for s in stages)
 
 
-def stretch_audio_to_duration(audio_bytes: bytes, target_sec: float, audio_ext: str = "mp3") -> bytes:
+def stretch_audio_to_duration(
+    audio_bytes: bytes,
+    target_sec: float,
+    audio_ext: str = "mp3",
+    *,
+    min_ratio: float = None,
+    max_ratio: float = None,
+) -> bytes:
     """
     Pitch-preserving time-stretch so output duration ≈ target_sec.
     Uses ffmpeg atempo. If durations are already close (<3% diff), returns input unchanged.
-    Extreme ratios are clamped to keep speech intelligible (~0.5x–2x effective after chaining).
+    Ratios clamped for intelligibility (redub uses gentler defaults via kwargs).
     """
     if not audio_bytes or target_sec <= 0.05:
         return audio_bytes
+
+    lo = REDUB_STRETCH_MIN if min_ratio is None else float(min_ratio)
+    hi = REDUB_STRETCH_MAX if max_ratio is None else float(max_ratio)
 
     in_path = out_path = None
     try:
@@ -368,13 +384,7 @@ def stretch_audio_to_duration(audio_bytes: bytes, target_sec: float, audio_ext: 
         if abs(ratio - 1.0) < 0.03:
             return audio_bytes  # already close enough
 
-        # Soft clamp: don't make speech unintelligible. Widened slightly
-        # from the original 0.5-2.0 for redub specifically (see the
-        # coverage/gap reporting added in redub_video() below — pushing
-        # the clamp further than this starts costing more intelligibility
-        # than it buys in extra coverage, so past this point we report the
-        # remaining gap instead of trying to out-stretch it).
-        ratio = max(0.45, min(2.2, ratio))
+        ratio = max(lo, min(hi, ratio))
         # Allow chaining beyond single-stage limits for moderate extremes already clamped
         filt = _atempo_chain(ratio)
 
@@ -461,16 +471,100 @@ def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: b
                     pass
 
 
+def _segment_windows_ms(audio) -> list[tuple[int, int]]:
+    """Build (start_ms, end_ms) speech windows via silence detection, else fixed chunks.
+
+    Silence cuts track dialogue turns much better than fixed 12s blocks
+    (which mashed multiple speakers into one bad TTS blob on short reels).
+    """
+    from pydub.silence import detect_nonsilent
+
+    duration_ms = len(audio)
+    thresh = max(-42, int(audio.dBFS) - 14) if audio.dBFS != float("-inf") else -35
+    try:
+        nonsilent = detect_nonsilent(
+            audio,
+            min_silence_len=280,
+            silence_thresh=thresh,
+            seek_step=15,
+        )
+    except Exception:
+        nonsilent = []
+
+    windows: list[tuple[int, int]] = []
+    if nonsilent and len(nonsilent) >= 2:
+        for start, end in nonsilent:
+            if end - start < REDUB_MIN_SEG_MS:
+                continue
+            # Split long runs so one window ≈ one short utterance
+            pos = start
+            while pos < end:
+                chunk_end = min(end, pos + REDUB_MAX_SEG_MS)
+                if chunk_end - pos >= REDUB_MIN_SEG_MS:
+                    windows.append((pos, chunk_end))
+                pos = chunk_end
+        # Merge tiny gaps (<350ms) between adjacent windows of same speaker rush
+        merged: list[tuple[int, int]] = []
+        for s, e in windows:
+            if merged and s - merged[-1][1] < 350 and (e - merged[-1][0]) <= REDUB_MAX_SEG_MS + 500:
+                merged[-1] = (merged[-1][0], e)
+            else:
+                merged.append((s, e))
+        windows = merged
+
+    if len(windows) < 2:
+        # Fixed short windows as fallback
+        chunk_ms = REDUB_CHUNK_MS
+        windows = []
+        pos = 0
+        while pos < duration_ms:
+            end = min(duration_ms, pos + chunk_ms)
+            if end - pos >= REDUB_MIN_SEG_MS:
+                windows.append((pos, end))
+            pos = end
+
+    return windows
+
+
+def _google_recognize_chunk(r, chunk, google_lang: str) -> str:
+    import speech_recognition as sr
+
+    chunk_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            chunk.export(tmp.name, format="wav")
+            chunk_path = tmp.name
+        with sr.AudioFile(chunk_path) as source:
+            r.adjust_for_ambient_noise(source, duration=min(0.35, len(chunk) / 1000))
+            audio_data = r.record(source)
+        try:
+            return (r.recognize_google(audio_data, language=google_lang) or "").strip()
+        except sr.UnknownValueError:
+            return ""
+        except Exception:
+            time.sleep(0.7)
+            try:
+                return (r.recognize_google(audio_data, language=google_lang) or "").strip()
+            except Exception:
+                return ""
+    finally:
+        if chunk_path and os.path.exists(chunk_path):
+            try:
+                os.unlink(chunk_path)
+            except OSError:
+                pass
+
+
 def google_transcribe_segments(
     audio_bytes: bytes,
     filename: str = "extracted.mp3",
     lang_code: str = "auto",
     chunk_ms: int = REDUB_CHUNK_MS,
 ) -> list[dict]:
-    """Transcribe with Google Speech in fixed time windows.
+    """Transcribe with Google Speech on silence-based (or short fixed) windows.
 
-    Returns list of {start_sec, end_sec, text}. Empty/failed windows are
-    omitted (timeline keeps silence there). No Whisper — Google only.
+    Returns list of {start_sec, end_sec, text}. Empty windows omitted.
+    No Whisper — Google only.
     """
     import speech_recognition as sr
     from pydub import AudioSegment
@@ -478,12 +572,11 @@ def google_transcribe_segments(
     google_lang = (
         lang_code
         if lang_code and str(lang_code).lower() not in ("auto", "none", "detect", "")
-        else "ur-PK"
+        else "hi-IN"  # Hindi-first for typical short-form source; UI can override
     )
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes)).set_frame_rate(16000).set_channels(1)
     duration_sec = len(audio) / 1000.0
-    chunk_ms = max(4000, min(30000, int(chunk_ms or REDUB_CHUNK_MS)))
-    total_chunks = max(1, (len(audio) + chunk_ms - 1) // chunk_ms)
+    windows = _segment_windows_ms(audio)
 
     r = sr.Recognizer()
     r.energy_threshold = 300
@@ -491,51 +584,26 @@ def google_transcribe_segments(
     r.operation_timeout = 25
 
     segments: list[dict] = []
-    for ci in range(total_chunks):
-        start_ms = ci * chunk_ms
-        end_ms = min(len(audio), (ci + 1) * chunk_ms)
-        if end_ms - start_ms < 400:
+    for start_ms, end_ms in windows:
+        # Small pad so word edges aren't clipped
+        pad = 80
+        s = max(0, start_ms - pad)
+        e = min(len(audio), end_ms + pad)
+        if e - s < REDUB_MIN_SEG_MS:
             continue
-        chunk = audio[start_ms:end_ms]
-        chunk_path = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
-                chunk.export(tmp.name, format="wav")
-                chunk_path = tmp.name
-            with sr.AudioFile(chunk_path) as source:
-                r.adjust_for_ambient_noise(source, duration=min(0.4, len(chunk) / 1000))
-                audio_data = r.record(source)
-            text = ""
-            try:
-                text = r.recognize_google(audio_data, language=google_lang)
-            except sr.UnknownValueError:
-                text = ""
-            except Exception:
-                time.sleep(0.8)
-                try:
-                    text = r.recognize_google(audio_data, language=google_lang)
-                except Exception:
-                    text = ""
-            text = (text or "").strip()
-            if text:
-                segments.append({
-                    "start_sec": round(start_ms / 1000.0, 3),
-                    "end_sec": round(end_ms / 1000.0, 3),
-                    "text": text,
-                })
-        finally:
-            if chunk_path and os.path.exists(chunk_path):
-                try:
-                    os.unlink(chunk_path)
-                except OSError:
-                    pass
+        text = _google_recognize_chunk(r, audio[s:e], google_lang)
+        if text:
+            segments.append({
+                "start_sec": round(start_ms / 1000.0, 3),
+                "end_sec": round(end_ms / 1000.0, 3),
+                "text": text,
+            })
 
     if not segments:
         raise UserFacingError(
             "Could not detect speech in this video. Try a clearer audio track, "
             "or set the source language manually instead of Auto."
         )
-    # Attach total duration for callers
     for s in segments:
         s["_total_duration_sec"] = duration_sec
     return segments
@@ -726,9 +794,9 @@ def redub_video(
     silent_tail_sec = 0.0
     trimmed_sec = 0.0
     length_note = (
-        f"Timed dub: {len(timed_clips)} speech window(s) aligned to the original timeline "
-        f"using Google Speech chunks (~{REDUB_CHUNK_MS // 1000}s). "
-        "This is audio alignment only — faces are not re-animated."
+        f"Timed dub: {len(timed_clips)} speech window(s) from silence detection + Google Speech. "
+        "Speech is placed on the original timeline (gentle speed fit only). "
+        "Faces are not re-animated. Set source language manually if Auto misreads Hindi/Urdu."
     )
     if tts_failures:
         length_note += f" {tts_failures} segment(s) failed TTS and were left silent."
