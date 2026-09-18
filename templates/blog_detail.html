@@ -100,9 +100,11 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "Article",
+  "@type": "BlogPosting",
+  "mainEntityOfPage": {"@id": "{{ canonical_url }}#webpage"},
   "headline": {{ post.title|tojson }},
   "description": {{ (post.excerpt or "")|tojson }},
+  "image": {{ self.og_image()|tojson }},
   "datePublished": {{ (post.date or "")|tojson }},
   "dateModified": {{ (updated_date or post.date or "")|tojson }},
   "author": {
@@ -110,10 +112,7 @@
     "name": {{ author|tojson }}{% if author == "Faisal" %},
     "url": {{ (request.url_root.rstrip("/") + url_for("about"))|tojson }}{% endif %}
   },
-  "publisher": {
-    "@type": "Organization",
-    "name": "VoxCraft"
-  }{% if post.tags %},
+  "publisher": {"@id": "https://voxcraft.site/#organization"}{% if post.tags %},
   "keywords": {{ (post.tags | join(', '))|tojson }}{% endif %}
 }
 </script>

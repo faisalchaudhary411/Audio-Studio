@@ -103,7 +103,26 @@
   "@type": "CollectionPage",
   "name": "VoxCraft Voice Library",
   "description": "{{ voice_count }} neural text-to-speech voices across {{ language_count }} languages, with first-class Urdu and Hindi support.",
-  "url": "https://voxcraft.site/voices"
+  "url": "https://voxcraft.site/voices",
+  "mainEntity": {
+    "@type": "ItemList",
+    "numberOfItems": {{ all_voices|selectattr('is_pro_only', 'equalto', false)|list|length }},
+    "itemListElement": [
+      {% for v in all_voices if not v.is_pro_only %}
+      {
+        "@type": "ListItem",
+        "position": {{ loop.index }},
+        "item": {
+          "@type": "Product",
+          "name": {{ (v.name + ' (' + v.language + ')')|tojson }},
+          "brand": {"@id": "https://voxcraft.site/#organization"},
+          "category": "Text-to-speech voice",
+          "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+        }
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+  }
 }
 </script>
 

@@ -3,6 +3,11 @@
 {% block meta_description %}Free AI text to speech online for Urdu, Hindi, English & 45+ languages. Neural voices, voice cloning, AI music generator, and free audio tools — no signup required to start.{% endblock %}
 {% block og_title %}VoxCraft — AI Voice Generator & Multilingual Text-to-Speech{% endblock %}
 {% block og_description %}Generate natural AI voices in Urdu, Hindi, Punjabi & more. Free text to speech, voice cloning, and AI music for YouTube, podcasts, and video — commercial use allowed.{% endblock %}
+{% block preload %}
+<link rel="preload" href="{{ url_for('static', filename='audio/previews/ur-pk-uzmaneural.mp3') }}" as="audio">
+<link rel="preload" href="{{ url_for('static', filename='audio/previews/hi-in-swaraneural.mp3') }}" as="audio">
+<link rel="preload" href="{{ url_for('static', filename='audio/previews/en-us-jennyneural.mp3') }}" as="audio">
+{% endblock %}
 
 {% block content %}
 
@@ -498,46 +503,8 @@
   ]
 }
 </script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  "name": "VoxCraft",
-  "url": "https://voxcraft.site/",
-  "logo": "https://voxcraft.site/static/favicons/android-chrome-512x512.png",
-  "description": "VoxCraft is a multilingual neural text-to-speech and online audio toolkit for creators, with strong Urdu, Hindi and South Asian language support, voice cloning, AI music, and free browser-based audio tools.",
-  "foundingDate": "2025",
-  "areaServed": "Worldwide",
-  "contactPoint": {
-    "@type": "ContactPoint",
-    "contactType": "customer support",
-    "url": "https://voxcraft.site/contact"
-  },
-  "sameAs": [
-    "https://voxcraft.site/about",
-    "https://voxcraft.site/blog"
-  ]
-}
-</script>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": "VoxCraft",
-  "url": "https://voxcraft.site/",
-  "description": "Neural text-to-speech, voice cloning, AI music, and free online audio tools — no signup required.",
-  "publisher": {
-    "@type": "Organization",
-    "name": "VoxCraft",
-    "url": "https://voxcraft.site/"
-  },
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "https://voxcraft.site/tools?q={search_term_string}",
-    "query-input": "required name=search_term_string"
-  }
-}
-</script>
+{# Organization + WebSite schema moved to base.html so every page carries
+   it, not just this one — see the entity-graph block in <head>. #}
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",

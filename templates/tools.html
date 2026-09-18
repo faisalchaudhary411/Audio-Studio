@@ -58,7 +58,7 @@
     ("Speech & text", ["transcribe-audio-to-text", "voice-changer", "video-audio-redub"]),
     ("Edit & clean", ["trim-cut-audio", "merge-audio-files", "remove-background-noise", "split-audio-by-silence", "fade-audio"]),
     ("Volume & tone", ["normalize-audio-volume", "adjust-audio-volume", "simple-audio-eq"]),
-    ("Format & channels", ["convert-audio-format", "stereo-to-mono", "extract-audio-from-video"]),
+    ("Format & channels", ["convert-audio-format", "compress-audio", "decompress-audio", "stereo-to-mono", "extract-audio-from-video"]),
     ("Time & effects", ["change-audio-speed", "loop-audio", "reverse-audio"]),
     ("Create", ["ai-music-generator"]),
   ] %}
@@ -70,8 +70,8 @@
   <div class="tools-filterbar">
     <label class="tools-search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tools-search__icon"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" id="tools-search" placeholder="Search tools — denoise, transcribe, merge…" autocomplete="off">
-      <button type="button" class="tools-search__clear" id="tools-search-clear" aria-label="Clear search" hidden>&times;</button>
+      <input type="text" id="tools-search" placeholder="Search tools — denoise, transcribe, merge…" autocomplete="off" value="{{ search_query|default('') }}">
+      <button type="button" class="tools-search__clear" id="tools-search-clear" aria-label="Clear search" {% if not search_query %}hidden{% endif %}>&times;</button>
     </label>
     <div class="tools-chips" id="tools-chips">
       <button type="button" class="tools-chip is-active" data-cat="all">All</button>
@@ -256,6 +256,12 @@
       applyFilter();
     });
   }
+  // Runs the existing filter once on load when the search box arrives
+  // pre-filled — e.g. a visitor (or Googlebot) landing via
+  // /tools?q=denoise through the site's SearchAction structured data.
+  // Without this, the box would show "denoise" typed in but every card
+  // would still be visible until the visitor typed something themselves.
+  if (search.value.trim()) applyFilter();
 
   function setActiveChip(cat) {
     activeCat = cat;

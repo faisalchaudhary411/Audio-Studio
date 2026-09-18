@@ -157,6 +157,27 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "VoxCraft",
+    "url": "https://voxcraft.site/pricing",
+    "applicationCategory": "MultimediaApplication",
+    "operatingSystem": "Web",
+    "description": "VoxCraft pricing — free tier, Pro, and Pro+ plans for neural text-to-speech, voice cloning, AI music, and audio tools.",
+    "offers": [
+      {% for o in software_schema_offers %}
+      {
+        "@type": "Offer",
+        "name": {{ o.name|tojson }},
+        "price": {{ o.price|tojson }},
+        "priceCurrency": "USD"
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
     "@type": "FAQPage",
     "mainEntity": [
       {"@type": "Question", "name": "How does manual payment (EasyPaisa/JazzCash/bank) work?", "acceptedAnswer": {"@type": "Answer", "text": "Select your plan on the upgrade page, send the PKR amount shown to one of the listed accounts, then submit the form with your payment details. Access activates automatically for a grace period while the payment is verified, and becomes permanent once confirmed."}},
