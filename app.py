@@ -4444,6 +4444,7 @@ def api_redub():
     source_lang = (request.form.get("source_lang") or "auto").strip()
     target_lang = (request.form.get("target_lang") or "US English").strip()
     voice_id = (request.form.get("voice_id") or "").strip()
+    voice_id_b = (request.form.get("voice_id_b") or "").strip()
     try:
         speed_pct = int(request.form.get("speed_pct") or 100)
     except (TypeError, ValueError):
@@ -4457,6 +4458,8 @@ def api_redub():
     known = {vid for lang_voices in VOICES.values() for vid in lang_voices.values()}
     if voice_id not in known:
         return jsonify({"error": "Unknown voice. Choose a voice from the list."}), 400
+    if voice_id_b and voice_id_b not in known:
+        return jsonify({"error": "Unknown second voice. Choose a voice from the list, or leave it empty."}), 400
 
     if target_lang not in VOICES:
         return jsonify({"error": "Unknown target language."}), 400
@@ -4477,6 +4480,7 @@ def api_redub():
             source_lang=source_lang,
             target_studio_lang=target_lang,
             voice_id=voice_id,
+            voice_id_b=voice_id_b or None,
             speed_pct=speed_pct,
             match_length=match_length,
         )

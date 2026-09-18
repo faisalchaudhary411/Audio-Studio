@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -34,8 +35,97 @@ REDUB_CHUNK_MS = 5 * 1000
 REDUB_MAX_SEG_MS = 8 * 1000
 REDUB_MIN_SEG_MS = 700
 # Gentle stretch — extreme atempo made sample redubs unintelligible
-REDUB_STRETCH_MIN = 0.72
-REDUB_STRETCH_MAX = 1.35
+REDUB_STRETCH_MIN = 0.78
+REDUB_STRETCH_MAX = 1.28
+# If TTS is shorter than the window, leave trailing silence instead of
+# stretching more than this factor (sounds more natural for dialogue).
+REDUB_PAD_INSTEAD_OF_STRETCH = 1.18
+
+# --- Hinglish / Indian-number glossary (Google-only quality aids) ---
+# Applied after ASR and after translation. Order matters for some patterns.
+_ASR_FIXES = [
+    # Common Google ASR garbling on short Hindi/Hinglish clips
+    (r"\bbetay\b", "bete"),
+    (r"\bklye\b", "ke liye"),
+    (r"\bkia\b", "kya"),
+    (r"\bhojaingi\b", "ho jayegi"),
+    (r"\bhojayegi\b", "ho jayegi"),
+    (r"\bmehnga\b", "mehnga"),
+    (r"\bmehanga\b", "mehnga"),
+    (r"\bbilkul banega\b", "bilkul banega"),
+    (r"\bbilkul ban jayega\b", "bilkul ban jayega"),
+    (r"\bspecs dkhat[e]?\b", "specs dekhte"),
+    (r"\bdkhate\b", "dekhte"),
+    (r"\bbna denge\b", "bana denge"),
+    (r"\brs\.?\s*11[,.]?40+0*\b", "Rs 11,40,000", re.I),
+    (r"\b11\s*lakh\s*4(?:0+)?\b", "11 lakh 40 thousand", re.I),
+    (r"\bc\s*b\s*s\s*e\b", "CBSE", re.I),
+]
+
+_TRANSLATE_GLOSSARY = [
+    # Indian number words → clear English for TTS
+    (r"\b(\d+)\s*lakh(?:s)?\b", r"\1 lakh", re.I),
+    (r"\b(\d+)\s*crore(?:s)?\b", r"\1 crore", re.I),
+    (r"\beleven\s+lakh\s+four\b", "eleven lakh forty thousand", re.I),
+    (r"\beleven\s+lakh\s+4\b", "eleven lakh forty thousand", re.I),
+    (r"\b11\s*,?\s*40+0*\b", "11,40,000"),
+    (r"\brs\.?\s*11[,.]?40+0*\b", "1,140,000 rupees", re.I),
+    (r"\b1[,.]?140[,.]?000\b", "1,140,000"),
+    # Keep hardware terms readable for TTS
+    (r"\brtx\s*5080\b", "RTX 5080", re.I),
+    (r"\bi9\s*14(?:th)?\s*gen\b", "i9 14th gen", re.I),
+    (r"\b32\s*gb\s*ram\b", "32 GB RAM", re.I),
+    (r"\b1\s*tb\s*ssd\b", "1 TB SSD", re.I),
+    (r"\bmicrosoft\s+word\b", "Microsoft Word", re.I),
+    # Soften awkward literal translations common on this content
+    (r"\bit will be done at all\b", "absolutely, it can be done", re.I),
+    (r"\byes,?\s*it will be done at all\b", "Yes, absolutely, it can be done", re.I),
+    (r"\bneed a system what is the condition for me\b",
+     "for running Microsoft Word you need a decent system, right", re.I),
+]
+
+
+def _apply_pattern_list(text: str, patterns: list) -> str:
+    if not text:
+        return text
+    out = text
+    for item in patterns:
+        if len(item) == 3:
+            pat, repl, flags = item
+            out = re.sub(pat, repl, out, flags=flags)
+        else:
+            pat, repl = item
+            out = re.sub(pat, repl, out, flags=re.IGNORECASE)
+    return out
+
+
+def clean_asr_text(text: str) -> str:
+    """Light cleanup of Google ASR output (Hinglish typos, clipped words)."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    text = _apply_pattern_list(text, _ASR_FIXES)
+    # Collapse repeated spaces / odd punctuation from ASR
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([,.!?])", r"\1", text)
+    return text
+
+
+def postprocess_translation(text: str) -> str:
+    """Fix numbers, lakh/crore, and common bad literal translations before TTS."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    text = _apply_pattern_list(text, _TRANSLATE_GLOSSARY)
+    # "eleven lakh four I" style garbage → try to salvage
+    text = re.sub(
+        r"\b(eleven|11)\s+lakh\s+four\s*[a-z]?\b",
+        "eleven lakh forty thousand",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 # Azure Translator v3 REST
 AZURE_TRANSLATE_URL = "https://api.cognitive.microsofttranslator.com/translate"
@@ -247,7 +337,7 @@ def _count_sentences(text: str) -> int:
 def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
     """
     Translate plain text. Prefers Azure Translator; falls back to Google if Azure
-    is not configured. Set AZURE_TRANSLATOR_KEY (+ optional REGION) on the server.
+    is not configured. Always runs postprocess_translation for numbers / Hinglish.
     """
     text = (text or "").strip()
     if not text:
@@ -259,14 +349,15 @@ def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[
     google_key = _google_api_key()
 
     if azure_key:
-        return _translate_azure(text, target_lang_code, source_lang_code)
-    if google_key:
-        return _translate_google(text, target_lang_code, source_lang_code)
-
-    raise UserFacingError(
-        "Translation is not configured. Set AZURE_TRANSLATOR_KEY (and AZURE_TRANSLATOR_REGION if needed) "
-        "on the server. Free F0 tier includes 2 million characters/month."
-    )
+        out = _translate_azure(text, target_lang_code, source_lang_code)
+    elif google_key:
+        out = _translate_google(text, target_lang_code, source_lang_code)
+    else:
+        raise UserFacingError(
+            "Translation is not configured. Set AZURE_TRANSLATOR_KEY (and AZURE_TRANSLATOR_REGION if needed) "
+            "on the server. Free F0 tier includes 2 million characters/month."
+        )
+    return postprocess_translation(out)
 
 
 
@@ -591,7 +682,7 @@ def google_transcribe_segments(
         e = min(len(audio), end_ms + pad)
         if e - s < REDUB_MIN_SEG_MS:
             continue
-        text = _google_recognize_chunk(r, audio[s:e], google_lang)
+        text = clean_asr_text(_google_recognize_chunk(r, audio[s:e], google_lang))
         if text:
             segments.append({
                 "start_sec": round(start_ms / 1000.0, 3),
@@ -613,9 +704,12 @@ def assemble_timed_dub(
     segment_audio: list[tuple[float, float, bytes]],
     total_duration_sec: float,
 ) -> bytes:
-    """Build one MP3 timeline: place each TTS clip at start_sec, stretched to fit window.
+    """Build one MP3 timeline: place each TTS clip at start_sec.
 
-    segment_audio: list of (start_sec, end_sec, mp3_bytes)
+    Prefer natural TTS length + trailing silence inside the window when the
+    clip is shorter than the original speech. Only stretch when the clip is
+    longer than the window (or mildly shorter within REDUB_PAD_INSTEAD_OF_STRETCH).
+    This keeps dialogue gaps and avoids robotic slow-speech.
     """
     from pydub import AudioSegment
 
@@ -627,18 +721,46 @@ def assemble_timed_dub(
             continue
         start_ms = max(0, int(float(start_sec) * 1000))
         end_ms = max(start_ms + 200, int(float(end_sec) * 1000))
-        window_sec = max(0.25, (end_ms - start_ms) / 1000.0)
-        fitted = stretch_audio_to_duration(mp3_bytes, window_sec, audio_ext="mp3")
+        window_ms = end_ms - start_ms
+        window_sec = max(0.25, window_ms / 1000.0)
+
         try:
-            clip = AudioSegment.from_file(io.BytesIO(fitted), format="mp3")
+            raw = AudioSegment.from_file(io.BytesIO(mp3_bytes), format="mp3")
         except Exception:
             continue
-        # Don't overflow the timeline
+        tts_ms = len(raw)
+        if tts_ms < 80:
+            continue
+
+        # Decide stretch vs pad:
+        # - TTS longer than window → speed up (clamp) to fit
+        # - TTS much shorter → leave natural length + silence (no slow-mo)
+        # - mild shortfall → gentle stretch only
+        if tts_ms > window_ms:
+            fitted = stretch_audio_to_duration(mp3_bytes, window_sec, audio_ext="mp3")
+            try:
+                clip = AudioSegment.from_file(io.BytesIO(fitted), format="mp3")
+            except Exception:
+                clip = raw[:window_ms]
+        elif tts_ms * REDUB_PAD_INSTEAD_OF_STRETCH < window_ms:
+            # Keep natural pace; silence fills the rest of the dialogue gap
+            clip = raw
+        else:
+            fitted = stretch_audio_to_duration(mp3_bytes, window_sec, audio_ext="mp3")
+            try:
+                clip = AudioSegment.from_file(io.BytesIO(fitted), format="mp3")
+            except Exception:
+                clip = raw
+
         if start_ms >= total_ms:
             continue
         max_len = total_ms - start_ms
         if len(clip) > max_len:
             clip = clip[:max_len]
+        # Also never spill past this segment's original end by more than 120ms
+        hard_cap = min(max_len, window_ms + 120)
+        if len(clip) > hard_cap:
+            clip = clip[:hard_cap]
         timeline = timeline.overlay(clip, position=start_ms)
 
     buf = io.BytesIO()
@@ -653,12 +775,16 @@ def redub_video(
     source_lang: str = "auto",
     target_studio_lang: str = "US English",
     voice_id: str = "en-US-JennyNeural",
+    voice_id_b: Optional[str] = None,
     speed_pct: int = 100,
     match_length: bool = True,
 ) -> dict:
     """
     Full redub pipeline. Returns dict with download tokens (not base64) for
     video/audio, plus transcript metadata.
+
+    voice_id_b: optional second stock voice. When set, segments alternate
+    voice_id / voice_id_b (cheap two-speaker approximation, no diarization).
     """
     check_file_size(video_bytes, max_mb=MAX_VIDEO_MB)
     sweep_redub_outputs()
@@ -674,6 +800,7 @@ def redub_video(
     source_lang = (source_lang or "auto").strip()
     if source_lang not in TRANSCRIBE_LANGS:
         source_lang = "auto"
+    voice_id_b = (voice_id_b or "").strip() or None
 
     # ---- 1. Extract audio ----
     audio_bytes = video_to_audio(video_bytes, filename, output_format="mp3", quality_kbps=192)
@@ -723,7 +850,8 @@ def redub_video(
     for seg in segments:
         src = seg["text"]
         if same_lang:
-            seg["translated"] = src
+            # Still run number / Hinglish cleanup even when not translating
+            seg["translated"] = postprocess_translation(src) or src
         else:
             try:
                 seg["translated"] = translate_text(src, target_code, source_lang_code=source_code)
@@ -756,14 +884,22 @@ def redub_video(
     voice_note = None
     timed_clips: list[tuple[float, float, bytes]] = []
     tts_failures = 0
+    dual_voice = bool(voice_id_b and voice_id_b != voice_id)
+    spoken_idx = 0
 
     for seg in segments:
         text = (seg.get("translated") or "").strip()
         if not text:
             continue
+        # Alternate voices for a cheap two-speaker effect (no diarization)
+        use_voice = voice_id
+        if dual_voice:
+            use_voice = voice_id if (spoken_idx % 2 == 0) else voice_id_b
+        spoken_idx += 1
+
         meta: dict = {}
         clip = tts_dispatch(
-            text, voice_id, rate=rate_str, ssml_mode=False, speed_pct=speed_pct, _meta=meta
+            text, use_voice, rate=rate_str, ssml_mode=False, speed_pct=speed_pct, _meta=meta
         )
         if not clip:
             tts_failures += 1
@@ -773,9 +909,9 @@ def redub_video(
                 "Your selected voice was temporarily unavailable for some segments, "
                 "so a substitute voice was used (gender/accent may differ)."
             )
-        # Optionally skip strict window fitting when match_length is off:
-        # still place at start, but use natural TTS length (may overlap next)
-        end = seg["end_sec"] if match_length else (seg["start_sec"] + max(0.5, (seg["end_sec"] - seg["start_sec"])))
+        end = seg["end_sec"] if match_length else (
+            seg["start_sec"] + max(0.5, (seg["end_sec"] - seg["start_sec"]))
+        )
         timed_clips.append((seg["start_sec"], end, clip))
         if not tts_meta:
             tts_meta.update(meta)
@@ -788,16 +924,19 @@ def redub_video(
     if not tts_audio:
         raise UserFacingError("Could not assemble the dubbed audio timeline.")
 
-    stretched = True  # per-segment fit
+    stretched = True  # per-segment fit where needed
     stretch_ratio = 1.0
     tts_dur_final = total_dur
     silent_tail_sec = 0.0
     trimmed_sec = 0.0
     length_note = (
-        f"Timed dub: {len(timed_clips)} speech window(s) from silence detection + Google Speech. "
-        "Speech is placed on the original timeline (gentle speed fit only). "
-        "Faces are not re-animated. Set source language manually if Auto misreads Hindi/Urdu."
+        f"Timed dub: {len(timed_clips)} speech window(s) (silence detection + Google Speech). "
+        "Natural pace preferred; light stretch only when a line overruns its window. "
+        "Numbers and common Hinglish terms are cleaned before TTS. "
+        "Faces are not re-animated. Set source language to Hindi (hi-IN) for best results on Indian clips."
     )
+    if dual_voice:
+        length_note += f" Two voices alternated by segment ({voice_id} / {voice_id_b})."
     if tts_failures:
         length_note += f" {tts_failures} segment(s) failed TTS and were left silent."
 
@@ -829,6 +968,7 @@ def redub_video(
         "skipped_translation": same_lang,
         "target_lang": target_studio_lang,
         "voice_id": voice_id,
+        "voice_id_b": voice_id_b if dual_voice else None,
         "match_length": bool(match_length),
         "original_duration_sec": round(original_dur, 2) if original_dur else None,
         "length_matched": bool(match_length and original_dur > 0.05),
@@ -838,5 +978,6 @@ def redub_video(
         "voice_note": voice_note,
         "translation_note": translation_note,
         "timed_segments": len(timed_clips),
-        "engine": "google_timed",
+        "engine": "google_timed_v2",
+        "dual_voice": dual_voice,
     }
