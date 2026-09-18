@@ -1605,7 +1605,9 @@
 
         const videoName = data.filename || 'VoxCraft-Redub.mp4';
         const audioName = data.audio_filename || 'VoxCraft-Redub-Audio.mp3';
-        const notes = [data.translation_note, data.voice_note, data.length_note].filter(Boolean);
+        // Only show real warnings (translation drop / voice fallback).
+        // length_note is internal pipeline detail — do not show to users.
+        const notes = [data.translation_note, data.voice_note].filter(Boolean);
         const notesHtml = notes.map(function (n) {
           return '<div class="limit-toast" style="margin-bottom:10px;">⚠ ' + escapeHtml(n) + '</div>';
         }).join('');
