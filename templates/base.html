@@ -45,6 +45,25 @@
      override by passing its own canonical_url into render_template(). -->
 <link rel="canonical" href="{{ canonical_url }}">
 
+{# hreflang: language-targeted SEO landings (English UI, language intent).
+   x-default points at the global home. Full translated UI is not shipped yet —
+   these tags connect related language entry points so Google can surface the
+   right landing for regional queries. #}
+{% block hreflang %}
+<link rel="alternate" hreflang="x-default" href="{{ canonical_host }}/">
+<link rel="alternate" hreflang="en" href="{{ canonical_host }}/">
+<link rel="alternate" hreflang="ur" href="{{ canonical_host }}/urdu-text-to-speech">
+<link rel="alternate" hreflang="hi" href="{{ canonical_host }}/hindi-text-to-speech">
+<link rel="alternate" hreflang="pa" href="{{ canonical_host }}/punjabi-text-to-speech">
+<link rel="alternate" hreflang="bn" href="{{ canonical_host }}/bengali-text-to-speech">
+<link rel="alternate" hreflang="ta" href="{{ canonical_host }}/tamil-text-to-speech">
+<link rel="alternate" hreflang="te" href="{{ canonical_host }}/telugu-text-to-speech">
+<link rel="alternate" hreflang="mr" href="{{ canonical_host }}/marathi-text-to-speech">
+<link rel="alternate" hreflang="gu" href="{{ canonical_host }}/gujarati-text-to-speech">
+<link rel="alternate" hreflang="ml" href="{{ canonical_host }}/malayalam-text-to-speech">
+<link rel="alternate" hreflang="kn" href="{{ canonical_host }}/kannada-text-to-speech">
+{% endblock %}
+
 <!-- Google Search Console: paste the code Google gives you into this content= value -->
 <meta name="google-site-verification" content="{{ google_site_verification_code|default('') }}">
 
@@ -208,6 +227,27 @@
         <a href="{{ url_for('developers') }}" role="menuitem">Developer API</a>
         <a href="{{ url_for('about') }}" role="menuitem">About</a>
         <a href="{{ url_for('contact') }}" role="menuitem">Contact</a>
+      </div>
+    </div>
+    <div class="nav__more nav__lang" id="nav-lang">
+      <button type="button" class="nav__more-btn nav__lang-btn" id="nav-lang-btn" aria-expanded="false" aria-haspopup="true" aria-label="Languages">
+        <span class="nav__lang-icon" aria-hidden="true">文A</span>
+        <span class="nav__lang-label">Languages</span>
+        <svg class="nav__chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="nav__more-menu nav__lang-menu" role="menu">
+        <a href="/urdu-text-to-speech" role="menuitem"><span class="nav__mi-title">Urdu</span><span class="nav__mi-sub">اردو TTS</span></a>
+        <a href="/hindi-text-to-speech" role="menuitem"><span class="nav__mi-title">Hindi</span><span class="nav__mi-sub">हिन्दी TTS</span></a>
+        <a href="/punjabi-text-to-speech" role="menuitem"><span class="nav__mi-title">Punjabi</span><span class="nav__mi-sub">ਪੰਜਾਬੀ TTS</span></a>
+        <a href="/bengali-text-to-speech" role="menuitem"><span class="nav__mi-title">Bengali</span><span class="nav__mi-sub">বাংলা TTS</span></a>
+        <a href="/tamil-text-to-speech" role="menuitem"><span class="nav__mi-title">Tamil</span><span class="nav__mi-sub">தமிழ் TTS</span></a>
+        <a href="/telugu-text-to-speech" role="menuitem"><span class="nav__mi-title">Telugu</span><span class="nav__mi-sub">తెలుగు TTS</span></a>
+        <a href="/marathi-text-to-speech" role="menuitem"><span class="nav__mi-title">Marathi</span><span class="nav__mi-sub">मराठी TTS</span></a>
+        <a href="/gujarati-text-to-speech" role="menuitem"><span class="nav__mi-title">Gujarati</span><span class="nav__mi-sub">ગુજરાતી TTS</span></a>
+        <a href="/malayalam-text-to-speech" role="menuitem"><span class="nav__mi-title">Malayalam</span><span class="nav__mi-sub">മലയാളം TTS</span></a>
+        <a href="/kannada-text-to-speech" role="menuitem"><span class="nav__mi-title">Kannada</span><span class="nav__mi-sub">ಕನ್ನಡ TTS</span></a>
+        <a href="{{ url_for('voices_page') }}" role="menuitem"><span class="nav__mi-title">All voices</span><span class="nav__mi-sub">Full library</span></a>
+        <a href="{{ url_for('studio') }}" role="menuitem"><span class="nav__mi-title">Open Studio</span><span class="nav__mi-sub">Generate any language</span></a>
       </div>
     </div>
   </nav>
