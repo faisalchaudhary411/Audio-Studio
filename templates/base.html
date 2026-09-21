@@ -325,6 +325,25 @@
       <a href="{{ url_for('about') }}">About</a>
       <a href="{{ url_for('contact') }}">Contact</a>
     </div>
+
+    <button type="button" class="nav-drawer__acc" data-acc="lang" aria-expanded="false">
+      Languages
+      <svg class="nav-drawer__chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="nav-drawer__panel" id="acc-lang" hidden>
+      <a href="/urdu-text-to-speech">Urdu · اردو</a>
+      <a href="/hindi-text-to-speech">Hindi · हिन्दी</a>
+      <a href="/punjabi-text-to-speech">Punjabi · ਪੰਜਾਬੀ</a>
+      <a href="/bengali-text-to-speech">Bengali · বাংলা</a>
+      <a href="/tamil-text-to-speech">Tamil · தமிழ்</a>
+      <a href="/telugu-text-to-speech">Telugu · తెలుగు</a>
+      <a href="/marathi-text-to-speech">Marathi · मराठी</a>
+      <a href="/gujarati-text-to-speech">Gujarati · ગુજરાતી</a>
+      <a href="/malayalam-text-to-speech">Malayalam · മലയാളം</a>
+      <a href="/kannada-text-to-speech">Kannada · ಕನ್ನಡ</a>
+      <a href="{{ url_for('voices_page') }}">All voices</a>
+      <a href="{{ url_for('studio') }}">Open Studio</a>
+    </div>
   </div>
 
   <div class="nav-drawer__foot">
