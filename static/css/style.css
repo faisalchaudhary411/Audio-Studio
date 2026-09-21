@@ -140,6 +140,18 @@ img{max-width:100%;display:block;}
 .nav__mi-title{color:var(--text-hi);font-weight:500;font-size:0.88rem;}
 .nav__mi-sub{font-size:0.72rem;color:var(--text-dim);}
 
+/* Language dropdown — same chrome as Products/More, wider menu for scripts */
+.nav__lang-btn .nav__lang-icon{
+  font-size:0.78rem;font-weight:700;letter-spacing:0.02em;
+  color:var(--brass-hi);line-height:1;
+}
+.nav__lang-menu{
+  min-width:240px;max-height:min(70vh,420px);overflow-y:auto;
+  left:auto;right:0;
+}
+.nav__lang-menu a{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;}
+.nav__lang-menu .nav__mi-sub{margin-left:auto;text-align:right;}
+
 .nav__actions{
   display:flex;align-items:center;gap:8px;margin-left:auto;
   position:relative;z-index:220;
