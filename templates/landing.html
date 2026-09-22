@@ -1,8 +1,22 @@
 {% extends "base.html" %}
-{% block title %}VoxCraft — AI Voice Generator, Text to Speech & Voice Cloning{% endblock %}
+{% block title %}VoxCraft — AI Voice Generator & Text to Speech{% endblock %}
 {% block meta_description %}Free AI text to speech online for Urdu, Hindi, English & 45+ languages. Neural voices, voice cloning, AI music generator, and free audio tools — no signup required to start.{% endblock %}
 {% block og_title %}VoxCraft — AI Voice Generator & Multilingual Text-to-Speech{% endblock %}
 {% block og_description %}Generate natural AI voices in Urdu, Hindi, Punjabi & more. Free text to speech, voice cloning, and AI music for YouTube, podcasts, and video — commercial use allowed.{% endblock %}
+{% block hreflang %}
+<link rel="alternate" hreflang="x-default" href="{{ canonical_host }}/">
+<link rel="alternate" hreflang="en" href="{{ canonical_host }}/">
+<link rel="alternate" hreflang="ur" href="{{ canonical_host }}/urdu-text-to-speech">
+<link rel="alternate" hreflang="hi" href="{{ canonical_host }}/hindi-text-to-speech">
+<link rel="alternate" hreflang="pa" href="{{ canonical_host }}/punjabi-text-to-speech">
+<link rel="alternate" hreflang="bn" href="{{ canonical_host }}/bengali-text-to-speech">
+<link rel="alternate" hreflang="ta" href="{{ canonical_host }}/tamil-text-to-speech">
+<link rel="alternate" hreflang="te" href="{{ canonical_host }}/telugu-text-to-speech">
+<link rel="alternate" hreflang="mr" href="{{ canonical_host }}/marathi-text-to-speech">
+<link rel="alternate" hreflang="gu" href="{{ canonical_host }}/gujarati-text-to-speech">
+<link rel="alternate" hreflang="ml" href="{{ canonical_host }}/malayalam-text-to-speech">
+<link rel="alternate" hreflang="kn" href="{{ canonical_host }}/kannada-text-to-speech">
+{% endblock %}
 {% block preload %}
 <link rel="preload" href="{{ url_for('static', filename='audio/previews/ur-pk-uzmaneural.mp3') }}" as="audio">
 <link rel="preload" href="{{ url_for('static', filename='audio/previews/hi-in-swaraneural.mp3') }}" as="audio">

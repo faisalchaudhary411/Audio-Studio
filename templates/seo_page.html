@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% block title %}{{ page.title }}{% endblock %}
 {% block meta_description %}{{ page.meta_description }}{% endblock %}
+{# Reciprocal hreflang only on language TTS landings (not every SEO page). #}
+{% block hreflang %}
+{% if page_slug in (
+  'urdu-text-to-speech','hindi-text-to-speech','punjabi-text-to-speech',
+  'bengali-text-to-speech','tamil-text-to-speech','telugu-text-to-speech',
+  'marathi-text-to-speech','gujarati-text-to-speech','malayalam-text-to-speech',
+  'kannada-text-to-speech'
+) %}
+<link rel="alternate" hreflang="x-default" href="{{ canonical_host }}/">
+<link rel="alternate" hreflang="en" href="{{ canonical_host }}/">
+<link rel="alternate" hreflang="ur" href="{{ canonical_host }}/urdu-text-to-speech">
+<link rel="alternate" hreflang="hi" href="{{ canonical_host }}/hindi-text-to-speech">
+<link rel="alternate" hreflang="pa" href="{{ canonical_host }}/punjabi-text-to-speech">
+<link rel="alternate" hreflang="bn" href="{{ canonical_host }}/bengali-text-to-speech">
+<link rel="alternate" hreflang="ta" href="{{ canonical_host }}/tamil-text-to-speech">
+<link rel="alternate" hreflang="te" href="{{ canonical_host }}/telugu-text-to-speech">
+<link rel="alternate" hreflang="mr" href="{{ canonical_host }}/marathi-text-to-speech">
+<link rel="alternate" hreflang="gu" href="{{ canonical_host }}/gujarati-text-to-speech">
+<link rel="alternate" hreflang="ml" href="{{ canonical_host }}/malayalam-text-to-speech">
+<link rel="alternate" hreflang="kn" href="{{ canonical_host }}/kannada-text-to-speech">
+{% endif %}
+{% endblock %}
 {% block content %}
 <section class="hero hero--compact">
   <span class="hero__eyebrow">{{ page.eyebrow }}</span>
