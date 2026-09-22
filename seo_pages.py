@@ -34,7 +34,7 @@ SEO_PAGES = {
     },
     "punjabi-text-to-speech": {
         "title": "Punjabi Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Punjabi text to speech online. Generate Punjabi (Gurmukhi) AI voiceovers for YouTube, explainers, and learning — neural voices, no signup required to start.",
+        "meta_description": "Free Punjabi text to speech online. Generate Gurmukhi AI voiceovers for YouTube and learning — neural voices, no signup to start.",
         "eyebrow": "Punjabi AI Voice",
         "h1": "Create a Punjabi voiceover from text",
         "intro": [
@@ -75,7 +75,7 @@ SEO_PAGES = {
     },
     "bengali-text-to-speech": {
         "title": "Bengali Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Bengali (Bangla) text to speech online. Generate Bengali AI voiceovers for YouTube, courses, and explainers — neural voices, download MP3, no signup to start.",
+        "meta_description": "Free Bengali text to speech online. Generate Bangla AI voiceovers for YouTube and courses — neural voices, no signup to start.",
         "eyebrow": "Bengali AI Voice",
         "h1": "Create a Bengali voiceover from text",
         "intro": [
@@ -115,7 +115,7 @@ SEO_PAGES = {
     },
     "tamil-text-to-speech": {
         "title": "Tamil Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Tamil text to speech online. Generate Tamil AI voiceovers for YouTube, education, and product videos — neural voices, downloadable audio, no signup to start.",
+        "meta_description": "Free Tamil text to speech online. Generate Tamil AI voiceovers for YouTube and education — neural voices, no signup to start.",
         "eyebrow": "Tamil AI Voice",
         "h1": "Create a Tamil voiceover from text",
         "intro": [
@@ -155,7 +155,7 @@ SEO_PAGES = {
     },
     "telugu-text-to-speech": {
         "title": "Telugu Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Telugu text to speech online. Generate Telugu AI voiceovers for YouTube, courses, and regional content — neural voices, MP3 download, no signup required to start.",
+        "meta_description": "Free Telugu text to speech online. Generate Telugu AI voiceovers for YouTube and courses — neural voices, no signup to start.",
         "eyebrow": "Telugu AI Voice",
         "h1": "Create a Telugu voiceover from text",
         "intro": [
@@ -227,7 +227,7 @@ SEO_PAGES = {
     },
     "audio-tools-for-youtubers": {
         "title": "Audio Tools for YouTubers — Online Toolkit | VoxCraft",
-        "meta_description": "Explore practical online audio tools for YouTubers, including transcription, trimming, merging, format conversion, noise reduction and video-to-audio extraction.",
+        "meta_description": "Practical online audio tools for YouTubers: transcribe, trim, merge, convert, denoise, and extract audio from video.",
         "eyebrow": "Creator Toolkit", "h1": "Practical audio tools for YouTube creators",
         "intro": ["Most YouTube projects do not need a complex audio suite for every task. Small jobs such as trimming a clip, joining narration sections or converting a file can often be handled with focused tools.", "VoxCraft groups common creator tasks in one toolkit so you can move between voice creation and basic audio processing without changing your overall workflow."],
         "steps": ["Start with the task you actually need: transcribe, trim, merge, convert, clean or extract.", "Keep the original file before making destructive edits.", "Use one tool at a time and review the result before the next step.", "Export a compatible format for your video editor or publishing workflow."],
@@ -246,7 +246,7 @@ SEO_PAGES = {
     # --- High-intent keyword pages (2026 research) ---
     "ai-video-dubbing": {
         "title": "AI Video Dubbing Online — Translate Video | VoxCraft",
-        "meta_description": "Dub videos online with AI: transcribe, translate, and re-voice clips in English, Hindi, Urdu and more. Timed segments, free tier to start — no desktop install.",
+        "meta_description": "AI video dubbing online: translate and re-voice clips in English, Hindi, Urdu and more. Free tier — no desktop install.",
         "eyebrow": "Video Redub",
         "h1": "AI video dubbing online",
         "intro": [
@@ -316,7 +316,7 @@ SEO_PAGES = {
     },
     "free-voice-cloning": {
         "title": "Free Voice Cloning Online — Clone a Sample | VoxCraft",
-        "meta_description": "Learn how voice cloning works on VoxCraft. Clone a short sample for consistent narration. Free tier covers Studio voices; cloning is available on Pro+ plans.",
+        "meta_description": "Voice cloning on VoxCraft: clone a short sample for consistent narration. Studio voices free; cloning on Pro+ plans.",
         "eyebrow": "Voice Cloning",
         "h1": "Voice cloning online",
         "intro": [
@@ -350,7 +350,7 @@ SEO_PAGES = {
     },
     "marathi-text-to-speech": {
         "title": "Marathi Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Marathi text to speech online. Generate Marathi AI voiceovers in Devanagari for YouTube, education, and product videos — neural voices, no signup to start.",
+        "meta_description": "Free Marathi text to speech online. Generate Devanagari AI voiceovers for YouTube and education — neural voices, no signup to start.",
         "eyebrow": "Marathi AI Voice",
         "h1": "Create a Marathi voiceover from text",
         "intro": [
@@ -390,7 +390,7 @@ SEO_PAGES = {
     },
     "gujarati-text-to-speech": {
         "title": "Gujarati Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Gujarati text to speech online. Generate Gujarati AI voiceovers for YouTube, business explainers, and learning — neural voices, downloadable audio, no signup to start.",
+        "meta_description": "Free Gujarati text to speech online. Generate Gujarati AI voiceovers for YouTube and business — neural voices, no signup to start.",
         "eyebrow": "Gujarati AI Voice",
         "h1": "Create a Gujarati voiceover from text",
         "intro": [
@@ -430,7 +430,7 @@ SEO_PAGES = {
     },
     "malayalam-text-to-speech": {
         "title": "Malayalam Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Malayalam text to speech online. Generate Malayalam AI voiceovers for YouTube, education, and regional content — neural voices, no signup required to start.",
+        "meta_description": "Free Malayalam text to speech online. Generate Malayalam AI voiceovers for YouTube and education — neural voices, no signup to start.",
         "eyebrow": "Malayalam AI Voice",
         "h1": "Create a Malayalam voiceover from text",
         "intro": [
@@ -470,7 +470,7 @@ SEO_PAGES = {
     },
     "kannada-text-to-speech": {
         "title": "Kannada Text to Speech — Free AI Voice | VoxCraft",
-        "meta_description": "Free Kannada text to speech online. Generate Kannada AI voiceovers for YouTube, education, and product videos — neural voices, downloadable audio, no signup to start.",
+        "meta_description": "Free Kannada text to speech online. Generate Kannada AI voiceovers for YouTube and education — neural voices, no signup to start.",
         "eyebrow": "Kannada AI Voice",
         "h1": "Create a Kannada voiceover from text",
         "intro": [
@@ -510,7 +510,7 @@ SEO_PAGES = {
     },
     "remove-noise-from-audio": {
         "title": "Remove Noise from Audio Online — Free | VoxCraft",
-        "meta_description": "Remove background noise from audio online. Clean podcasts, interviews, and voiceovers in the browser — free tier, no install. Pair with normalize and convert tools.",
+        "meta_description": "Remove background noise from audio online. Clean podcasts and voiceovers in the browser — free tier, no install.",
         "eyebrow": "Denoise",
         "h1": "Remove noise from audio online",
         "intro": [
