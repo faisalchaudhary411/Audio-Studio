@@ -439,16 +439,13 @@ def _csrf_protect():
 
 @app.after_request
 def _security_headers(response):
-    """Baseline security headers that were entirely absent before this.
-    Deliberately NOT including Content-Security-Policy here — the site
-    loads AdSense, Plausible, Google Fonts, Freemius checkout, and roughly
-    a dozen external "featured on" badge images (see base.html), and
-    AdSense in particular needs a wide, not-fully-documented set of Google
-    ad-serving origins to render correctly. A guessed CSP risks silently
-    breaking ad revenue or checkout on a live paying-customer site with no
-    way to test it here first — that needs to be built with CSP
-    Report-Only mode against real traffic first, not shipped blind. These
-    four don't have that risk profile:
+    """Baseline security headers for HTML and other app responses.
+
+    Enforcing Content-Security-Policy is still deferred: AdSense, Plausible,
+    Google Fonts, Freemius checkout, and external badge images need a wide
+    allowlist. A guessed enforce-mode CSP can silently break ads or checkout.
+    Phase 3 ships CSP *Report-Only* so browsers evaluate the policy without
+    blocking; tighten to enforce after reviewing console/report data in prod.
     """
     # SAMEORIGIN, not DENY — the site iframes its own /ads/slot/<slot> route
     # for ad units (see templates/partials/ads_global.html and
@@ -463,6 +460,30 @@ def _security_headers(response):
     # that for a year and skip the first insecure-HTTP round-trip on repeat
     # visits. Remove if you ever need to serve plain HTTP anywhere.
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Limit powerful browser features not used by the product UI.
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    )
+    # Report-Only CSP — does not block; use browser console / future report-uri
+    # to refine before switching to Content-Security-Policy enforce mode.
+    response.headers["Content-Security-Policy-Report-Only"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+        "https://pagead2.googlesyndication.com https://www.googletagmanager.com "
+        "https://www.google-analytics.com https://www.google.com https://www.gstatic.com "
+        "https://plausible.io https://*.freemius.com https://checkout.freemius.com "
+        "https://js.stripe.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob: https:; "
+        "media-src 'self' blob: data:; "
+        "connect-src 'self' https:; "
+        "frame-src 'self' https://googleads.g.doubleclick.net "
+        "https://tpc.googlesyndication.com https://*.googlesyndication.com "
+        "https://*.freemius.com https://checkout.freemius.com https://js.stripe.com; "
+        "object-src 'none'; base-uri 'self'; "
+        "form-action 'self' https://checkout.freemius.com https://*.freemius.com"
+    )
     return response
 
 
