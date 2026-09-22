@@ -24,7 +24,7 @@ TOOL_PAGES = {
     "transcribe-audio-to-text": {
         "widget": "transcribe",
         "usage_key": "transcribe",
-        "title": "Urdu & Hindi Speech to Text — Free Audio Transcription | VoxCraft",
+        "title": "Urdu & Hindi Speech to Text — Free | VoxCraft",
         "meta_description": "Transcribe Urdu, Hindi, or English audio to text online, free. Turn WAV, MP3, M4A, OGG or FLAC recordings into text for voice memos, interviews, lectures and podcasts.",
         "eyebrow": "Audio → Text",
         "h1": "Transcribe Urdu, Hindi, or English audio to text — free",
@@ -71,7 +71,7 @@ TOOL_PAGES = {
     "convert-audio-format": {
         "widget": "convert",
         "usage_key": "convert",
-        "title": "Convert Audio Format Online Free — MP3, WAV, OGG, M4A, FLAC | VoxCraft",
+        "title": "Convert Audio Format Online Free | VoxCraft",
         "meta_description": "Convert audio format online free. Change between MP3, WAV, OGG, M4A and FLAC with adjustable bitrate. No install, no signup.",
         "eyebrow": "Format Conversion",
         "h1": "Convert audio format online — free",
@@ -115,7 +115,7 @@ TOOL_PAGES = {
     "compress-audio": {
         "widget": "compress",
         "usage_key": "compress",
-        "title": "Compress Audio Online Free — Reduce MP3/WAV File Size | VoxCraft",
+        "title": "Compress Audio Online Free — Shrink Files | VoxCraft",
         "meta_description": "Compress an audio file online for free. Shrink MP3, WAV, OGG, M4A or FLAC file size for email, upload limits, or storage, with three compression levels to choose from.",
         "eyebrow": "Shrink File Size",
         "h1": "Compress audio — reduce file size online, free",
@@ -196,7 +196,7 @@ TOOL_PAGES = {
     "merge-audio-files": {
         "widget": "merge",
         "usage_key": "merge",
-        "title": "Merge Audio Files Online Free — Audio Joiner, Combine Clips | VoxCraft",
+        "title": "Merge Audio Files Online Free — Joiner | VoxCraft",
         "meta_description": "Free online audio joiner. Merge audio files and combine multiple MP3, WAV or OGG clips into one track with optional silence gap. No install, no signup.",
         "eyebrow": "Combine Clips",
         "h1": "Merge audio files online — free",
@@ -233,7 +233,7 @@ TOOL_PAGES = {
     "trim-cut-audio": {
         "widget": "cutter",
         "usage_key": "cutter",
-        "title": "Trim & Cut Audio Online Free — MP3 Cutter, Ringtone Maker | VoxCraft",
+        "title": "Trim & Cut Audio Online Free — MP3 Cutter | VoxCraft",
         "meta_description": "Trim audio online free. Cut MP3 and WAV clips to exact start/end points, or split one file in two, in your browser — works as an MP3 cutter or ringtone maker. No install needed.",
         "eyebrow": "Trim / Split",
         "h1": "Trim and cut audio online — free",
@@ -270,7 +270,7 @@ TOOL_PAGES = {
     "remove-background-noise": {
         "widget": "denoise",
         "usage_key": "denoise",
-        "title": "Remove Background Noise from Audio Online — Free Noise Reducer | VoxCraft",
+        "title": "Remove Background Noise Online — Free | VoxCraft",
         "meta_description": "Remove background noise, hiss, hum, fan and static from audio online for free. Standard spectral denoise, or Studio AI speech enhancement (Pro) — the same class of model behind Adobe Podcast Enhance.",
         "eyebrow": "Noise Reduction",
         "h1": "Remove background noise from audio online — free",
@@ -317,7 +317,7 @@ TOOL_PAGES = {
     "voice-changer": {
         "widget": "voicechange",
         "usage_key": "voicechange",
-        "title": "Voice Changer & Pitch Changer Online Free — Robot, Echo | VoxCraft",
+        "title": "Voice Changer Online Free — Pitch Effects | VoxCraft",
         "meta_description": "Free online voice changer and pitch changer. Apply pitch shift, robot, echo, chipmunk or deep voice effects to any audio clip. No install, no signup.",
         "eyebrow": "Voice Effects",
         "h1": "Voice changer online — free pitch & effects",
@@ -353,7 +353,7 @@ TOOL_PAGES = {
     "extract-audio-from-video": {
         "widget": "videoxtract",
         "usage_key": "videoxtract",
-        "title": "Audio Extractor — Extract Audio from Video Online Free | VoxCraft",
+        "title": "Extract Audio from Video Online Free | VoxCraft",
         "meta_description": "Free online audio extractor. Convert MP4, MOV, MKV or WEBM to MP3 or WAV in your browser. No signup required.",
         "eyebrow": "Video → Audio",
         "h1": "Extract audio from video online — free",
@@ -397,7 +397,7 @@ TOOL_PAGES = {
     "ai-music-generator": {
         "widget": "music",
         "usage_key": None,
-        "title": "AI Music Generator Free — Text to Music & Song Online | VoxCraft",
+        "title": "AI Music Generator Free — Text to Music | VoxCraft",
         "meta_description": "Generate original AI music from a text prompt online. Instrumental beds or songs with sung vocals from lyrics. ACE-Step powered text-to-music for YouTube, podcasts and Shorts. Pro+ feature.",
         "eyebrow": "AI Music",
         "h1": "AI music generator — text to music online",
@@ -450,7 +450,7 @@ TOOL_PAGES = {
     "normalize-audio-volume": {
         "widget": "normalize",
         "usage_key": "normalize",
-        "title": "Normalize Audio Volume Online Free — LUFS Loudness Normalizer | VoxCraft",
+        "title": "Normalize Audio Volume Online Free | VoxCraft",
         "meta_description": "Normalize audio volume online free. True LUFS loudness normalization (EBU R128) with Spotify/YouTube, podcast and broadcast presets, plus simple peak normalize. Ideal before publishing or merging.",
         "eyebrow": "Normalize",
         "h1": "Normalize audio volume online — free",
@@ -518,7 +518,7 @@ TOOL_PAGES = {
     "change-audio-speed": {
         "widget": "speed",
         "usage_key": "speed",
-        "title": "Audio Speed Changer Online Free — Speed Up or Slow Down | VoxCraft",
+        "title": "Audio Speed Changer Online Free | VoxCraft",
         "meta_description": "Speed up or slow down audio online free (0.5×–2×). Keep pitch or allow shift. Perfect for Shorts, voice memos and practice.",
         "eyebrow": "Speed",
         "h1": "Change audio speed online — free",
@@ -582,7 +582,7 @@ TOOL_PAGES = {
     "split-audio-by-silence": {
         "widget": "split",
         "usage_key": "split",
-        "title": "Split Audio by Silence Online Free — Auto Splitter | VoxCraft",
+        "title": "Split Audio by Silence Online Free | VoxCraft",
         "meta_description": "Split audio by silence online free. Auto-cut long recordings into separate clips at pauses. Ideal for interviews and multi-take voiceovers.",
         "eyebrow": "Split",
         "h1": "Split audio by silence online — free",
@@ -615,7 +615,7 @@ TOOL_PAGES = {
     "reverse-audio": {
         "widget": "reverse",
         "usage_key": "reverse",
-        "title": "Audio Reverser Online Free — Reverse & Play Audio Backwards | VoxCraft",
+        "title": "Audio Reverser Online Free — Reverse Clip | VoxCraft",
         "meta_description": "Free online audio reverser. Play any MP3 or WAV backwards in your browser. Instant reverse for effects, transitions and hidden messages.",
         "eyebrow": "Reverse",
         "h1": "Reverse audio online — free",
@@ -679,7 +679,7 @@ TOOL_PAGES = {
     "video-audio-redub": {
         "widget": "redub",
         "usage_key": None,  # Pro-only; no free daily counter
-        "title": "AI Dubbing & Video Redub Online Free — Translate & Re-voice | VoxCraft",
+        "title": "AI Dubbing & Video Redub Online Free | VoxCraft",
         "meta_description": "Redub video online. Translate and replace spoken audio in 40+ languages with neural AI voices. AI video dubbing for creators.",
         "eyebrow": "Video redub",
         "h1": "Video redub online — AI translate & re-voice",

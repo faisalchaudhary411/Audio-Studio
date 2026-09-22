@@ -3866,7 +3866,7 @@ def seo_landing_page(slug):
     # accordingly rather than sending every CTA to the same place.
     cta_url = url_for("tools_hub") if slug == "audio-tools-for-youtubers" else url_for("studio")
 
-    return render_template("seo_page.html", page=page, cta_url=cta_url)
+    return render_template("seo_page.html", page=page, page_slug=slug, cta_url=cta_url)
 
 
 @app.route("/api/tools/transcribe", methods=["POST"])
