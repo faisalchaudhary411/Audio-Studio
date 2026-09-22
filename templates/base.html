@@ -255,7 +255,7 @@
     {% if account_user_ctx and account_user_ctx.email %}
     <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--desktop" title="{{ account_user_ctx.email }}">
       <span class="nav-user__avatar">
-        {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="Account avatar">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
+        {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="Account avatar" width="32" height="32">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
       </span>
       <span class="nav-user__meta">
         <span class="nav-user__name">{{ account_user_ctx.name.split(' ')[0] }}</span>
@@ -338,7 +338,7 @@
     {% if account_user_ctx and account_user_ctx.email %}
     <a href="{{ url_for('account_dashboard') }}" class="nav-drawer__profile">
       <span class="nav-drawer__avatar">
-        {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="Account avatar">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
+        {% if account_user_ctx.avatar_url %}<img src="{{ account_user_ctx.avatar_url }}" alt="Account avatar" width="32" height="32">{% else %}<span>{{ account_user_ctx.initial }}</span>{% endif %}
       </span>
       <span class="nav-drawer__who">
         <span class="nav-drawer__who-name">{{ account_user_ctx.name.split(' ')[0] }}</span>
