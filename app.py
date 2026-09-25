@@ -11,9 +11,14 @@ Paddle is intentionally NOT ported (Freemius replaced it per your own history).
 
 REQUIRED ENV VARS for this pass to actually work (see README):
 - SECRET_KEY        — Flask session signing key (app refuses to start without it)
-- ADMIN_PASSWORD    — gates /admin (there was NO auth on the original admin page — added here)
-- RESEND_API_KEY, ADMIN_EMAIL — for pro-request notification emails
-- FREEMIUS_API_TOKEN, FREEMIUS_PRODUCT_ID — only if you want Freemius checkout wired live
+- ADMIN_EMAIL       — the only account email that may access /admin and is
+                      auto-granted Pro+. Login is the normal /login page.
+- ADMIN_PASSWORD    — used only to bootstrap that account's password the
+                      first time (if the account has no password yet). After
+                      first login, change password from /account.
+- RESEND_API_KEY    — for pro-request / key notification emails
+- FREEMIUS_API_TOKEN, FREEMIUS_PRODUCT_ID, FREEMIUS_SECRET_KEY — Freemius
+  checkout + webhook (secret required for webhook processing)
 
 GITHUB_TOKEN is no longer needed — persistence.py moved from GitHub-JSON to
 a local SQLite database (see persistence.py's docstring and
@@ -434,7 +439,13 @@ def _csrf_protect():
     token = session.get("csrf_token", "")
     submitted = request.form.get("csrf_token", "")
     if not token or not submitted or not hmac.compare_digest(token, submitted):
-        return jsonify({"error": "Your session expired or the page was open too long. Please refresh and try again."}), 403
+        # Prefer an HTML-friendly response for browser form posts so the
+        # user sees a clear refresh hint instead of a raw JSON blob.
+        wants_html = "text/html" in (request.headers.get("Accept") or "")
+        msg = "Your session expired or the page was open too long. Please refresh and try again."
+        if wants_html and not request.path.startswith("/api/"):
+            return msg, 403, {"Content-Type": "text/plain; charset=utf-8"}
+        return jsonify({"error": msg}), 403
 
 
 @app.after_request
@@ -614,6 +625,60 @@ LIMITS_CACHE_TTL = 30
 _limits_cache = {"data": None, "ts": 0}
 
 
+def is_site_admin() -> bool:
+    """True only when the logged-in *account* email matches ADMIN_EMAIL.
+
+    Admin is no longer a separate /admin/login password gate. Anyone who
+    knows /admin but is not signed in as ADMIN_EMAIL is denied. We never
+    trust a stale session['admin_authed'] flag alone — the email is
+    re-checked every request (constant-time when lengths allow).
+    """
+    if not ADMIN_EMAIL:
+        return False
+    email = (session.get("account_email") or "").strip().lower()
+    if not email or len(email) != len(ADMIN_EMAIL):
+        return False
+    try:
+        return hmac.compare_digest(email, ADMIN_EMAIL)
+    except Exception:
+        return False
+
+
+def _ensure_admin_account():
+    """Ensure ADMIN_EMAIL has a usable account password so the owner can
+    log in via the normal /login page.
+
+    - If no account exists and ADMIN_PASSWORD is set → create account and
+      set that password.
+    - If account exists but has no password_hash yet and ADMIN_PASSWORD is
+      set → set the password once (does not overwrite an already-set
+      password — change it from /account after first login).
+    Safe to call on every request (cheap lookup); only writes when needed.
+    """
+    if not ADMIN_EMAIL:
+        return
+    user = accounts.find_user(ADMIN_EMAIL)
+    if user and user.get("password_hash"):
+        return
+    if not ADMIN_PASSWORD or len(ADMIN_PASSWORD) < 8:
+        return
+    if not user:
+        accounts.find_or_create_user(ADMIN_EMAIL, "Admin")
+    accounts.set_password(ADMIN_EMAIL, ADMIN_PASSWORD)
+
+
+def _safe_next_url(candidate: str, *, default: str, allowed_prefix: str = "/") -> str:
+    """Open-redirect hardening: only same-origin relative paths."""
+    next_url = (candidate or "").strip()
+    if (next_url.startswith(allowed_prefix)
+            and not next_url.startswith("//")
+            and "://" not in next_url
+            and "\\" not in next_url
+            and not next_url.startswith("/\\")):
+        return next_url
+    return default
+
+
 def get_limits() -> dict:
     now = time.time()
     if _limits_cache["data"] is None or (now - _limits_cache["ts"]) > LIMITS_CACHE_TTL:
@@ -700,6 +765,20 @@ def _license_context() -> dict:
 
     ctx = {"valid": False, "plan": "", "name": ""}
 
+    # Site admin (ADMIN_EMAIL logged in via /login) is always treated as
+    # Pro+ for the browser app — no license key required. Checked first so
+    # quotas and feature gates never lock the owner out of their own tools.
+    if is_site_admin():
+        email = (session.get("account_email") or "").strip().lower()
+        user = accounts.find_user(email) if email else {}
+        ctx = {
+            "valid": True,
+            "plan": "pro_plus",
+            "name": (user.get("name") if user else "") or "Admin",
+        }
+        g.license_ctx = ctx
+        return ctx
+
     key = session.get("license_key")
     if key:
         result = licensing.check_vox_license(key)
@@ -756,10 +835,16 @@ def has_clone_and_music() -> bool:
 
 
 def current_roles():
-    """Roles for this request (plan + optional admin)."""
+    """Roles for this request (plan + optional admin).
+
+    Admin is derived from is_site_admin() (logged-in account email ==
+    ADMIN_EMAIL), not a standalone admin_authed cookie. Session may still
+    carry admin_authed as a cache hint after login, but the live email
+    check is what grants the role.
+    """
     return rbac.roles_for(
         plan=get_plan() or "free",
-        is_admin=bool(session.get("admin_authed")),
+        is_admin=is_site_admin(),
     )
 
 
@@ -770,7 +855,7 @@ def can(permission: str) -> bool:
 
 def require_permission(permission: str, *, api: bool = False):
     """Decorator: block the view unless can(permission).
-    api=True → JSON 402/403; else redirect to upgrade or admin login.
+    api=True → JSON 402/403; else redirect to upgrade or normal /login.
     """
     from functools import wraps
 
@@ -784,7 +869,10 @@ def require_permission(permission: str, *, api: bool = False):
             if need == rbac.ROLE_ADMIN:
                 if api:
                     return jsonify({"error": "Admin access required."}), 403
-                return redirect(url_for("admin_login", next=request.path))
+                # Not signed in as ADMIN_EMAIL — send to normal site login.
+                # If already logged in as someone else, still send to login
+                # with next=/admin so they can switch accounts.
+                return redirect(url_for("account_login", next=request.path))
             if api or request.path.startswith("/api/"):
                 return jsonify({"error": msg, "required": need}), 402
             # HTML: send them to pricing/upgrade
@@ -809,7 +897,7 @@ def require_role(*roles: str, api: bool = False):
             if rbac.ROLE_ADMIN in wanted:
                 if api:
                     return jsonify({"error": "Admin access required."}), 403
-                return redirect(url_for("admin_login", next=request.path))
+                return redirect(url_for("account_login", next=request.path))
             msg = "Your plan does not include this feature."
             if api or request.path.startswith("/api/"):
                 return jsonify({"error": msg}), 402
@@ -819,7 +907,11 @@ def require_role(*roles: str, api: bool = False):
 
 
 def admin_required(view_func):
-    """Back-compat: same as require_permission('admin.access')."""
+    """Back-compat: same as require_permission('admin.access').
+
+    Only the account whose email equals ADMIN_EMAIL can pass. Visiting
+    /admin while logged out or as any other user never grants access.
+    """
     return require_permission("admin.access")(view_func)
 
 
@@ -885,6 +977,7 @@ def inject_globals():
         "can": can,
         "account_email_ctx": session.get("account_email", ""),
         "account_user_ctx": _account_user_context(),
+        "is_admin_ctx": is_site_admin(),
         "canonical_url": canonical_url,
         "canonical_host": CANONICAL_HOST,
         "google_site_verification_code": os.environ.get("GOOGLE_SITE_VERIFICATION", ""),
@@ -2146,73 +2239,34 @@ ADMIN_LOGIN_LOCKOUT_MINUTES = 15
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
-    if request.method == "GET":
-        return render_template("admin/login.html")
+    """Legacy URL — admin is now account-based.
 
-    ip_hash = usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
-    now = dt.datetime.now()
-    record = persistence.get_login_attempts(ip_hash)
-
-    # Currently locked out? Reject before even checking the password —
-    # otherwise a correct guess during lockout would still let an attacker
-    # in, defeating the point of the lockout.
-    locked_until_str = record.get("locked_until")
-    if locked_until_str:
-        locked_until = dt.datetime.strptime(locked_until_str, "%Y-%m-%d %H:%M:%S")
-        if now < locked_until:
-            remaining_min = max(1, int((locked_until - now).total_seconds() // 60) + 1)
-            return render_template("admin/login.html",
-                                    error=f"Too many failed attempts. Try again in {remaining_min} minute(s).")
-
-    email = request.form.get("email", "").strip().lower()
-    password = request.form.get("password", "")
-    # HARDENING: constant-time comparison instead of == — plain string
-    # comparison short-circuits on the first mismatched character, which
-    # theoretically leaks timing info about the correct value. hmac.compare_digest
-    # runs in constant time regardless of where the strings first differ.
-    # Both email AND password must match — reusing ADMIN_EMAIL (already set
-    # for pro-request notifications) means logging in now takes two secrets
-    # instead of one, not just a cosmetic field.
-    email_ok = bool(ADMIN_EMAIL) and hmac.compare_digest(email, ADMIN_EMAIL)
-    password_ok = bool(ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
-    if email_ok and password_ok:
-        persistence.clear_login_attempts(ip_hash)  # legitimate login wipes any prior failed attempts
-        session["admin_authed"] = True
-        next_url = request.args.get("next") or url_for("admin_dashboard")
+    Only the user whose email equals ADMIN_EMAIL (env) gets admin after a
+    normal /login. This route never accepts a password itself; it either
+    sends an already-authenticated admin to the dashboard, or redirects
+    everyone else to /login?next=/admin.
+    """
+    _ensure_admin_account()
+    if is_site_admin():
+        next_url = _safe_next_url(
+            request.args.get("next") or "",
+            default=url_for("admin_dashboard"),
+            allowed_prefix="/admin",
+        )
         return redirect(next_url)
-
-    # Wrong email or password (deliberately not saying which, so a wrong
-    # guess can't be used to enumerate the correct email separately from
-    # the correct password) — record the attempt. Stored in the DB (not an
-    # in-memory dict) because gunicorn runs multiple worker processes; an
-    # in-memory counter would only apply per-worker, silently doubling the
-    # effective attempt budget an attacker gets depending on which worker
-    # handles each request.
-    first_attempt_str = record.get("first_attempt")
-    if first_attempt_str:
-        first_attempt = dt.datetime.strptime(first_attempt_str, "%Y-%m-%d %H:%M:%S")
-        if (now - first_attempt).total_seconds() > ADMIN_LOGIN_WINDOW_MINUTES * 60:
-            record = {}  # window expired — start counting fresh
-
-    count = record.get("count", 0) + 1
-    new_record = {
-        "count": count,
-        "first_attempt": record.get("first_attempt", now.strftime("%Y-%m-%d %H:%M:%S")),
-    }
-    if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
-        new_record["locked_until"] = (now + dt.timedelta(minutes=ADMIN_LOGIN_LOCKOUT_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
-    persistence.set_login_attempts(ip_hash, new_record)
-
-    if count >= ADMIN_LOGIN_MAX_ATTEMPTS:
-        return render_template("admin/login.html",
-                                error=f"Too many failed attempts. Try again in {ADMIN_LOGIN_LOCKOUT_MINUTES} minutes.")
-    return render_template("admin/login.html", error="Incorrect email or password.")
+    # Already logged in as a non-admin? Still force them through /login so
+    # they can switch to the admin account (we don't reveal that this is
+    # an admin gate beyond the next= target).
+    return redirect(url_for("account_login", next=request.args.get("next") or url_for("admin_dashboard")))
 
 
 @app.route("/admin/logout")
 def admin_logout():
-    session.pop("admin_authed", None)
-    return redirect(url_for("admin_login"))
+    """Clear the whole session (account + any legacy admin_authed flag)."""
+    session.clear()
+    session.permanent = True
+    session["csrf_token"] = secrets.token_hex(32)
+    return redirect(url_for("account_login"))
 
 
 @app.route("/admin")
@@ -2247,54 +2301,79 @@ def admin_dashboard():
                             db_path=persistence.DB_PATH)
 
 
+def _safe_int(value, default, *, minimum=0, maximum=None):
+    """Parse an admin form integer without raising; clamp to a sane range."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    if n < minimum:
+        n = minimum
+    if maximum is not None and n > maximum:
+        n = maximum
+    return n
+
+
+def _safe_http_url(value: str) -> str:
+    """Only allow http(s) checkout URLs — blocks javascript:/data: XSS vectors
+    if a compromised admin session or bad paste lands in limits."""
+    v = (value or "").strip()
+    if not v:
+        return ""
+    lower = v.lower()
+    if lower.startswith("https://") or lower.startswith("http://"):
+        return v
+    return ""
+
+
 @app.route("/admin/limits", methods=["GET", "POST"])
 @admin_required
 def admin_limits():
     if request.method == "POST":
         limits = {
-            "FREE_CHAR_LIMIT": int(request.form.get("FREE_CHAR_LIMIT", 5000)),
-            "FREE_MONTHLY_CHAR_QUOTA": int(request.form.get("FREE_MONTHLY_CHAR_QUOTA", 50000)),
-            "FREE_DAILY_ACTIONS": int(request.form.get("FREE_DAILY_ACTIONS", 10)),
-            "FREE_BATCH_LIMIT": int(request.form.get("FREE_BATCH_LIMIT", 5)),
-            "FREE_BATCH_MAX_LINES": int(request.form.get("FREE_BATCH_MAX_LINES", 20)),
-            "FREE_PREVIEW_LIMIT": int(request.form.get("FREE_PREVIEW_LIMIT", 5)),
-            "PRO_BATCH_MAX": int(request.form.get("PRO_BATCH_MAX", 20)),
+            "FREE_CHAR_LIMIT": _safe_int(request.form.get("FREE_CHAR_LIMIT"), 5000, minimum=0, maximum=10_000_000),
+            "FREE_MONTHLY_CHAR_QUOTA": _safe_int(request.form.get("FREE_MONTHLY_CHAR_QUOTA"), 50000, minimum=0, maximum=100_000_000),
+            "FREE_DAILY_ACTIONS": _safe_int(request.form.get("FREE_DAILY_ACTIONS"), 10, minimum=0, maximum=100_000),
+            "FREE_BATCH_LIMIT": _safe_int(request.form.get("FREE_BATCH_LIMIT"), 5, minimum=0, maximum=10_000),
+            "FREE_BATCH_MAX_LINES": _safe_int(request.form.get("FREE_BATCH_MAX_LINES"), 20, minimum=0, maximum=10_000),
+            "FREE_PREVIEW_LIMIT": _safe_int(request.form.get("FREE_PREVIEW_LIMIT"), 5, minimum=0, maximum=10_000),
+            "PRO_BATCH_MAX": _safe_int(request.form.get("PRO_BATCH_MAX"), 20, minimum=0, maximum=10_000),
             # Pro / Pro+ monthly quotas (TTS chars, clone gens, music tracks)
-            "TTS_CHAR_MONTHLY_LIMIT_PRO": int(request.form.get("TTS_CHAR_MONTHLY_LIMIT_PRO", 100000)),
-            "TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS": int(request.form.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS", 200000)),
-            "CLONE_MONTHLY_LIMIT": int(request.form.get("CLONE_MONTHLY_LIMIT", 60)),
-            "MUSIC_MONTHLY_LIMIT": int(request.form.get("MUSIC_MONTHLY_LIMIT", 40)),
-            "CLONE_DAILY_LIMIT": int(request.form.get("CLONE_DAILY_LIMIT", 30)),
-            "MUSIC_DAILY_LIMIT": int(request.form.get("MUSIC_DAILY_LIMIT", 20)),
-            "REDUB_DAILY_LIMIT_PRO": int(request.form.get("REDUB_DAILY_LIMIT_PRO", 20)),
-            "REDUB_MONTHLY_LIMIT_PRO": int(request.form.get("REDUB_MONTHLY_LIMIT_PRO", 100)),
+            "TTS_CHAR_MONTHLY_LIMIT_PRO": _safe_int(request.form.get("TTS_CHAR_MONTHLY_LIMIT_PRO"), 100000, minimum=0, maximum=100_000_000),
+            "TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS": _safe_int(request.form.get("TTS_CHAR_MONTHLY_LIMIT_PRO_PLUS"), 200000, minimum=0, maximum=100_000_000),
+            "CLONE_MONTHLY_LIMIT": _safe_int(request.form.get("CLONE_MONTHLY_LIMIT"), 60, minimum=0, maximum=100_000),
+            "MUSIC_MONTHLY_LIMIT": _safe_int(request.form.get("MUSIC_MONTHLY_LIMIT"), 40, minimum=0, maximum=100_000),
+            "CLONE_DAILY_LIMIT": _safe_int(request.form.get("CLONE_DAILY_LIMIT"), 30, minimum=0, maximum=100_000),
+            "MUSIC_DAILY_LIMIT": _safe_int(request.form.get("MUSIC_DAILY_LIMIT"), 20, minimum=0, maximum=100_000),
+            "REDUB_DAILY_LIMIT_PRO": _safe_int(request.form.get("REDUB_DAILY_LIMIT_PRO"), 20, minimum=0, maximum=100_000),
+            "REDUB_MONTHLY_LIMIT_PRO": _safe_int(request.form.get("REDUB_MONTHLY_LIMIT_PRO"), 100, minimum=0, maximum=100_000),
             # Default matches len of FREE_VOICES in voices.py (currently 27).
-            "FREE_VOICES_COUNT": int(request.form.get("FREE_VOICES_COUNT", 27)),
-            "PRO_PRICE_PKR": int(request.form.get("PRO_PRICE_PKR", 840)),
+            "FREE_VOICES_COUNT": _safe_int(request.form.get("FREE_VOICES_COUNT"), 27, minimum=0, maximum=10_000),
+            "PRO_PRICE_PKR": _safe_int(request.form.get("PRO_PRICE_PKR"), 840, minimum=0, maximum=10_000_000),
             "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
             "PRO_PRICE_USD_LABEL": request.form.get("PRO_PRICE_USD_LABEL", "$3"),
             "PRO_PRICE_ANNUAL_USD_LABEL": request.form.get("PRO_PRICE_ANNUAL_USD_LABEL", "$30"),
-            "PRO_PLUS_PRICE_PKR": int(request.form.get("PRO_PLUS_PRICE_PKR", 1680)),
+            "PRO_PLUS_PRICE_PKR": _safe_int(request.form.get("PRO_PLUS_PRICE_PKR"), 1680, minimum=0, maximum=10_000_000),
             "PRO_PLUS_PRICE_LABEL": request.form.get("PRO_PLUS_PRICE_LABEL", "1680 PKR"),
             "PRO_PLUS_PRICE_USD_LABEL": request.form.get("PRO_PLUS_PRICE_USD_LABEL", "$6"),
             "PRO_PLUS_PRICE_ANNUAL_USD_LABEL": request.form.get("PRO_PLUS_PRICE_ANNUAL_USD_LABEL", "$60"),
             "FREE_PRICE_LABEL": request.form.get("FREE_PRICE_LABEL", "$0"),
-            "CHECKOUT_URL": request.form.get("CHECKOUT_URL", ""),
-            "CHECKOUT_URL_PRO_PLUS": request.form.get("CHECKOUT_URL_PRO_PLUS", ""),
+            "CHECKOUT_URL": _safe_http_url(request.form.get("CHECKOUT_URL", "")),
+            "CHECKOUT_URL_PRO_PLUS": _safe_http_url(request.form.get("CHECKOUT_URL_PRO_PLUS", "")),
             "FREE_FEATURES": request.form.get("FREE_FEATURES", ""),
             "PRO_FEATURES": request.form.get("PRO_FEATURES", ""),
             "PRO_PLUS_FEATURES": request.form.get("PRO_PLUS_FEATURES", ""),
             "AUTO_APPROVE_MANUAL": request.form.get("AUTO_APPROVE_MANUAL") == "on",
-            "MANUAL_GRACE_HOURS": int(request.form.get("MANUAL_GRACE_HOURS", 72)),
-            "API_FREE_QUOTA": int(request.form.get("API_FREE_QUOTA", 10000)),
-            "API_STARTER_QUOTA": int(request.form.get("API_STARTER_QUOTA", 200000)),
+            "MANUAL_GRACE_HOURS": _safe_int(request.form.get("MANUAL_GRACE_HOURS"), 72, minimum=0, maximum=8760),
+            "API_FREE_QUOTA": _safe_int(request.form.get("API_FREE_QUOTA"), 10000, minimum=0, maximum=100_000_000),
+            "API_STARTER_QUOTA": _safe_int(request.form.get("API_STARTER_QUOTA"), 200000, minimum=0, maximum=100_000_000),
             "API_STARTER_PRICE_USD_LABEL": request.form.get("API_STARTER_PRICE_USD_LABEL", "$9"),
             "API_STARTER_PRICE_ANNUAL_USD_LABEL": request.form.get("API_STARTER_PRICE_ANNUAL_USD_LABEL", "$90"),
-            "CHECKOUT_URL_API_STARTER": request.form.get("CHECKOUT_URL_API_STARTER", ""),
-            "API_PRO_QUOTA": int(request.form.get("API_PRO_QUOTA", 1000000)),
+            "CHECKOUT_URL_API_STARTER": _safe_http_url(request.form.get("CHECKOUT_URL_API_STARTER", "")),
+            "API_PRO_QUOTA": _safe_int(request.form.get("API_PRO_QUOTA"), 1000000, minimum=0, maximum=100_000_000),
             "API_PRO_PRICE_USD_LABEL": request.form.get("API_PRO_PRICE_USD_LABEL", "$29"),
             "API_PRO_PRICE_ANNUAL_USD_LABEL": request.form.get("API_PRO_PRICE_ANNUAL_USD_LABEL", "$290"),
-            "CHECKOUT_URL_API_PRO": request.form.get("CHECKOUT_URL_API_PRO", ""),
+            "CHECKOUT_URL_API_PRO": _safe_http_url(request.form.get("CHECKOUT_URL_API_PRO", "")),
         }
         ok, err = persistence.save_limits(limits)
         _limits_cache["data"] = None  # force refresh so the change is visible immediately
@@ -2312,20 +2391,74 @@ def admin_limits():
 def admin_keys():
     if request.method == "POST":
         action = request.form.get("action")
-        key = request.form.get("key", "")
+        key = (request.form.get("key") or "").strip()
+        known_keys = persistence.load_license_keys()
+
         if action == "create":
-            licensing.create_new_key_manual(plan=request.form.get("plan", "pro"),
-                                             subscription_type=request.form.get("duration", "monthly"))
-        elif action == "revoke":
-            licensing.revoke_key(key)
-        elif action == "unrevoke":
-            licensing.unrevoke_key(key)
-        elif action == "delete":
-            licensing.delete_key(key)
-        elif action == "reset_device":
-            licensing.reset_device_lock(key)
-        elif action == "toggle_plan":
-            licensing.set_plan(key)
+            plan = request.form.get("plan", "pro")
+            if plan not in licensing.PLANS:
+                plan = "pro"
+            duration = request.form.get("duration", "monthly")
+            if duration not in ("monthly", "annual"):
+                duration = "monthly"
+            new_key = licensing.create_new_key_manual(
+                plan=plan,
+                subscription_type=duration,
+                customer_name=request.form.get("customer_name", "").strip() or "Manual",
+                customer_email=request.form.get("customer_email", "").strip(),
+            )
+            flash(f"Created key {new_key[:20]}…", "ok")
+            persistence.append_audit("admin_key_create", f"key={new_key[:16]}… plan={plan} duration={duration}",
+                                     actor="admin")
+        elif action in ("revoke", "unrevoke", "extend", "update_customer", "delete",
+                        "reset_device", "toggle_plan"):
+            if not key or key not in known_keys:
+                flash("Key not found — action ignored.", "error")
+            elif action == "revoke":
+                licensing.revoke_key(key)
+                flash("Key revoked.", "ok")
+                persistence.append_audit("admin_key_revoke", f"key={key[:16]}…", actor="admin")
+            elif action == "unrevoke":
+                # extend_if_expired=True so an expired key becomes usable
+                # again instead of being immediately re-revoked by sweep.
+                duration = request.form.get("duration", "").strip() or None
+                if duration and duration not in ("monthly", "annual"):
+                    duration = "monthly"
+                licensing.unrevoke_key(key, extend_if_expired=True, subscription_type=duration)
+                flash("Key unrevoked (expiry extended if it was past).", "ok")
+                persistence.append_audit("admin_key_unrevoke", f"key={key[:16]}…", actor="admin")
+            elif action == "extend":
+                duration = request.form.get("duration", "monthly").strip() or "monthly"
+                if duration not in ("monthly", "annual"):
+                    duration = "monthly"
+                licensing.extend_key(key, subscription_type=duration)
+                flash(f"Key extended ({duration}).", "ok")
+                persistence.append_audit("admin_key_extend", f"key={key[:16]}… duration={duration}", actor="admin")
+            elif action == "update_customer":
+                email = (request.form.get("customer_email") or "").strip().lower()
+                if email and "@" not in email:
+                    flash("Invalid email — not saved.", "error")
+                else:
+                    licensing.update_key_customer(
+                        key,
+                        customer_name=request.form.get("customer_name"),
+                        customer_email=email if email is not None else None,
+                    )
+                    flash("Customer name/email updated.", "ok")
+                    persistence.append_audit("admin_key_update_customer", f"key={key[:16]}… email={email}",
+                                             actor="admin")
+            elif action == "delete":
+                licensing.delete_key(key)
+                flash("Key deleted permanently.", "ok")
+                persistence.append_audit("admin_key_delete", f"key={key[:16]}…", actor="admin")
+            elif action == "reset_device":
+                licensing.reset_device_lock(key)
+                flash("Device lock reset.", "ok")
+                persistence.append_audit("admin_key_reset_device", f"key={key[:16]}…", actor="admin")
+            elif action == "toggle_plan":
+                licensing.set_plan(key)
+                flash("Plan toggled.", "ok")
+                persistence.append_audit("admin_key_toggle_plan", f"key={key[:16]}…", actor="admin")
         return redirect(url_for("admin_keys"))
     licensing.sweep_expired_keys()  # mark any newly-expired keys as revoked before displaying
     keys = persistence.load_license_keys()
@@ -2343,21 +2476,46 @@ def admin_requests():
         if action == "approve":
             reqs = persistence.load_requests()
             target = next((r for r in reqs if r["id"] == req_id), None)
-            if target:
+            if not target:
+                flash("Request not found.", "error")
+            elif target.get("status") == "approved" and target.get("key_assigned") and target.get("grace_finalized"):
+                # Already fully approved — don't mint a second live key.
+                flash("Request already approved — no new key created.", "error")
+            else:
                 plan = target.get("plan_requested", "pro")
+                if plan not in licensing.PLANS:
+                    plan = "pro"
                 # Grant the duration the customer actually paid for — an
                 # annual manual-payment request approved here previously got
                 # the same hardcoded 30-day key as a monthly one, since
                 # billing period was never captured or passed through.
                 billing = target.get("billing_requested", "monthly")
-                new_key = licensing.create_subscription_key(target.get("name", "Pro User"), target.get("email", ""),
-                                                              plan=plan,
-                                                              subscription_type="annual" if billing == "annual" else "monthly")
+                if billing not in ("monthly", "annual"):
+                    billing = "monthly"
+                new_key = licensing.create_subscription_key(
+                    target.get("name", "Pro User"),
+                    target.get("email", ""),
+                    plan=plan,
+                    subscription_type="annual" if billing == "annual" else "monthly",
+                )
                 pro_requests.approve_request(req_id, new_key)
-                _provision_paid_account(target.get("email", ""), target.get("name", "Pro User"),
-                                         "VoxCraft Pro+" if plan == "pro_plus" else "VoxCraft Pro")
+                _provision_paid_account(
+                    target.get("email", ""),
+                    target.get("name", "Pro User"),
+                    "VoxCraft Pro+" if plan == "pro_plus" else "VoxCraft Pro",
+                )
+                flash(f"Approved — key issued for {target.get('email', '')}.", "ok")
+                persistence.append_audit(
+                    "admin_request_approve",
+                    f"req={req_id} email={target.get('email', '')} plan={plan}",
+                    actor="admin",
+                )
         elif action == "reject":
-            pro_requests.reject_request(req_id)
+            if pro_requests.reject_request(req_id):
+                flash("Request rejected.", "ok")
+                persistence.append_audit("admin_request_reject", f"req={req_id}", actor="admin")
+            else:
+                flash("Request not found.", "error")
         return redirect(url_for("admin_requests"))
     reqs = persistence.load_requests()
     lim = persistence.load_limits()
@@ -2690,7 +2848,7 @@ def admin_notifications():
                 "type": request.form.get("type", "update"),
                 "title": request.form.get("title", "").strip(),
                 "message": request.form.get("message", "").strip(),
-                "link_url": request.form.get("link_url", "").strip(),
+                "link_url": _safe_http_url(request.form.get("link_url", "")),
                 "link_text": request.form.get("link_text", "").strip() or "Learn more",
                 "banner": request.form.get("banner") == "on",
                 "active": request.form.get("active") == "on",
@@ -2710,7 +2868,7 @@ def admin_notifications():
                     a["type"] = request.form.get("type", "update")
                     a["title"] = request.form.get("title", "").strip()
                     a["message"] = request.form.get("message", "").strip()
-                    a["link_url"] = request.form.get("link_url", "").strip()
+                    a["link_url"] = _safe_http_url(request.form.get("link_url", ""))
                     a["link_text"] = request.form.get("link_text", "").strip() or "Learn more"
                     a["banner"] = request.form.get("banner") == "on"
                     a["active"] = request.form.get("active") == "on"
@@ -2799,29 +2957,47 @@ def admin_api_keys():
 
     if request.method == "POST":
         action = request.form.get("action")
+        allowed_api_plans = ("api_free", "api_starter", "api_pro")
         if action == "create":
             name = request.form.get("customer_name", "").strip()
-            email = request.form.get("customer_email", "").strip()
+            email = request.form.get("customer_email", "").strip().lower()
             plan = request.form.get("plan", "").strip() or "api_starter"
-            try:
-                quota = int(request.form.get("monthly_char_quota", "200000"))
-            except ValueError:
-                quota = 200000
-            if name and email and quota > 0:
+            if plan not in allowed_api_plans:
+                plan = "api_starter"
+            quota = _safe_int(request.form.get("monthly_char_quota"), 200000, minimum=1, maximum=100_000_000)
+            if not name or not email or "@" not in email:
+                flash("Name and a valid email are required to create an API key.", "error")
+            else:
                 result = api_keys.create_api_key(name, email, plan, quota)
                 just_created = result  # {"raw_key": ..., "record": ...} — shown ONCE on this response only
                 sent = notifications.send_api_key_email(email, name, result["raw_key"], plan, quota)
                 if not sent:
                     app.logger.warning(f"API key created for {email} but email delivery failed — raw key must be copied from this page now, it cannot be retrieved again.")
+                    flash("Key created but email failed — copy the raw key from this page now.", "error")
+                else:
+                    flash(f"API key created for {email}.", "ok")
+                persistence.append_audit("admin_api_key_create", f"email={email} plan={plan} quota={quota}",
+                                         actor="admin")
                 keys = persistence.load_api_keys()
-        elif action == "revoke":
-            api_keys.revoke_key(request.form.get("key_id"))
-            keys = persistence.load_api_keys()
-        elif action == "unrevoke":
-            api_keys.unrevoke_key(request.form.get("key_id"))
-            keys = persistence.load_api_keys()
-        elif action == "delete":
-            api_keys.delete_key(request.form.get("key_id"))
+        elif action in ("revoke", "unrevoke", "delete"):
+            key_id = (request.form.get("key_id") or "").strip()
+            if not key_id:
+                flash("Missing key id.", "error")
+            elif action == "revoke":
+                ok = api_keys.revoke_key(key_id)
+                flash("API key revoked." if ok else "Key not found or save failed.", "ok" if ok else "error")
+                if ok:
+                    persistence.append_audit("admin_api_key_revoke", f"id={key_id}", actor="admin")
+            elif action == "unrevoke":
+                ok = api_keys.unrevoke_key(key_id)
+                flash("API key reactivated." if ok else "Key not found or save failed.", "ok" if ok else "error")
+                if ok:
+                    persistence.append_audit("admin_api_key_unrevoke", f"id={key_id}", actor="admin")
+            elif action == "delete":
+                ok = api_keys.delete_key(key_id)
+                flash("API key deleted." if ok else "Key not found.", "ok" if ok else "error")
+                if ok:
+                    persistence.append_audit("admin_api_key_delete", f"id={key_id}", actor="admin")
             keys = persistence.load_api_keys()
 
     # Attach live usage to each key for display — read-only peek, no lock
@@ -3265,15 +3441,25 @@ def freemius_webhook():
     Set up in Freemius: Developer Dashboard → your product → Webhooks →
     Listeners → Add Webhook → URL: https://<your-domain>/webhook/freemius →
     select at minimum: license.extended, license.cancelled, license.expired.
+
+    SECURITY: FREEMIUS_SECRET_KEY must be set. Without it, anyone who can
+    POST to this URL could extend/revoke arbitrary licenses. We refuse to
+    process mutating events when the secret is missing (returns 503).
     """
+    import hmac as _hmac
+    import hashlib as _hashlib
+
+    secret = (licensing.FREEMIUS_SECRET_KEY or "").strip()
+    if not secret:
+        app.logger.error("Freemius webhook received but FREEMIUS_SECRET_KEY is not set — refusing to process.")
+        return jsonify({"error": "Webhook not configured (missing FREEMIUS_SECRET_KEY)."}), 503
+
     signature = request.headers.get("X-Signature", "")
-    if licensing.FREEMIUS_SECRET_KEY:
-        if not signature:
-            return jsonify({"error": "Missing signature"}), 401
-        import hmac, hashlib
-        expected = hmac.new(licensing.FREEMIUS_SECRET_KEY.encode(), request.get_data(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected):
-            return jsonify({"error": "Invalid signature"}), 401
+    if not signature:
+        return jsonify({"error": "Missing signature"}), 401
+    expected = _hmac.new(secret.encode(), request.get_data(), _hashlib.sha256).hexdigest()
+    if not _hmac.compare_digest(signature, expected):
+        return jsonify({"error": "Invalid signature"}), 401
 
     data = request.get_json(silent=True) or {}
     event_type = data.get("event", data.get("type", ""))
@@ -3283,6 +3469,9 @@ def freemius_webhook():
 
     if event_type not in ("license.extended", "license.cancelled", "license.expired"):
         return jsonify({"success": True, "ignored": event_type}), 200
+
+    if not freemius_license_id:
+        return jsonify({"error": "No license id in payload"}), 400
 
     # Try both product lines: this one freemius_license_id will only ever
     # match a record in ONE of them (browser Pro/Pro+ license vs. Developer
@@ -3460,7 +3649,9 @@ def account_required(view_func):
     @wraps(view_func)
     def wrapper(*args, **kwargs):
         if not session.get("account_email"):
-            return redirect(url_for("account_login", next=request.path))
+            # next= only allows relative paths (open-redirect safe).
+            next_path = request.path if request.path.startswith("/") else ""
+            return redirect(url_for("account_login", next=next_path or None))
         return view_func(*args, **kwargs)
 
     return wrapper
@@ -3468,13 +3659,24 @@ def account_required(view_func):
 
 @app.route("/login", methods=["GET", "POST"])
 def account_login():
-    """Paid-customer login — separate from /admin/login above, and
-    deliberately not the source of truth for Pro/API access (see
-    accounts.py's docstring): this just looks up and hands back whatever
-    key(s) licensing.py/api_keys.py already have on file for the email.
-    No 'sign up' link here on purpose — accounts only exist because a
-    payment created one (see _provision_paid_account)."""
+    """Site login for paid customers *and* the site admin.
+
+    Admin is not a separate password gate: if ADMIN_EMAIL is configured and
+    this login's email matches it, the session becomes admin + Pro+ (see
+    is_site_admin / _license_context). Everyone else is a normal account.
+    No self-serve sign-up — accounts are created by payment or by the
+    ADMIN_EMAIL bootstrap (_ensure_admin_account).
+    """
+    _ensure_admin_account()
+
     if request.method == "GET":
+        # Already admin? Honour next=/admin without re-prompting.
+        if is_site_admin():
+            next_url = _safe_next_url(
+                request.args.get("next") or "",
+                default=url_for("account_dashboard"),
+            )
+            return redirect(next_url)
         return render_template("account_login.html")
 
     ip_hash = "login:" + usage_tracking.hash_ip(usage_tracking.get_client_ip(request))
@@ -3495,8 +3697,24 @@ def account_login():
 
     if user:
         persistence.clear_login_attempts(ip_hash)
+        # Session fixation hardening on privilege boundary (login).
+        session.clear()
+        session.permanent = True
+        session["csrf_token"] = secrets.token_hex(32)
         session["account_email"] = user["email"]
-        next_url = request.args.get("next") or url_for("account_dashboard")
+        # Mark admin only when email matches ADMIN_EMAIL — re-checked live
+        # by is_site_admin() on every request; this flag is a convenience
+        # for templates / audit, not the security boundary.
+        if ADMIN_EMAIL and hmac.compare_digest(
+                (user["email"] or "").strip().lower(), ADMIN_EMAIL):
+            session["admin_authed"] = True
+            persistence.append_audit("admin_login", f"email={user['email']}", actor=user["email"])
+        default_next = (
+            url_for("admin_dashboard")
+            if session.get("admin_authed")
+            else url_for("account_dashboard")
+        )
+        next_url = _safe_next_url(request.args.get("next") or "", default=default_next)
         return redirect(next_url)
 
     first_attempt_str = record.get("first_attempt")
@@ -3521,7 +3739,9 @@ def account_login():
 
 @app.route("/logout")
 def account_logout():
-    session.pop("account_email", None)
+    session.clear()
+    session.permanent = True
+    session["csrf_token"] = secrets.token_hex(32)
     return redirect(url_for("landing"))
 
 
@@ -3532,6 +3752,32 @@ def account_dashboard():
     user = accounts.find_user(email)
     license_key = licensing.find_key_by_email(email)
     license_info = licensing.check_vox_license(license_key) if license_key else {"valid": False}
+    # Site admin: always show Pro+ on the account page (matches nav / is_pro).
+    if is_site_admin():
+        license_info = {
+            "valid": True,
+            "plan": "pro_plus",
+            "name": (user.get("name") if user else "") or "Admin",
+        }
+        if not license_key:
+            license_key = "(admin — full Pro+ access, no license key required)"
+    # Fallback: if the account has no key linked by email (common for
+    # hand-created admin keys that left customer_email blank) but this
+    # browser session has an activated license_key that is valid, show
+    # that instead — matches what is_pro()/get_plan() already report in
+    # the nav. Also opportunistically backfill the key's customer_email
+    # so the next /account load resolves via the normal path.
+    elif not license_info.get("valid"):
+        session_key = (session.get("license_key") or "").strip()
+        if session_key:
+            session_info = licensing.check_vox_license(session_key)
+            if session_info.get("valid"):
+                license_key = session_key
+                license_info = session_info
+                try:
+                    licensing.update_key_customer(session_key, customer_email=email)
+                except Exception:
+                    pass
     api_key_records = api_keys.find_keys_by_email(email)
     plan_usage = pro_usage_summary(license_key, license_info.get("plan", "")) if license_info.get("valid") else {}
     usage_near = False

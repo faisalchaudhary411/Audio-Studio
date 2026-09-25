@@ -241,19 +241,29 @@ def create_subscription_key(customer_name: str, customer_email: str,
     return key
 
 
-def create_new_key_manual(plan: str = "pro", subscription_type: str = "monthly") -> str:
+def create_new_key_manual(plan: str = "pro", subscription_type: str = "monthly",
+                          customer_name: str = "Manual",
+                          customer_email: str = "") -> str:
     """Admin-panel 'create a key by hand' button (e.g. for manual bank-transfer
     approvals). subscription_type controls duration — "annual" for 365 days,
     anything else (including the "monthly" default) for 30 — same table
     _resolve_expiry uses everywhere else, so a hand-issued annual key lasts
-    exactly as long as one issued through the normal approval flow."""
+    exactly as long as one issued through the normal approval flow.
+
+    customer_name / customer_email should be filled in whenever the key is
+    for a known account — otherwise /account's find_key_by_email lookup
+    cannot associate the key with the logged-in user and the App license
+    panel shows "No active app subscription" even when the key is valid
+    and the nav correctly shows Pro/Pro+ via the activated session key.
+    """
     key = generate_license_key()
     keys = _keys()
     keys[key] = {
         "used": False, "revoked": False,
         "created": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "activated_by": "", "activated_on": "",
-        "customer_name": "Manual", "customer_email": "",
+        "customer_name": (customer_name or "Manual").strip() or "Manual",
+        "customer_email": (customer_email or "").strip().lower(),
         "subscription_type": subscription_type,
         "expires_at": _resolve_expiry(subscription_type),
         "amount_paid": 0, "renewal_count": 0, "activated_fp": "",
@@ -261,6 +271,35 @@ def create_new_key_manual(plan: str = "pro", subscription_type: str = "monthly")
     }
     _save(keys)
     return key
+
+
+def update_key_customer(key: str, customer_name: str = None, customer_email: str = None) -> bool:
+    """Admin action: set / correct the name and email on an existing key so
+    find_key_by_email (used by /account and account-only is_pro fallback)
+    can resolve it. Empty strings are allowed and clear the field."""
+    keys = _keys()
+    if key not in keys:
+        return False
+    if customer_name is not None:
+        keys[key]["customer_name"] = (customer_name or "").strip() or "Manual"
+    if customer_email is not None:
+        keys[key]["customer_email"] = (customer_email or "").strip().lower()
+    _save(keys)
+    return True
+
+
+def extend_key(key: str, subscription_type: str = "monthly") -> bool:
+    """Admin action: push expires_at forward from *now* (not from the old
+    expiry). Used together with unrevoke so an expired key that the admin
+    reactivates actually becomes usable again — otherwise is_subscription_active
+    still returns False and the next sweep_expired_keys re-marks it revoked."""
+    keys = _keys()
+    if key not in keys:
+        return False
+    keys[key]["expires_at"] = _resolve_expiry(subscription_type or keys[key].get("subscription_type") or "monthly")
+    keys[key]["subscription_type"] = subscription_type or keys[key].get("subscription_type") or "monthly"
+    _save(keys)
+    return True
 
 
 
@@ -272,11 +311,37 @@ def revoke_key(key: str):
         _save(keys)
 
 
-def unrevoke_key(key: str):
+def unrevoke_key(key: str, extend_if_expired: bool = True,
+                 subscription_type: str = None):
+    """Clear the revoked flag. If the key is already past expires_at (or has
+    no usable expiry), optionally push a fresh window from now so the key
+    actually works again — without this, is_subscription_active still fails
+    and the next sweep_expired_keys immediately re-revokes, making the
+    admin 'Unrevoke' button appear broken."""
     keys = _keys()
-    if key in keys:
-        keys[key]["revoked"] = False
-        _save(keys)
+    if key not in keys:
+        return
+    info = keys[key]
+    info["revoked"] = False
+    if extend_if_expired:
+        expired = False
+        expires_at = info.get("expires_at")
+        if expires_at:
+            try:
+                expiry = dt.datetime.strptime(expires_at, "%Y-%m-%d %H:%M")
+                if dt.datetime.now() > expiry:
+                    expired = True
+            except (ValueError, TypeError):
+                expired = True
+        else:
+            # No expiry stored → treat as needing a window so the key is usable
+            expired = True
+        if expired:
+            st = subscription_type or info.get("subscription_type") or "monthly"
+            info["expires_at"] = _resolve_expiry(st)
+            info["subscription_type"] = st
+    keys[key] = info
+    _save(keys)
 
 
 def delete_key(key: str):
@@ -415,6 +480,16 @@ def activate_vox_license(key: str, request) -> dict:
                 info["activated_fps"] = _push_history(info.get("activated_fps"), current_fp, cap=5)
                 info["activated_fp"] = current_fp
                 info["activated_on"] = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+                # Same backfill as first activation: if the key still has no
+                # email and the session is logged into an account, bind it so
+                # /account can resolve the key by email.
+                try:
+                    from flask import session as _session
+                    acct_email = (_session.get("account_email") or "").strip().lower()
+                    if acct_email and not (info.get("customer_email") or "").strip():
+                        info["customer_email"] = acct_email
+                except Exception:
+                    pass
                 holder["info"] = info
                 return {"valid": True, "name": info.get("customer_name", "Pro User")}
 
@@ -437,6 +512,28 @@ def activate_vox_license(key: str, request) -> dict:
             info["activated_ips"] = [ip_hash]
         info["activated_fp"] = current_fp
         info["activated_fps"] = [current_fp]
+        # If this key was hand-created without an email (admin "Create new
+        # key" used to leave customer_email blank) and the browser is
+        # logged into an account, bind the account email so /account and
+        # the account-only is_pro() fallback can find the key by email.
+        # Never overwrite a non-empty email that was set at purchase time.
+        try:
+            from flask import session as _session
+            acct_email = (_session.get("account_email") or "").strip().lower()
+            if acct_email and not (info.get("customer_email") or "").strip():
+                info["customer_email"] = acct_email
+                if not (info.get("customer_name") or "").strip() or info.get("customer_name") == "Manual":
+                    # Prefer the account's display name when the key still
+                    # carries the placeholder "Manual".
+                    try:
+                        import accounts as _accounts
+                        user = _accounts.find_user(acct_email)
+                        if user and (user.get("name") or "").strip():
+                            info["customer_name"] = user["name"].strip()
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         holder["info"] = info
         return {"valid": True, "name": info.get("customer_name", "Pro User")}
 

@@ -221,18 +221,21 @@ def revoke_key(key_id: str) -> bool:
     for k in keys:
         if str(k["id"]) == str(key_id):
             k["active"] = False
-            persistence.save_api_keys(keys)
-            return True
+            ok, _err = persistence.save_api_keys(keys)
+            return bool(ok)
     return False
 
 
 def unrevoke_key(key_id: str) -> bool:
+    """Reactivate a previously revoked API key. Returns True only when the
+    key was found AND the write succeeded — callers (admin UI) can surface
+    a failure instead of silently appearing to do nothing."""
     keys = persistence.load_api_keys()
     for k in keys:
         if str(k["id"]) == str(key_id):
             k["active"] = True
-            persistence.save_api_keys(keys)
-            return True
+            ok, _err = persistence.save_api_keys(keys)
+            return bool(ok)
     return False
 
 
