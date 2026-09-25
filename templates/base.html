@@ -252,6 +252,9 @@
       </div>
     </div>
 
+    {% if is_admin_ctx %}
+    <a href="{{ url_for('admin_dashboard') }}" class="nav__link nav__link--login" title="Admin panel">Admin</a>
+    {% endif %}
     {% if account_user_ctx and account_user_ctx.email %}
     <a href="{{ url_for('account_dashboard') }}" class="nav-user nav-user--desktop" title="{{ account_user_ctx.email }}">
       <span class="nav-user__avatar">
