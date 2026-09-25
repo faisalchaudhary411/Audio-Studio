@@ -8,9 +8,21 @@
     <h2 class="section__title">License keys</h2>
   </div>
 
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+      <div role="status" style="margin:0 0 16px;padding:14px 16px;border-radius:12px;font-size:0.92rem;line-height:1.45;
+        {% if category == 'error' %}background:rgba(232,93,93,0.12);border:1px solid rgba(232,93,93,0.35);color:#f0a0a0;
+        {% else %}background:rgba(79,166,156,0.15);border:1px solid rgba(79,166,156,0.4);color:var(--jade-hi);{% endif %}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
   <form method="post" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="create">
+    <input type="text" name="customer_name" class="admin-input" placeholder="Customer name" style="width:140px;">
+    <input type="email" name="customer_email" class="admin-input" placeholder="Customer email (required for /account)" style="width:220px;">
     <select name="plan" class="admin-input" style="width:auto;">
       <option value="pro">Pro ($3)</option>
       <option value="pro_plus">Pro+ ($6 — clone + music)</option>
@@ -21,6 +33,7 @@
     </select>
     <button type="submit" class="btn btn--brass btn--sm">+ Create new key</button>
   </form>
+  <p style="color:var(--text-dim);font-size:0.8rem;margin:-4px 0 12px;">Tip: always set the customer email when creating a key so the /account page can show the App license. Without it the nav may still show Pro+ (from a session activation) while App license says “No active app subscription”.</p>
 
   <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <input type="search" id="keys-search" class="admin-input" placeholder="Search key, email, name…" style="max-width:280px;">
@@ -63,15 +76,24 @@
             <form method="post" style="display:inline;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="key" value="{{ row.key }}">
               {% if row.revoked %}
-              <button type="submit" name="action" value="unrevoke" class="btn btn--jade btn--sm">Unrevoke</button>
+              <button type="submit" name="action" value="unrevoke" class="btn btn--jade btn--sm" title="Clears revoked and, if expired, extends the subscription from today">Unrevoke</button>
               {% else %}
               <button type="submit" name="action" value="revoke" class="btn btn--ghost btn--sm">Revoke</button>
               {% endif %}
+              <button type="submit" name="action" value="extend" class="btn btn--ghost btn--sm" title="Push a fresh monthly window from today">+30d</button>
               {% if row.used %}
               <button type="submit" name="action" value="reset_device" class="btn btn--ghost btn--sm" onclick="return confirm('Unlock this key so it can be reactivated on a new device? The customer will need to re-enter their key.')">Reset device lock</button>
               {% endif %}
               <button type="submit" name="action" value="toggle_plan" class="btn btn--ghost btn--sm">{{ 'Downgrade to Pro' if row.plan == 'pro_plus' else 'Upgrade to Pro+' }}</button>
               <button type="submit" name="action" value="delete" class="btn btn--ghost btn--sm" onclick="return confirm('Delete this key permanently?')">Delete</button>
+            </form>
+            <form method="post" style="display:flex;gap:4px;margin-top:6px;align-items:center;flex-wrap:wrap;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="key" value="{{ row.key }}">
+              <input type="hidden" name="action" value="update_customer">
+              <input type="text" name="customer_name" class="admin-input" value="{{ row.customer_name or '' }}" placeholder="Name" style="width:100px;font-size:0.78rem;padding:4px 6px;">
+              <input type="email" name="customer_email" class="admin-input" value="{{ row.customer_email or '' }}" placeholder="Email" style="width:160px;font-size:0.78rem;padding:4px 6px;">
+              <button type="submit" class="btn btn--ghost btn--sm" style="font-size:0.75rem;">Save</button>
             </form>
           </td>
         </tr>
