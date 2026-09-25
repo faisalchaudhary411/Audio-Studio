@@ -625,46 +625,59 @@ LIMITS_CACHE_TTL = 30
 _limits_cache = {"data": None, "ts": 0}
 
 
+def _emails_equal(a: str, b: str) -> bool:
+    """Constant-time email compare. Never raises on different lengths
+    (hmac.compare_digest would ValueError and break login for non-admins)."""
+    a = (a or "").strip().lower()
+    b = (b or "").strip().lower()
+    if not a or not b or len(a) != len(b):
+        return False
+    try:
+        return hmac.compare_digest(a, b)
+    except Exception:
+        return False
+
+
 def is_site_admin() -> bool:
     """True only when the logged-in *account* email matches ADMIN_EMAIL.
 
     Admin is no longer a separate /admin/login password gate. Anyone who
     knows /admin but is not signed in as ADMIN_EMAIL is denied. We never
     trust a stale session['admin_authed'] flag alone — the email is
-    re-checked every request (constant-time when lengths allow).
+    re-checked every request.
     """
     if not ADMIN_EMAIL:
         return False
-    email = (session.get("account_email") or "").strip().lower()
-    if not email or len(email) != len(ADMIN_EMAIL):
-        return False
-    try:
-        return hmac.compare_digest(email, ADMIN_EMAIL)
-    except Exception:
-        return False
+    return _emails_equal(session.get("account_email") or "", ADMIN_EMAIL)
 
 
 def _ensure_admin_account():
     """Ensure ADMIN_EMAIL has a usable account password so the owner can
     log in via the normal /login page.
 
-    - If no account exists and ADMIN_PASSWORD is set → create account and
-      set that password.
-    - If account exists but has no password_hash yet and ADMIN_PASSWORD is
-      set → set the password once (does not overwrite an already-set
-      password — change it from /account after first login).
-    Safe to call on every request (cheap lookup); only writes when needed.
+    - If no account exists and ADMIN_PASSWORD is set → create + set password.
+    - If account exists but has no password_hash yet → set ADMIN_PASSWORD.
+    - If ADMIN_FORCE_PASSWORD_RESET=1 → always re-apply ADMIN_PASSWORD
+      (recovery when you forgot the account password). Unset after use.
+
+    Does not overwrite an existing password unless force-reset is on.
     """
     if not ADMIN_EMAIL:
         return
-    user = accounts.find_user(ADMIN_EMAIL)
-    if user and user.get("password_hash"):
-        return
     if not ADMIN_PASSWORD or len(ADMIN_PASSWORD) < 8:
+        return
+    user = accounts.find_user(ADMIN_EMAIL)
+    force = os.environ.get("ADMIN_FORCE_PASSWORD_RESET", "").strip() in ("1", "true", "yes")
+    if user and user.get("password_hash") and not force:
         return
     if not user:
         accounts.find_or_create_user(ADMIN_EMAIL, "Admin")
     accounts.set_password(ADMIN_EMAIL, ADMIN_PASSWORD)
+    if force:
+        app.logger.warning(
+            "ADMIN_FORCE_PASSWORD_RESET applied for %s — unset that env var after login.",
+            ADMIN_EMAIL,
+        )
 
 
 def _safe_next_url(candidate: str, *, default: str, allowed_prefix: str = "/") -> str:
@@ -3695,20 +3708,40 @@ def account_login():
     password = request.form.get("password", "")
     user = accounts.verify_login_identifier(email, password)
 
+    # Admin recovery: if this is ADMIN_EMAIL and the submitted password
+    # matches ADMIN_PASSWORD (env), accept login even when the stored
+    # account hash is missing or different. Keeps the owner from being
+    # locked out after switching to account-based admin. Also syncs the
+    # account hash so subsequent logins work with the same password.
+    if not user and ADMIN_EMAIL and ADMIN_PASSWORD and _emails_equal(email, ADMIN_EMAIL):
+        # Length-safe constant-time compare (padding both sides avoids
+        # compare_digest ValueError on different lengths).
+        a = password.encode("utf-8")
+        b = ADMIN_PASSWORD.encode("utf-8")
+        pad = max(len(a), len(b))
+        password_ok = hmac.compare_digest(a.ljust(pad, b"\0"), b.ljust(pad, b"\0")) and len(a) == len(b)
+        if password_ok:
+            accounts.find_or_create_user(ADMIN_EMAIL, "Admin")
+            accounts.set_password(ADMIN_EMAIL, ADMIN_PASSWORD)
+            user = accounts.find_user(ADMIN_EMAIL) or {"email": ADMIN_EMAIL, "name": "Admin"}
+
     if user:
         persistence.clear_login_attempts(ip_hash)
         # Session fixation hardening on privilege boundary (login).
         session.clear()
         session.permanent = True
         session["csrf_token"] = secrets.token_hex(32)
-        session["account_email"] = user["email"]
+        session["account_email"] = (user.get("email") or email).strip().lower()
         # Mark admin only when email matches ADMIN_EMAIL — re-checked live
         # by is_site_admin() on every request; this flag is a convenience
         # for templates / audit, not the security boundary.
-        if ADMIN_EMAIL and hmac.compare_digest(
-                (user["email"] or "").strip().lower(), ADMIN_EMAIL):
+        if _emails_equal(session["account_email"], ADMIN_EMAIL):
             session["admin_authed"] = True
-            persistence.append_audit("admin_login", f"email={user['email']}", actor=user["email"])
+            try:
+                persistence.append_audit("admin_login", f"email={session['account_email']}",
+                                         actor=session["account_email"])
+            except Exception:
+                pass
         default_next = (
             url_for("admin_dashboard")
             if session.get("admin_authed")
