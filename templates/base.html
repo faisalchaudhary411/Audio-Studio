@@ -293,6 +293,9 @@
     <a href="{{ url_for('studio') }}" class="nav-drawer__link nav-drawer__link--primary">Studio</a>
     <a href="{{ url_for('tools_hub') }}" class="nav-drawer__link">Tools</a>
     <a href="{{ url_for('pricing') }}" class="nav-drawer__link">Pricing</a>
+    {% if is_admin_ctx %}
+    <a href="{{ url_for('admin_dashboard') }}" class="nav-drawer__link" style="color:var(--brass-hi);">Admin panel</a>
+    {% endif %}
 
     <button type="button" class="nav-drawer__acc" data-acc="products" aria-expanded="false">
       Products

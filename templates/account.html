@@ -169,6 +169,16 @@
     {% endif %}
   </div>
 
+  {% if is_admin_ctx %}
+  <div class="panel" style="margin-top:16px;border-color:rgba(232,169,60,0.35);">
+    <span class="panel__label" style="color:var(--brass-hi);">Site admin</span>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin:8px 0 14px;">
+      You’re signed in as the configured admin account (full Pro+ + admin panel).
+    </p>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn--brass btn--sm">Open admin panel</a>
+  </div>
+  {% endif %}
+
   <p style="text-align:center;margin-top:24px;">
     <a href="{{ url_for('account_logout') }}" style="color:var(--text-dim);font-size:0.85rem;">Log out</a>
   </p>
