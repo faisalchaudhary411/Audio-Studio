@@ -1,20 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Activate Your VoxCraft License{% endblock %}
 {% block robots %}<meta name="robots" content="noindex, follow">{% endblock %}
-{% block meta_description %}Activate a VoxCraft Pro or Pro+ license key — works with both a manual-payment license and a Freemius (card payment) key.{% endblock %}
+{% block meta_description %}Activate a VoxCraft Pro or Pro+ license key — paid plans are tied to your account email after you log in.{% endblock %}
 
 {% block content %}
 <section class="section" style="max-width:640px;">
   <div class="section__head">
     <span class="section__eyebrow">Pro</span>
     <h1 class="section__title">Activate your license</h1>
-    <p class="section__sub">Enter your license key below — works whether you paid by card (Freemius) or via manual payment (EasyPaisa/JazzCash/bank transfer).</p>
+    <p class="section__sub">Pro and Pro+ are bound to your <strong>account</strong> (the email you paid with). Log in first, then enter your key — free tools still work without an account.</p>
   </div>
   <div class="panel">
     {% if success %}
-      <p style="color:var(--jade-hi);">Activated — welcome, {{ name }}. Head to the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a> to start using Pro.</p>
+      {% if needs_login %}
+      <p style="color:var(--jade-hi);margin-bottom:12px;">Key accepted{% if name %} ({{ name }}){% endif %}.</p>
+      <p style="color:var(--text-mid);line-height:1.6;margin-bottom:16px;">{{ login_required_message or "Log in with the email used for this purchase to unlock Pro/Pro+ on your account." }}</p>
+      <a href="{{ url_for('account_login', next=url_for('studio')) }}" class="btn btn--brass">Log in to unlock Pro</a>
+      {% else %}
+      <p style="color:var(--jade-hi);">Activated — welcome, {{ name }}. Open the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a> to use Pro.</p>
+      {% endif %}
     {% else %}
       {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
+      {% if needs_login and not logged_in %}
+      <p style="background:rgba(232,169,60,0.1);border:1px solid rgba(232,169,60,0.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;color:var(--text-mid);font-size:0.9rem;line-height:1.5;">
+        You’re not logged in. You can still validate a key here, but <strong>Pro/Pro+ only unlocks after you log in</strong> with the purchase email.
+        <a href="{{ url_for('account_login', next=url_for('activate')) }}" style="color:var(--brass-hi);">Log in first</a>
+      </p>
+      {% endif %}
       {% if needs_unlock %}
       <p style="margin-bottom:14px;">
         <a href="{{ url_for('unlock_device', key=attempted_key) }}" class="btn btn--brass btn--sm">Unlock for this device</a>
@@ -32,50 +44,33 @@
   <div style="margin-top:32px;color:var(--text-mid);line-height:1.8;">
     <h2 style="font-family:var(--display);color:var(--text-hi);font-size:1.15rem;margin-bottom:10px;">How activation works</h2>
     <ol style="padding-left:20px;">
-      <li>Paste your license key exactly as it was given to you — no extra spaces before or after.</li>
-      <li>Tap Activate. VoxCraft checks it against our own records first, and against Freemius if it's a card-payment key.</li>
-      <li>Once valid, your Pro or Pro+ access is tied to this device/browser for use.</li>
-      <li>You're redirected straight into <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a> — no separate login step.</li>
+      <li><a href="{{ url_for('account_login') }}" style="color:var(--brass-hi)">Log in</a> with the email used when you paid (or set your password from the email we sent after purchase).</li>
+      <li>Paste your license key exactly as given — no extra spaces.</li>
+      <li>Tap Activate. The key is linked to your account email.</li>
+      <li>Pro/Pro+ features (higher batch limits, clone, music, etc.) unlock only while that account is logged in — not from a browser cookie alone.</li>
     </ol>
 
     <h2 style="font-family:var(--display);color:var(--text-hi);font-size:1.15rem;margin:26px 0 10px;">Where to find your key</h2>
     <ul style="padding-left:20px;">
-      <li><strong>Paid by card (Freemius):</strong> your license key was included in the confirmation email from Freemius after checkout.</li>
-      <li><strong>Paid manually (EasyPaisa/JazzCash/bank):</strong> your VoxCraft key is emailed once your payment is verified — see <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi)">upgrade</a> if you haven't submitted a payment yet, or your access is still in its temporary grace-period window.</li>
+      <li><strong>Paid by card (Freemius):</strong> confirmation email from Freemius after checkout.</li>
+      <li><strong>Paid manually (EasyPaisa/JazzCash/bank):</strong> VoxCraft emails your key once payment is verified.</li>
     </ul>
 
     <div class="panel" style="margin-top:26px;">
       <span class="panel__label">Frequently asked questions</span>
       <details style="margin-top:10px;">
         <summary>"Invalid license key" — what should I check?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">Copy-paste rather than retype the key, and check for a stray space at the start or end — this is the most common cause. If it still fails, confirm you're using the key from the correct confirmation email (Freemius vs. VoxCraft manual-payment keys look different).</p>
+        <p style="color:var(--text-mid);line-height:1.7;">Copy-paste rather than retype, and strip stray spaces. Confirm you're using the key from the correct email (Freemius vs manual payment).</p>
+      </details>
+      <details style="margin-top:10px;">
+        <summary>Why do I need to log in for Pro?</summary>
+        <p style="color:var(--text-mid);line-height:1.7;">Paid plans are bound to your account so Pro+ batch limits and features cannot be shared via cookies or IP alone. Free tools still work without an account.</p>
       </details>
       <details style="margin-top:10px;">
         <summary>Can I use one license on multiple devices?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">A license is tied to a single device at a time. To move it to a new phone or browser, use <a href="{{ url_for('unlock_device') }}" style="color:var(--brass-hi);">Unlock device</a> — enter your key and the email on the license, click the link we email you, then activate on the new device.</p>
-      </details>
-      <details style="margin-top:10px;">
-        <summary>I just paid manually — why isn't my key working yet?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">Manual payments are verified by hand, not instantly. You may already have temporary access on the device you paid from while verification is in progress — check the confirmation shown on the <a href="{{ url_for('upgrade') }}" style="color:var(--brass-hi);">upgrade</a> page after submitting. Your actual license key arrives by email once verification completes.</p>
-      </details>
-      <details style="margin-top:10px;">
-        <summary>Does activating require an account or password?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">No — VoxCraft doesn't use accounts or passwords. The license key itself is what unlocks Pro/Pro+ access on a device.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">Log in on each device with the same account. Device unlock is only needed if activation is blocked as “already active on another device.”</p>
       </details>
     </div>
   </div>
 </section>
-
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {"@type": "Question", "name": "\"Invalid license key\" \u2014 what should I check?", "acceptedAnswer": {"@type": "Answer", "text": "Copy-paste rather than retype the key, and check for a stray space at the start or end. Confirm you are using the key from the correct confirmation email."}},
-    {"@type": "Question", "name": "Can I use one license on multiple devices?", "acceptedAnswer": {"@type": "Answer", "text": "A license is tied to a single device at a time. Activating on a new device updates the binding."}},
-    {"@type": "Question", "name": "I just paid manually \u2014 why isn't my key working yet?", "acceptedAnswer": {"@type": "Answer", "text": "Manual payments are verified by hand rather than instantly. Temporary access may already be active on the device used to pay while verification is in progress, and the license key arrives by email once verification completes."}},
-    {"@type": "Question", "name": "Does activating require an account or password?", "acceptedAnswer": {"@type": "Answer", "text": "No, VoxCraft does not use accounts or passwords. The license key itself unlocks Pro or Pro+ access on a device."}}
-  ]
-}
-</script>
 {% endblock %}
