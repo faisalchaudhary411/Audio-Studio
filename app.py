@@ -500,22 +500,20 @@ def _security_headers(response):
 
 @app.before_request
 def _auto_restore_pro_session():
-    """If this browser has no license_key in session (cookies cleared,
-    incognito, or a different browser than where they activated), silently
-    check whether this device's IP or fingerprint matches an already-active
-    key's history and restore it — see licensing.find_key_for_device() for
-    the deliberate convenience-vs-shared-network trade-off this makes.
-    Skipped for static assets and webhook/health endpoints, which never
-    need Pro status and would otherwise trigger a needless DB scan on
-    every single request (image, CSS, JS file, etc.)."""
-    if session.get("license_key"):
-        return
-    skip_prefixes = ("/static/", "/webhook/", "/ads.txt")
-    if request.path.startswith(skip_prefixes):
-        return
-    restored_key = licensing.find_key_for_device(request)
-    if restored_key:
-        session["license_key"] = restored_key
+    """DISABLED for Pro/Pro+ access.
+
+    Pro and Pro+ are strictly bound to a logged-in account email (see
+    _license_context). Restoring a license_key into the session from
+    device fingerprint/IP alone previously let unpaid browsers show Pro+
+    batch limits and gated features without login.
+
+    Free-tier usage continues to use session / IP / fingerprint via
+    usage_tracking — that path never depended on this restore.
+
+    Kept as a no-op before_request so call sites and docs that mention
+    the name still resolve; do not re-enable silent Pro restore.
+    """
+    return
 
 
 # Prefixes deliberately excluded from the visitor counter: static assets
@@ -701,76 +699,67 @@ def get_limits() -> dict:
 
 
 def _effective_license_key() -> str:
-    """The license key that should actually govern this request — a
-    directly-activated session['license_key'] if present, else the key
-    tied to the logged-in account (session['account_email']), same
-    fallback _license_context() uses for is_pro()/get_plan()/can().
+    """License key used for Pro/Pro+ quotas and ownership — account-bound only.
 
-    Needed as its own thing (not just is_pro()) because a lot of code
-    doesn't only ask "are they Pro" — it uses the key ITSELF as the
-    identity for usage tracking (usage_tracking.get/bump_license_monthly_
-    counter), in-flight job counting, and saved-voice ownership checks
-    (_voice_usable_by). Those call sites were all reading
-    session.get('license_key') directly and getting "" for an
-    account-only login — even after can()/is_pro() correctly say Pro+,
-    since that only fixed the yes/no check, not the key those functions
-    need as an actual value. Concretely, before this: clone/music routes
-    hard-blocked account-only Pro+ customers with a 401 "Session expired"
-    (they gate on session.get('license_key') truthiness as a second,
-    separate check after can('clone.use')), and Pro TTS monthly quota
-    silently never got tracked or enforced for them at all (the quota
-    functions treated missing key as "nothing to check" and returned
-    early). Same g-cache pattern as _license_context() for the same
-    reason — cheap to call from several places in one request."""
+    Pro/Pro+ are strictly tied to a logged-in account email. A bare
+    session['license_key'] (activate without login, or old device restore)
+    does NOT grant a key identity for paid features.
+
+    Order:
+      1) Site admin → synthetic marker (no real key required)
+      2) Logged-in account → live key via find_key_by_email (must be valid)
+      3) Else → "" (free tier; IP/session quotas apply elsewhere)
+
+    Cached on flask.g once per request.
+    """
     cached = getattr(g, "effective_license_key", None)
     if cached is not None:
         return "" if cached == "__none__" else cached
-    key = session.get("license_key") or ""
-    if key and licensing.check_vox_license(key).get("valid"):
-        g.effective_license_key = key
-        return key
-    email = session.get("account_email", "")
-    if email:
-        acct_key = licensing.find_key_by_email(email) or ""
-        if acct_key:
-            g.effective_license_key = acct_key
-            return acct_key
+
+    if is_site_admin():
+        # Stable per-email id for admin quota buckets if anything keys off this
+        email = (session.get("account_email") or "").strip().lower()
+        marker = f"admin:{email}" if email else "admin:unknown"
+        g.effective_license_key = marker
+        return marker
+
+    email = (session.get("account_email") or "").strip().lower()
+    if not email:
+        g.effective_license_key = "__none__"
+        return ""
+
+    acct_key = licensing.find_key_by_email(email) or ""
+    if acct_key and licensing.check_vox_license(acct_key).get("valid"):
+        g.effective_license_key = acct_key
+        return acct_key
+
+    # Optional: session key only counts if it belongs to this account email
+    session_key = (session.get("license_key") or "").strip()
+    if session_key:
+        info = persistence.load_license_keys().get(session_key) or {}
+        key_email = (info.get("customer_email") or "").strip().lower()
+        if key_email and key_email == email and licensing.check_vox_license(session_key).get("valid"):
+            g.effective_license_key = session_key
+            return session_key
+
     g.effective_license_key = "__none__"
     return ""
 
 
 def _license_context() -> dict:
-    """Single source of truth for the current session's license status.
+    """Single source of truth for paid plan status (Pro / Pro+).
 
-    Checks TWO independent things a session can carry, and merges them:
-    1) session['license_key'] — a license key typed into /activate
-       directly in this browser (the original flow).
-    2) session['account_email'] — a username/password account login (see
-       accounts.py). Account login never set license_key itself; it only
-       ever looked the license up live wherever something needed it
-       (/account, the nav avatar). This function didn't know that, so
-       is_pro()/get_plan()/can()/current_roles() — and therefore every
-       Pro-gated tool plus this page's "Current plan" labels — silently
-       treated an account-only login as Free even when they were a
-       paying Pro/Pro+ customer with no license_key activated in that
-       particular browser session.
-    A valid session license_key still wins if both are present (keeps
-    existing /activate behavior exactly as it was); the account lookup
-    is only consulted as a fallback when there's no session key, or it
-    doesn't check out.
+    POLICY (strict account binding):
+      • Pro and Pro+ require a logged-in account (session['account_email']).
+      • The account email must own a valid, non-revoked, non-expired license
+        (looked up live via licensing.find_key_by_email), OR be the site
+        admin (ADMIN_EMAIL → always Pro+).
+      • session['license_key'] alone never grants Pro — that blocked the
+        "Pro+ batch without login" leak (device cookie / activate-only).
+      • Free tier stays anonymous: session + IP + fingerprint via
+        usage_tracking; no account required.
 
-    CHANGED: is_pro(), get_plan(), and has_clone_and_music() used to each
-    independently call licensing.check_vox_license() — so any request/
-    template that touched all three (the nav bar context processor did
-    exactly that) hit the license lookup 3 separate times for the same
-    session key. Cached on flask.g so it's computed at most once per
-    request no matter how many of those get called.
-
-    Also now carries 'name' — the customer name captured at signup (see
-    the manual /upgrade payment flow, which collects a real name) or
-    "Pro User" as the fallback for auto-generated/Freemius keys that never
-    had a name attached — so the nav bar can show who's actually logged in
-    instead of just a generic checkmark.
+    Cached on flask.g once per request.
     """
     cached = getattr(g, "license_ctx", None)
     if cached is not None:
@@ -778,9 +767,7 @@ def _license_context() -> dict:
 
     ctx = {"valid": False, "plan": "", "name": ""}
 
-    # Site admin (ADMIN_EMAIL logged in via /login) is always treated as
-    # Pro+ for the browser app — no license key required. Checked first so
-    # quotas and feature gates never lock the owner out of their own tools.
+    # Site admin (ADMIN_EMAIL logged in via /login) → always Pro+
     if is_site_admin():
         email = (session.get("account_email") or "").strip().lower()
         user = accounts.find_user(email) if email else {}
@@ -792,40 +779,50 @@ def _license_context() -> dict:
         g.license_ctx = ctx
         return ctx
 
-    key = session.get("license_key")
-    if key:
-        result = licensing.check_vox_license(key)
+    # No account login → Free only (ignore any session license_key)
+    email = (session.get("account_email") or "").strip().lower()
+    if not email:
+        g.license_ctx = ctx
+        return ctx
+
+    # Account login: resolve license by email (source of truth for paid)
+    acct_key = licensing.find_key_by_email(email)
+    if acct_key:
+        result = licensing.check_vox_license(acct_key)
         if result.get("valid"):
+            user = accounts.find_user(email)
+            name = (user.get("name") if user else "") or result.get("name") or "Pro User"
             ctx = {
                 "valid": True,
                 "plan": result.get("plan", "pro"),
-                "name": result.get("name") or "Pro User",
+                "name": name,
             }
+            g.license_ctx = ctx
+            return ctx
 
-    if not ctx["valid"]:
-        email = session.get("account_email", "")
-        if email:
-            acct_key = licensing.find_key_by_email(email)
-            if acct_key:
-                result = licensing.check_vox_license(acct_key)
-                if result.get("valid"):
-                    user = accounts.find_user(email)
-                    name = (user.get("name") if user else "") or result.get("name") or "Pro User"
-                    ctx = {
-                        "valid": True,
-                        "plan": result.get("plan", "pro"),
-                        "name": name,
-                    }
+    # Session key only if it is registered to this same account email
+    session_key = (session.get("license_key") or "").strip()
+    if session_key:
+        info = persistence.load_license_keys().get(session_key) or {}
+        key_email = (info.get("customer_email") or "").strip().lower()
+        if key_email and key_email == email:
+            result = licensing.check_vox_license(session_key)
+            if result.get("valid"):
+                user = accounts.find_user(email)
+                name = (user.get("name") if user else "") or result.get("name") or "Pro User"
+                ctx = {
+                    "valid": True,
+                    "plan": result.get("plan", "pro"),
+                    "name": name,
+                }
 
     g.license_ctx = ctx
     return ctx
 
 
 def is_pro() -> bool:
-    """Real check now: validates the license key stored in this session
-    against licensing.check_vox_license() (backed by license_keys.json on
-    GitHub). Falls back to False if no key is activated or GITHUB_TOKEN
-    isn't configured yet."""
+    """True only for a logged-in account with a valid Pro/Pro+ license
+    (or site admin). Never true from session cookie / IP alone."""
     return _license_context()["valid"]
 
 
@@ -1540,23 +1537,94 @@ def developers_signup():
 # ---------------------------------------------------------------------------
 @app.route("/activate", methods=["GET", "POST"])
 def activate():
+    """Bind a license key to a device record, but Pro/Pro+ access only
+    applies after the customer is logged into the account that owns the
+    key (customer_email on the key must match session account_email).
+    """
     if request.method == "GET":
-        return render_template("activate.html")
+        return render_template(
+            "activate.html",
+            needs_login=not bool(session.get("account_email")),
+            logged_in=bool(session.get("account_email")),
+        )
     key = (request.form.get("license_key") or "").strip()
     if not key:
-        return render_template("activate.html", error="Enter a license key.")
+        return render_template("activate.html", error="Enter a license key.",
+                               needs_login=not bool(session.get("account_email")),
+                               logged_in=bool(session.get("account_email")))
+
+    # Prefer login first so we can stamp customer_email on the key
+    account_email = (session.get("account_email") or "").strip().lower()
+    if not account_email:
+        # Still validate the key so we don't send people on a wild goose chase,
+        # but do not grant Pro via session alone.
+        result = licensing.activate_any_license(key, request)
+        if result.get("valid"):
+            internal = result.get("internal_key", key)
+            session["license_key"] = internal
+            # If key has no email yet, we cannot link it until they log in
+            return render_template(
+                "activate.html",
+                success=True,
+                name=result.get("name"),
+                needs_login=True,
+                logged_in=False,
+                login_required_message=(
+                    "Your key is valid. Log in with the email used for this purchase "
+                    "to unlock Pro/Pro+ on this account. Paid plans are account-bound, "
+                    "not cookie-only."
+                ),
+            )
+        return render_template(
+            "activate.html",
+            error=result.get("error", "Invalid license key."),
+            needs_unlock=result.get("needs_unlock", False),
+            attempted_key=key if result.get("needs_unlock") else "",
+            needs_login=True,
+            logged_in=False,
+        )
+
     result = licensing.activate_any_license(key, request)
     if result.get("valid"):
-        # Store the INTERNAL key in the session (not whatever the customer typed —
-        # if they entered a Freemius key, result["internal_key"] is the wrapper key
-        # that everything else in the app checks against).
-        session["license_key"] = result.get("internal_key", key)
-        return render_template("activate.html", success=True, name=result.get("name"))
+        internal = result.get("internal_key", key)
+        session["license_key"] = internal
+        # Ensure the key is linked to this account so find_key_by_email works
+        try:
+            info = persistence.load_license_keys().get(internal) or {}
+            key_email = (info.get("customer_email") or "").strip().lower()
+            if not key_email:
+                licensing.update_key_customer(internal, customer_email=account_email)
+            elif key_email != account_email:
+                return render_template(
+                    "activate.html",
+                    error=(
+                        f"This key is registered to a different email ({key_email}). "
+                        "Log in with that account, or contact support."
+                    ),
+                    logged_in=True,
+                    needs_login=False,
+                )
+        except Exception:
+            pass
+        # Clear cached license ctx so this request/next page sees Pro
+        if hasattr(g, "license_ctx"):
+            del g.license_ctx
+        if hasattr(g, "effective_license_key"):
+            del g.effective_license_key
+        return render_template(
+            "activate.html",
+            success=True,
+            name=result.get("name"),
+            logged_in=True,
+            needs_login=False,
+        )
     return render_template(
         "activate.html",
         error=result.get("error", "Invalid license key."),
         needs_unlock=result.get("needs_unlock", False),
         attempted_key=key if result.get("needs_unlock") else "",
+        logged_in=True,
+        needs_login=False,
     )
 
 
