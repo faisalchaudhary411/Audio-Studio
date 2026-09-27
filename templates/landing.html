@@ -113,19 +113,20 @@
   </div>
 </div>
   <p class="hero__sub">
-    VoxCraft is a free AI text-to-speech studio for Urdu, Hindi, Punjabi, Bengali, Tamil, Telugu, English, and 40+ more languages — plus voice cloning, an AI music generator, and free audio tools for YouTube, podcasts, and video.
+    Free AI text to speech for Urdu, Hindi, Punjabi, Bengali, Tamil, Telugu, English, and 40+ more languages. Voice cloning, an AI music generator, and simple audio tools for YouTube and podcasts — start without an account.
   </p>
   <div class="hero__actions">
-    <a href="{{ url_for('studio') }}" class="btn btn--brass">Start free text to speech</a>
-    <a href="{{ url_for('pricing') }}" class="btn btn--ghost">See pricing</a>
+    <a href="{{ url_for('studio') }}" class="btn btn--brass">Open Voice Studio</a>
+    <a href="{{ url_for('seo_landing_page', slug='urdu-text-to-speech') }}" class="btn btn--ghost">Urdu TTS</a>
+    <a href="{{ url_for('seo_landing_page', slug='hindi-text-to-speech') }}" class="btn btn--ghost">Hindi TTS</a>
   </div>
-  <p class="hero__trust">No signup · First voiceover in ~10 seconds · Commercial use allowed</p>
+  <p class="hero__trust">No signup · First voiceover in about 10 seconds · Commercial use allowed</p>
   <p class="hero__trust" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
     <a href="{{ url_for('seo_landing_page', slug='urdu-text-to-speech') }}" class="btn btn--ghost btn--sm">Urdu text to speech</a>
     <a href="{{ url_for('seo_landing_page', slug='hindi-text-to-speech') }}" class="btn btn--ghost btn--sm">Hindi text to speech</a>
     <a href="{{ url_for('seo_landing_page', slug='free-text-to-speech') }}" class="btn btn--ghost btn--sm">Free TTS online</a>
     <a href="{{ url_for('seo_landing_page', slug='text-to-speech-for-youtube') }}" class="btn btn--ghost btn--sm">TTS for YouTube</a>
-    <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" class="btn btn--ghost btn--sm">AI music generator</a>
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost btn--sm">Voice Studio</a>
     <a href="{{ url_for('voice_cloning') }}" class="btn btn--ghost btn--sm">Voice cloning</a>
   </p>
 
