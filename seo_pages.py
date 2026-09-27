@@ -96,7 +96,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                            ('Text to speech for YouTube',
                                             '/text-to-speech-for-youtube'),
                                            ('Trim or cut audio', '/tools/trim-cut-audio'),
-                                           ('Normalize volume', '/tools/normalize-audio-volume')]},
+                                           ('Normalize volume', '/tools/normalize-audio-volume')],
+                         'sub': 'Free Urdu text to speech in the browser — pick a neural voice, '
+                                'paste your script, generate and download. No account required on '
+                                'the free tier.'},
  'hindi-text-to-speech': {'title': 'Hindi Text to Speech Free — AI Voice Online | VoxCraft',
                           'meta_description': 'Free Hindi text to speech online. Paste Devanagari '
                                               '(or carefully tested Roman), pick a Hindi neural '
@@ -166,7 +169,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                             ('How to create a YouTube voiceover',
                                              '/how-to-create-youtube-voiceover'),
                                             ('Normalize volume', '/tools/normalize-audio-volume'),
-                                            ('Merge audio files', '/tools/merge-audio-files')]},
+                                            ('Merge audio files', '/tools/merge-audio-files')],
+                          'sub': 'Free Hindi text to speech online — Devanagari works best, '
+                                 'generate neural narration, download for YouTube or courses '
+                                 'without signing up.'},
  'punjabi-text-to-speech': {'title': 'Punjabi Text to Speech Free — AI Voice Online | VoxCraft',
                             'meta_description': 'Free Punjabi text to speech online. Paste '
                                                 'Gurmukhi, pick a neural voice, download narration '
@@ -229,7 +235,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                               ('Urdu text to speech', '/urdu-text-to-speech'),
                                               ('Free text to speech', '/free-text-to-speech'),
                                               ('Normalize volume',
-                                               '/tools/normalize-audio-volume')]},
+                                               '/tools/normalize-audio-volume')],
+                            'sub': 'Free Punjabi text to speech — paste Gurmukhi, choose a neural '
+                                   'voice, download narration. No signup needed to start.'},
  'bengali-text-to-speech': {'title': 'Bengali Text to Speech Free — AI Voice Online | VoxCraft',
                             'meta_description': 'Free Bengali (Bangla) text to speech online. '
                                                 'Native script, neural voices, download for '
@@ -284,7 +292,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                               ('Free text to speech', '/free-text-to-speech'),
                                               ('Text to speech for YouTube',
                                                '/text-to-speech-for-youtube'),
-                                              ('Merge audio files', '/tools/merge-audio-files')]},
+                                              ('Merge audio files', '/tools/merge-audio-files')],
+                            'sub': 'Free Bengali (Bangla) text to speech online — native script, '
+                                   'neural voice, download for video or courses. No account '
+                                   'required on free.'},
  'tamil-text-to-speech': {'title': 'Tamil Text to Speech Free — AI Voice Online | VoxCraft',
                           'meta_description': 'Free Tamil text to speech online. Paste Tamil '
                                               'script, pick a neural voice, download narration — '
@@ -336,7 +347,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                             ('Free text to speech', '/free-text-to-speech'),
                                             ('How to create a YouTube voiceover',
                                              '/how-to-create-youtube-voiceover'),
-                                            ('Normalize volume', '/tools/normalize-audio-volume')]},
+                                            ('Normalize volume', '/tools/normalize-audio-volume')],
+                          'sub': 'Free Tamil text to speech online — paste Tamil script, generate '
+                                 'neural audio, download. No signup required to start.'},
  'telugu-text-to-speech': {'title': 'Telugu Text to Speech Free — AI Voice Online | VoxCraft',
                            'meta_description': 'Free Telugu text to speech online. Neural voices '
                                                'for YouTube and courses — download MP3, no signup '
@@ -386,7 +399,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                              ('Kannada text to speech', '/kannada-text-to-speech'),
                                              ('Free text to speech', '/free-text-to-speech'),
                                              ('Text to speech for YouTube',
-                                              '/text-to-speech-for-youtube')]},
+                                              '/text-to-speech-for-youtube')],
+                           'sub': 'Free Telugu text to speech online — neural voices, downloadable '
+                                  'narration for YouTube and courses. No signup on free tier.'},
  'text-to-speech-for-youtube': {'title': 'Text to Speech for YouTube — Free AI Voiceover | '
                                          'VoxCraft',
                                 'meta_description': 'Practical text to speech workflow for '
@@ -458,7 +473,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                    '/audio-tools-for-youtubers'),
                                                   ('Normalize volume',
                                                    '/tools/normalize-audio-volume'),
-                                                  ('Merge audio', '/tools/merge-audio-files')]},
+                                                  ('Merge audio', '/tools/merge-audio-files')],
+                                'sub': 'Yes — you can use text to speech for YouTube: test a short '
+                                       'opening, fix names and numbers, generate in sections, then '
+                                       'edit the audio into your video.'},
  'free-text-to-speech': {'title': 'Free Text to Speech Online — No Signup | VoxCraft',
                          'meta_description': 'Free text to speech online with neural voices. Urdu, '
                                              'Hindi, English and more. Download narration — no '
@@ -514,7 +532,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                            ('Urdu TTS', '/urdu-text-to-speech'),
                                            ('Hindi TTS', '/hindi-text-to-speech'),
                                            ('YouTube TTS workflow', '/text-to-speech-for-youtube'),
-                                           ('All tools', '/tools')]},
+                                           ('All tools', '/tools')],
+                         'sub': 'Free text to speech online with neural voices (including Urdu and '
+                                'Hindi). Generate and download without an account on the free '
+                                'tier.'},
  'how-to-create-youtube-voiceover': {'title': 'How to Create a YouTube Voiceover (Simple Workflow) '
                                               '| VoxCraft',
                                      'meta_description': 'A simple YouTube voiceover workflow: '
@@ -564,7 +585,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                        ('Urdu text to speech',
                                                         '/urdu-text-to-speech'),
                                                        ('Hindi text to speech',
-                                                        '/hindi-text-to-speech')]},
+                                                        '/hindi-text-to-speech')],
+                                     'sub': 'Write for the ear, test the first 20–40 seconds, fix '
+                                            'hard words, then generate or record the rest in '
+                                            'sections and match audio to the video.'},
  'audio-tools-for-youtubers': {'title': 'Audio Tools for YouTubers — Free Online Toolkit | '
                                         'VoxCraft',
                                'meta_description': 'Online audio tools for YouTube: transcribe, '
@@ -609,7 +633,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                   '/tools/remove-background-noise'),
                                                  ('Extract audio from video',
                                                   '/tools/extract-audio-from-video'),
-                                                 ('Open Voice Studio', '/studio')]},
+                                                 ('Open Voice Studio', '/studio')],
+                               'sub': 'Browser tools for YouTube audio: transcribe, trim, merge, '
+                                      'convert, denoise, and extract audio — no desktop install '
+                                      'required.'},
  'ai-video-dubbing': {'title': 'AI Video Dubbing Online — Translate & Re-voice | VoxCraft',
                       'meta_description': 'AI video dubbing in the browser: translate and re-voice '
                                           'short clips in English, Hindi, Urdu and more. Free tier '
@@ -655,7 +682,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                         ('Open Voice Studio', '/studio'),
                                         ('Voice cloning', '/voice-cloning'),
                                         ('Extract audio from video',
-                                         '/tools/extract-audio-from-video')]},
+                                         '/tools/extract-audio-from-video')],
+                      'sub': 'AI video dubbing translates and re-voices short clips in the browser '
+                             '(e.g. Hindi, Urdu, English). Preview before you publish; free tier '
+                             'available.'},
  'ai-voice-generator': {'title': 'AI Voice Generator Online — Free Neural Voices | VoxCraft',
                         'meta_description': 'Free AI voice generator for creators. Neural TTS in '
                                             'Urdu, Hindi, English and 40+ languages. Download '
@@ -696,7 +726,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                           ('All voices', '/voices'),
                                           ('Free text to speech', '/free-text-to-speech'),
                                           ('Voice cloning', '/voice-cloning'),
-                                          ('Urdu text to speech', '/urdu-text-to-speech')]},
+                                          ('Urdu text to speech', '/urdu-text-to-speech')],
+                        'sub': 'An AI voice generator turns text into downloadable neural speech. '
+                               'VoxCraft supports Urdu, Hindi, English and 40+ languages — free '
+                               'tier, no signup to start.'},
  'free-voice-cloning': {'title': 'Voice Cloning Online — Clone a Sample | VoxCraft',
                         'meta_description': 'Voice cloning from a short clean sample for '
                                             'consistent narration. Stock Studio voices on free; '
@@ -737,7 +770,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                         'related_links': [('Voice Cloning', '/voice-cloning'),
                                           ('Open Voice Studio', '/studio'),
                                           ('Pricing', '/pricing'),
-                                          ('AI voice generator', '/ai-voice-generator')]},
+                                          ('AI voice generator', '/ai-voice-generator')],
+                        'sub': 'Voice cloning builds a reusable voice from a short clean sample. '
+                               'Stock Studio voices are free-tier friendly; cloning needs an '
+                               'eligible Pro+ plan.'},
  'marathi-text-to-speech': {'title': 'Marathi Text to Speech Free — AI Voice Online | VoxCraft',
                             'meta_description': 'Free Marathi text to speech online. Devanagari '
                                                 'script, neural voices, download for YouTube or '
@@ -785,7 +821,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                '/gujarati-text-to-speech'),
                                               ('Free text to speech', '/free-text-to-speech'),
                                               ('Normalize volume',
-                                               '/tools/normalize-audio-volume')]},
+                                               '/tools/normalize-audio-volume')],
+                            'sub': 'Free Marathi text to speech — Devanagari script, neural voice, '
+                                   'download for explainers and lessons. No account required to '
+                                   'start.'},
  'gujarati-text-to-speech': {'title': 'Gujarati Text to Speech Free — AI Voice Online | VoxCraft',
                              'meta_description': 'Free Gujarati text to speech online. Neural '
                                                  'voices for YouTube and business videos — no '
@@ -830,7 +869,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                ('Marathi text to speech',
                                                 '/marathi-text-to-speech'),
                                                ('All voices', '/voices'),
-                                               ('Free text to speech', '/free-text-to-speech')]},
+                                               ('Free text to speech', '/free-text-to-speech')],
+                             'sub': 'Free Gujarati text to speech online — neural narration for '
+                                    'YouTube and business videos. No signup required to start.'},
  'malayalam-text-to-speech': {'title': 'Malayalam Text to Speech Free — AI Voice Online | VoxCraft',
                               'meta_description': 'Free Malayalam text to speech online. Neural '
                                                   'voices for YouTube and education — download '
@@ -875,7 +916,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                  '/kannada-text-to-speech'),
                                                 ('Free text to speech', '/free-text-to-speech'),
                                                 ('Text to speech for YouTube',
-                                                 '/text-to-speech-for-youtube')]},
+                                                 '/text-to-speech-for-youtube')],
+                              'sub': 'Free Malayalam text to speech — paste script, generate '
+                                     'neural audio, download for video or courses. No signup on '
+                                     'free tier.'},
  'kannada-text-to-speech': {'title': 'Kannada Text to Speech Free — AI Voice Online | VoxCraft',
                             'meta_description': 'Free Kannada text to speech online. Neural voices '
                                                 'for YouTube and education — no signup to start.',
@@ -916,7 +960,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                               ('Telugu text to speech', '/telugu-text-to-speech'),
                                               ('Tamil text to speech', '/tamil-text-to-speech'),
                                               ('All voices', '/voices'),
-                                              ('Free text to speech', '/free-text-to-speech')]},
+                                              ('Free text to speech', '/free-text-to-speech')],
+                            'sub': 'Free Kannada text to speech online — neural voices for YouTube '
+                                   'and education. No account required to start.'},
  'remove-noise-from-audio': {'title': 'Remove Noise from Audio Online — Free | VoxCraft',
                              'meta_description': 'Remove background noise from speech online. '
                                                  'Clean podcasts and voiceovers in the browser — '
@@ -955,7 +1001,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                ('Convert audio', '/tools/convert-audio-format'),
                                                ('Audio tools for YouTubers',
                                                 '/audio-tools-for-youtubers'),
-                                               ('Open Voice Studio', '/studio')]},
+                                               ('Open Voice Studio', '/studio')],
+                             'sub': 'Upload speech audio and remove background noise (fans, hiss, '
+                                    'room tone) in the browser. Free tier; tuned for voice, not '
+                                    'full music mastering.'},
  'text-to-speech-mp3': {'title': 'Text to Speech MP3 Download — Free Online | VoxCraft',
                         'meta_description': 'Convert text to speech and download MP3 online. '
                                             'Neural voices including Urdu and Hindi — free tier, '
@@ -984,7 +1033,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                           ('Convert audio format', '/tools/convert-audio-format'),
                                           ('Free text to speech', '/free-text-to-speech'),
                                           ('Urdu text to speech', '/urdu-text-to-speech'),
-                                          ('Hindi text to speech', '/hindi-text-to-speech')]}}
+                                          ('Hindi text to speech', '/hindi-text-to-speech')],
+                        'sub': 'Generate text to speech and download MP3 (or convert to other '
+                               'formats) for editors and LMS — free tier, no signup to start.'}}
 
 
 # Fields the admin form (/admin/seo) is allowed to override — matches the
