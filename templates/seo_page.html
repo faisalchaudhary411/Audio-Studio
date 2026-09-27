@@ -27,6 +27,13 @@
 <section class="hero hero--compact">
   <span class="hero__eyebrow">{{ page.eyebrow }}</span>
   <h1 class="hero__title">{{ page.h1 }}</h1>
+  {# GEO: one clear answer under H1 for AI overviews + featured snippets #}
+  {% if page.sub %}
+  <p class="hero__answer" style="margin:14px 0 8px;padding:12px 14px;border-radius:10px;background:rgba(232,169,60,0.08);border:1px solid rgba(232,169,60,0.22);color:var(--text-hi);font-size:1.02rem;line-height:1.55;max-width:42rem;">
+    <strong style="color:var(--brass-hi);font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;display:block;margin-bottom:6px;">Quick answer</strong>
+    {{ page.sub }}
+  </p>
+  {% endif %}
   {% for p in page.intro %}<p class="hero__sub">{{ p }}</p>{% endfor %}
   <div class="hero__actions">
     <a href="{{ cta_url }}" class="btn btn--brass">{{ page.cta_label }}</a>
