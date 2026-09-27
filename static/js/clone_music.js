@@ -136,12 +136,73 @@
   // Tracks the reference_id from the most recent /api/clone/upload call for
   // the file currently sitting in cloneRefInput, so "Save this voice" and
   // "Clone & generate" don't each upload the same clip separately.
+  // Also set by "Use as clone reference" (Studio TTS → /api/clone/from-tts-voice).
   let pendingReferenceId = null;
   // voice_id -> {ref_text, owned, access}, populated from /api/clone/voices
   // (your own) and /api/clone/voices/public (the community library) so
   // picking a saved voice can auto-fill ref_text and the UI knows whether
   // to show Delete/Make-public controls for it.
   const savedVoiceMeta = {};
+
+  const cloneStudioVoiceSelect = document.getElementById('clone-studio-voice-select');
+  const cloneStudioSampleText = document.getElementById('clone-studio-sample-text');
+  const cloneUseStudioBtn = document.getElementById('clone-use-studio-voice-btn');
+  const cloneStudioStatus = document.getElementById('clone-studio-voice-status');
+
+  if (cloneUseStudioBtn) {
+    cloneUseStudioBtn.addEventListener('click', async () => {
+      const voiceId = cloneStudioVoiceSelect && cloneStudioVoiceSelect.value;
+      if (!voiceId) {
+        if (cloneStudioStatus) cloneStudioStatus.textContent = 'Select a Studio voice first.';
+        return;
+      }
+      if (cloneStudioStatus) cloneStudioStatus.textContent = 'Generating Studio sample…';
+      cloneUseStudioBtn.disabled = true;
+      try {
+        const res = await fetch('/api/clone/from-tts-voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voice_id: voiceId,
+            text: cloneStudioSampleText ? cloneStudioSampleText.value.trim() : '',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (cloneStudioStatus) cloneStudioStatus.textContent = data.error || 'Could not generate reference.';
+          return;
+        }
+        pendingReferenceId = data.reference_id;
+        // Clear file input so generate path uses pendingReferenceId, not a stale file
+        if (cloneRefInput) cloneRefInput.value = '';
+        if (cloneVoiceSelect) cloneVoiceSelect.value = '';
+        if (cloneRefText && data.ref_text) cloneRefText.value = data.ref_text;
+        if (cloneSaveBtn) cloneSaveBtn.disabled = false;
+        if (cloneSaveHint) {
+          cloneSaveHint.textContent = 'Studio voice reference ready — you can clone or save it for reuse.';
+        }
+        const qw = document.getElementById('clone-quality-warn');
+        if (qw && data.quality && data.quality.warnings && data.quality.warnings.length) {
+          qw.style.display = 'block';
+          qw.innerHTML = data.quality.warnings.map(w => '• ' + w).join('<br>');
+        } else if (qw) {
+          qw.style.display = 'none';
+          qw.innerHTML = '';
+        }
+        const dur = data.quality && data.quality.duration_sec;
+        if (cloneStudioStatus) {
+          cloneStudioStatus.textContent = dur
+            ? `Reference ready (${dur}s). Type your script and generate.`
+            : 'Reference ready. Type your script and generate.';
+          cloneStudioStatus.style.color = 'var(--jade-hi)';
+        }
+      } catch (err) {
+        if (cloneStudioStatus) cloneStudioStatus.textContent = 'Network error — try again.';
+      } finally {
+        cloneUseStudioBtn.disabled = false;
+      }
+    });
+  }
 
   async function refreshSavedVoices(selectId) {
     if (!cloneVoiceSelect) return;
