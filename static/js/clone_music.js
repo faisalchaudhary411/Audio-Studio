@@ -594,8 +594,9 @@
         return;
       }
       const savedVoiceId = usingSavedVoice() ? cloneVoiceSelect.value : null;
-      if (!savedVoiceId && !cloneRefInput.files.length) {
-        cloneStatus.textContent = 'Upload a reference clip or pick a saved voice first.';
+      // Studio TTS path sets pendingReferenceId without a file or saved voice
+      if (!savedVoiceId && !(cloneRefInput && cloneRefInput.files.length) && !pendingReferenceId) {
+        cloneStatus.textContent = 'Upload a reference clip, pick a saved voice, or use a Studio TTS voice first.';
         return;
       }
       if (!cloneText.value.trim()) {
