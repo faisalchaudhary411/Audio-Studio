@@ -1313,6 +1313,16 @@ def studio():
         plan_usage = pro_usage_summary(lk, get_plan())
     # Ordered list: primary languages first, then the rest (keeps dropdown scannable)
     lang_order = [l for l in ordered_languages() if l in active_voices]
+    # Flat list for clone "Use a Studio voice" picker (Pro+ sees full catalogue)
+    studio_voice_options = []
+    for lang in lang_order:
+        for name, vid in (active_voices.get(lang) or {}).items():
+            studio_voice_options.append({
+                "voice_id": vid,
+                "name": name,
+                "language": lang,
+                "label": f"{name} · {language_label(lang) if callable(language_label) else lang}",
+            })
     return render_template(
         "studio.html",
         voices=active_voices,
@@ -1328,6 +1338,7 @@ def studio():
         usage=usage_summary(),
         clone_char_limit=CLONE_CHAR_LIMIT,
         plan_usage=plan_usage,
+        studio_voice_options=studio_voice_options,
     )
 
 
@@ -1340,7 +1351,22 @@ def voice_cloning():
     the same clone_music.js — no duplicated cloning logic, just a second,
     content-rich entry point aimed at people searching for voice cloning
     specifically rather than the Studio as a whole."""
-    return render_template("voice_cloning.html", clone_char_limit=CLONE_CHAR_LIMIT)
+    active_voices = VOICES if is_pro() else FREE_VOICES
+    lang_order = [l for l in ordered_languages() if l in active_voices]
+    studio_voice_options = []
+    for lang in lang_order:
+        for name, vid in (active_voices.get(lang) or {}).items():
+            studio_voice_options.append({
+                "voice_id": vid,
+                "name": name,
+                "language": lang,
+                "label": f"{name} · {lang}",
+            })
+    return render_template(
+        "voice_cloning.html",
+        clone_char_limit=CLONE_CHAR_LIMIT,
+        studio_voice_options=studio_voice_options,
+    )
 
 
 @app.route("/video-redub")
@@ -5265,6 +5291,107 @@ def api_clone_upload():
         pass
 
     return jsonify({"reference_id": ref_id, "quality": quality})
+
+
+# Longer than Studio previews — clone engines want ~5–15s of clear speech.
+_CLONE_TTS_REF_SAMPLES = {
+    "en": (
+        "Hello, this is a short sample for voice cloning. "
+        "I am speaking clearly in a quiet setting so the model can learn my tone and pace. "
+        "Please use this reference only for authorized synthesis."
+    ),
+    "hi": (
+        "नमस्ते, यह वॉइस क्लोनिंग के लिए एक छोटा नमूना है। "
+        "मैं साफ़ आवाज़ में बोल रहा हूँ ताकि मॉडल मेरी आवाज़ समझ सके।"
+    ),
+    "ur": (
+        "السلام علیکم، یہ وائس کلوننگ کے لیے ایک مختصر نمونہ ہے۔ "
+        "میں صاف آواز میں بول رہا ہوں تاکہ ماڈل میری آواز سیکھ سکے۔"
+    ),
+}
+
+
+def _clone_ref_sample_for_voice(voice_id: str, custom_text: str = "") -> tuple:
+    """Return (text, language_label) for a TTS-as-clone-reference sample."""
+    custom = (custom_text or "").strip()
+    if custom:
+        # Cap so we stay near 5–15s, not a full chapter
+        return custom[:400], "custom"
+    vid = (voice_id or "").lower()
+    if vid.startswith("ur-") or "urdu" in vid:
+        return _CLONE_TTS_REF_SAMPLES["ur"], "Urdu"
+    if vid.startswith("hi-") or "hindi" in vid:
+        return _CLONE_TTS_REF_SAMPLES["hi"], "Hindi"
+    return _CLONE_TTS_REF_SAMPLES["en"], "English"
+
+
+@app.route("/api/clone/from-tts-voice", methods=["POST"])
+def api_clone_from_tts_voice():
+    """Pro+-only: synthesize a short Studio (stock TTS) clip and register it
+    as a clone reference_id — same shape as /api/clone/upload, so the rest
+    of the clone UI (generate / save) needs no special path.
+
+    This is the 'Use a Studio voice' option: pick a neural voice + optional
+    sample line → server runs tts_dispatch → writes into CLONE_UPLOAD_DIR.
+    """
+    if not can("clone.use"):
+        return jsonify({"error": "Voice cloning is a Pro+ feature."}), 402
+
+    data = request.get_json(force=True) or {}
+    voice_id = (data.get("voice_id") or "").strip()
+    if not voice_id:
+        return jsonify({"error": "Select a Studio voice."}), 400
+
+    known = {vid for lang_voices in VOICES.values() for vid in lang_voices.values()}
+    if voice_id not in known:
+        return jsonify({"error": "Unknown voice."}), 400
+
+    # Free-tier-only voices vs Pro catalogue: clone is Pro+, so all VOICES ok
+    text, lang_label = _clone_ref_sample_for_voice(voice_id, data.get("text") or "")
+    if len(text) < 20:
+        return jsonify({"error": "Sample text is too short — use at least a full sentence."}), 400
+
+    try:
+        audio = tts_dispatch(text, voice_id, rate="+0%", speed_pct=100)
+    except Exception as e:
+        return api_error(e, "generate a Studio voice reference")
+
+    if not audio:
+        return jsonify({"error": "TTS returned empty audio."}), 500
+
+    safe_vid = secure_filename(voice_id) or "voice"
+    ref_id = f"{int(time.time())}_tts_{safe_vid}.mp3"
+    path = os.path.join(CLONE_UPLOAD_DIR, ref_id)
+    with open(path, "wb") as f:
+        f.write(audio)
+
+    quality = {"ok": True, "warnings": [], "source": "studio_tts", "voice_id": voice_id}
+    try:
+        from pydub import AudioSegment
+        seg = AudioSegment.from_file(path)
+        dur = len(seg) / 1000.0
+        quality["duration_sec"] = round(dur, 2)
+        quality["dbfs"] = round(seg.dBFS, 1)
+        if dur < 3:
+            quality["warnings"].append("Generated reference is very short (<3s). Try a longer sample line.")
+            quality["ok"] = False
+        elif dur < 5:
+            quality["warnings"].append("Generated reference is under 5s — cloning may be weaker.")
+        # Soft product note: cloning stock TTS is often similar to using TTS directly
+        quality["warnings"].append(
+            "Studio voices are synthetic. Cloning them is useful for testing; "
+            "best results usually come from a real human recording."
+        )
+    except Exception:
+        pass
+
+    return jsonify({
+        "reference_id": ref_id,
+        "quality": quality,
+        "ref_text": text[:300],
+        "voice_id": voice_id,
+        "language": lang_label,
+    })
 
 
 def _voice_usable_by(voice: dict, license_key: str) -> bool:
