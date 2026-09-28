@@ -53,8 +53,8 @@ DEFAULT_LIMITS = {
     "FREE_BATCH_MAX_LINES": 20,
     "FREE_PREVIEW_LIMIT": 5,
     "PRO_BATCH_MAX": 20,
-    # Must match the actual size of FREE_VOICES in voices.py (currently 27).
-    "FREE_VOICES_COUNT": 27,
+    # Informational display only — free tier uses the full VOICES catalogue.
+    "FREE_VOICES_COUNT": 133,
     "PRO_PRICE_PKR": 840,
     "PRO_PRICE_LABEL": "840 PKR",
     "PRO_PRICE_USD_LABEL": "$3",

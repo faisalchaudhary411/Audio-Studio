@@ -1189,9 +1189,10 @@ def voices_page():
     tap (main.js's error handler disables them and shows "Preview coming
     soon", but only post-click). Now each card only gets the real play
     button if a preview file for it actually exists; every other card gets
-    an honest "Try in Studio" (free voices) or "Get Pro" (Pro-only voices)
-    link instead, deep-linking into /studio?lang=&voice= so it's functional
-    on click 100% of the time instead of ~2%.
+    an honest "Try in Studio" link instead, deep-linking into
+    /studio?lang=&voice= so it's functional on click.
+    Stock neural voices are available on free (usage limits still apply);
+    Pro/Pro+ unlock higher quotas and cloning/music — not a smaller voice list.
     """
     import os as _os
     preview_dir = _os.path.join(app.static_folder, "audio", "previews")
@@ -1201,8 +1202,6 @@ def voices_page():
         }
     except OSError:
         available_previews = set()
-
-    free_voice_ids = {vid for vs in FREE_VOICES.values() for vid in vs.values()}
 
     all_voices = []
     for lang, voices in VOICES.items():
@@ -1217,7 +1216,8 @@ def voices_page():
                 "voice_id": voice_id,
                 "audio_slug": voice_id.lower(),
                 "has_preview": voice_id.lower() in available_previews,
-                "is_pro_only": voice_id not in free_voice_ids,
+                # Full catalogue is free-tier eligible; limits are chars/day/month only.
+                "is_pro_only": False,
             })
     languages = list(VOICES.keys())
     voice_count = len(all_voices)
@@ -1298,7 +1298,9 @@ def pro_usage_summary(license_key: str, plan: str) -> dict:
 @app.route("/studio")
 def studio():
     lim = get_limits()
-    active_voices = VOICES if is_pro() else FREE_VOICES
+    # Full catalogue for free and Pro. Free is limited by chars/day/month
+    # (admin limits), not by hiding half the voices/languages.
+    active_voices = VOICES
     # BUG FIX: this always passed the FREE tier's batch line cap to the
     # template, even for Pro/Pro+ sessions — so the Batch tab displayed
     # "up to 20 lines" (or whatever FREE_BATCH_MAX_LINES is set to) for
@@ -1351,7 +1353,7 @@ def voice_cloning():
     the same clone_music.js — no duplicated cloning logic, just a second,
     content-rich entry point aimed at people searching for voice cloning
     specifically rather than the Studio as a whole."""
-    active_voices = VOICES if is_pro() else FREE_VOICES
+    active_voices = VOICES
     lang_order = [l for l in ordered_languages() if l in active_voices]
     studio_voice_options = []
     for lang in lang_order:
@@ -1374,7 +1376,7 @@ def video_redub():
     """Dedicated page for audio-only video redub (Pro). Same widget as the
     /tools/video-audio-redub tool page, with full marketing content and
     Studio-style voice picker."""
-    active_voices = VOICES if is_pro() else FREE_VOICES
+    active_voices = VOICES
     lang_order = [l for l in ordered_languages() if l in active_voices]
     return render_template(
         "redub.html",
@@ -1387,10 +1389,12 @@ def video_redub():
 @app.route("/pricing")
 def pricing():
     limits = persistence.load_limits()
+    _voice_count = sum(len(v) for v in VOICES.values())
+    _lang_count = len(VOICES)
     free_features = [f.strip() for f in (limits.get("FREE_FEATURES") or "").split("|") if f.strip()] or [
         f"{limits['FREE_DAILY_ACTIONS']} generations/day",
         f"{limits['FREE_CHAR_LIMIT']:,} chars/generation",
-        f"{limits['FREE_VOICES_COUNT']} voices",
+        f"All {_voice_count}+ voices · {_lang_count} languages",
         "Ads supported",
     ]
     _tts_pro = int(limits.get("TTS_CHAR_MONTHLY_LIMIT_PRO") or TTS_CHAR_MONTHLY_LIMIT_PRO)
@@ -2454,8 +2458,8 @@ def admin_limits():
             "MUSIC_DAILY_LIMIT": _safe_int(request.form.get("MUSIC_DAILY_LIMIT"), 20, minimum=0, maximum=100_000),
             "REDUB_DAILY_LIMIT_PRO": _safe_int(request.form.get("REDUB_DAILY_LIMIT_PRO"), 20, minimum=0, maximum=100_000),
             "REDUB_MONTHLY_LIMIT_PRO": _safe_int(request.form.get("REDUB_MONTHLY_LIMIT_PRO"), 100, minimum=0, maximum=100_000),
-            # Default matches len of FREE_VOICES in voices.py (currently 27).
-            "FREE_VOICES_COUNT": _safe_int(request.form.get("FREE_VOICES_COUNT"), 27, minimum=0, maximum=10_000),
+            # Informational only — free tier uses the full VOICES catalogue.
+            "FREE_VOICES_COUNT": _safe_int(request.form.get("FREE_VOICES_COUNT"), 133, minimum=0, maximum=10_000),
             "PRO_PRICE_PKR": _safe_int(request.form.get("PRO_PRICE_PKR"), 840, minimum=0, maximum=10_000_000),
             "PRO_PRICE_LABEL": request.form.get("PRO_PRICE_LABEL", "840 PKR"),
             "PRO_PRICE_USD_LABEL": request.form.get("PRO_PRICE_USD_LABEL", "$3"),
