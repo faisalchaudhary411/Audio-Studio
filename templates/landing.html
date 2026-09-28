@@ -512,7 +512,9 @@
       "@type": "Offer",
       "name": {{ o.name|tojson }},
       "price": {{ o.price|tojson }},
-      "priceCurrency": "USD"
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock",
+      "url": "https://voxcraft.site/pricing"
     }{% if not loop.last %},{% endif %}
     {% endfor %}
   ]

@@ -113,11 +113,9 @@
         "@type": "ListItem",
         "position": {{ loop.index }},
         "item": {
-          "@type": "Product",
+          "@type": "Thing",
           "name": {{ (v.name + ' (' + v.language + ')')|tojson }},
-          "brand": {"@id": "https://voxcraft.site/#organization"},
-          "category": "Text-to-speech voice",
-          "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+          "description": "Neural text-to-speech voice"
         }
       }{% if not loop.last %},{% endif %}
       {% endfor %}

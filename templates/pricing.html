@@ -163,13 +163,16 @@
     "applicationCategory": "MultimediaApplication",
     "operatingSystem": "Web",
     "description": "VoxCraft pricing — free tier, Pro, and Pro+ plans for neural text-to-speech, voice cloning, AI music, and audio tools.",
+    "image": "https://voxcraft.site/static/img/screenshots/step-render.png",
     "offers": [
       {% for o in software_schema_offers %}
       {
         "@type": "Offer",
         "name": {{ o.name|tojson }},
         "price": {{ o.price|tojson }},
-        "priceCurrency": "USD"
+        "priceCurrency": "USD",
+        "availability": "https://schema.org/InStock",
+        "url": "https://voxcraft.site/pricing"
       }{% if not loop.last %},{% endif %}
       {% endfor %}
     ]
