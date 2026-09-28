@@ -1038,13 +1038,14 @@ def _bump_counter(counter_key: str):
 
 
 def _check_and_bump(counter_key: str, limit: int) -> bool:
-    """Returns True if under limit (and increments), False if limit hit."""
+    """Atomic: True if under limit (and increments), False if limit hit.
+
+    Single SQLite transaction so parallel free requests cannot all pass a
+    read-only check and then overshoot the daily cap.
+    """
     if is_pro():
         return True
-    if not _under_limit(counter_key, limit):
-        return False
-    _bump_counter(counter_key)
-    return True
+    return usage_tracking.try_bump_daily_counter(request, counter_key, limit)
 
 
 def _monthly_chars_used() -> int:
@@ -5005,8 +5006,11 @@ def api_generate():
     if _would_exceed_pro_tts_quota(len(text)):
         return jsonify({"error": f"Monthly character quota reached for your plan ({_tts_monthly_quota_for_plan():,} characters/month). It resets at the start of next month — contact support if you need more."}), 429
 
-    if not _under_limit("usage_singles", lim["FREE_DAILY_ACTIONS"]):
-        return jsonify({"error": f"Daily free limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Resets at midnight UTC — or upgrade to Pro to remove the daily generation cap."}), 429
+    # Atomic reserve so parallel free tabs cannot each pass a read-only
+    # check and overshoot the daily cap. Refund if TTS itself fails.
+    if not is_pro():
+        if not usage_tracking.try_bump_daily_counter(request, "usage_singles", lim["FREE_DAILY_ACTIONS"]):
+            return jsonify({"error": f"Daily free limit reached ({lim['FREE_DAILY_ACTIONS']} generations/day). Resets at midnight UTC — or upgrade to Pro to remove the daily generation cap."}), 429
 
     rate_str = f"{speed_pct - 100:+d}%"
     text = apply_pronunciation_dict(text, persistence.load_pronunciation_dict())
@@ -5024,10 +5028,11 @@ def api_generate():
             except Exception:
                 pass
     except Exception as e:
+        if not is_pro():
+            usage_tracking.refund_daily_counter(request, "usage_singles")
         # Don't leak internal stack traces to the client
         return jsonify({"error": "Could not generate audio right now. Please try again in a moment."}), 500
 
-    _bump_counter("usage_singles")
     _bump_monthly_chars(len(text))
     _bump_pro_tts_chars(len(text))
 
@@ -5067,8 +5072,9 @@ def api_batch():
     if len(lines) > max_lines:
         return jsonify({"error": f"{'Pro' if is_pro() else 'Free'} plan limit is {max_lines} lines."}), 402
 
-    if not _under_limit("usage_batches", lim["FREE_BATCH_LIMIT"]):
-        return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for more batch runs."}), 402
+    if not is_pro():
+        if not usage_tracking.try_bump_daily_counter(request, "usage_batches", lim["FREE_BATCH_LIMIT"]):
+            return jsonify({"error": f"Free batch limit reached ({lim['FREE_BATCH_LIMIT']}/day). Upgrade to Pro for more batch runs."}), 402
 
     total_chars = sum(len(ln) for ln in lines)
     if _would_exceed_monthly_quota(total_chars, lim["FREE_MONTHLY_CHAR_QUOTA"]):
@@ -5095,9 +5101,11 @@ def api_batch():
             errors.append(f"Line {idx + 1}: could not be generated.")
 
     if not results:
+        if not is_pro():
+            usage_tracking.refund_daily_counter(request, "usage_batches")
         return jsonify({"error": "All lines failed to generate.", "details": errors}), 500
 
-    _bump_counter("usage_batches")  # only counts against the daily batch-run quota if something actually succeeded
+    # Daily batch slot already reserved atomically above (try_bump).
 
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:

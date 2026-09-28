@@ -175,6 +175,36 @@ def bump_daily_counter(request, counter_key: str):
         holder["record"] = merged
 
 
+def try_bump_daily_counter(request, counter_key: str, limit: int) -> bool:
+    """Atomic under-limit check + increment in one SQLite transaction.
+
+    Stops parallel free requests from each reading "under limit" and all
+    succeeding (check-then-act race). True if bumped, False if at limit.
+    """
+    if limit <= 0:
+        return False
+    ip_key, fp_key = _keys_for(request)
+    with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+        merged = _merge(holder["a"], holder["b"])
+        used = merged["daily"].get(counter_key, 0)
+        if used >= limit:
+            return False
+        merged["daily"][counter_key] = used + 1
+        holder["record"] = merged
+        return True
+
+
+def refund_daily_counter(request, counter_key: str):
+    """Undo one try_bump when work failed after a successful reserve."""
+    ip_key, fp_key = _keys_for(request)
+    with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
+        merged = _merge(holder["a"], holder["b"])
+        used = merged["daily"].get(counter_key, 0)
+        if used > 0:
+            merged["daily"][counter_key] = used - 1
+            holder["record"] = merged
+
+
 def get_monthly_chars(request) -> int:
     ip_key, fp_key = _keys_for(request)
     with persistence.usage_pair_transaction(ip_key, fp_key) as holder:
