@@ -529,6 +529,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                   'editing.')],
                          'cta_label': 'Try free text to speech',
                          'related_links': [('Open Voice Studio', '/studio'),
+                                           ('What is text to speech?', '/what-is-text-to-speech'),
+                                           ('TTS for beginners', '/text-to-speech-for-beginners'),
+                                           ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
                                            ('Urdu TTS', '/urdu-text-to-speech'),
                                            ('Hindi TTS', '/hindi-text-to-speech'),
                                            ('YouTube TTS workflow', '/text-to-speech-for-youtube'),
@@ -723,6 +726,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                  'Studio.')],
                         'cta_label': 'Generate a voice',
                         'related_links': [('Open Voice Studio', '/studio'),
+                                          ('What is text to speech?', '/what-is-text-to-speech'),
+                                          ('TTS for beginners', '/text-to-speech-for-beginners'),
+                                          ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
                                           ('All voices', '/voices'),
                                           ('Free text to speech', '/free-text-to-speech'),
                                           ('Voice cloning', '/voice-cloning'),
@@ -1033,9 +1039,399 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                           ('Convert audio format', '/tools/convert-audio-format'),
                                           ('Free text to speech', '/free-text-to-speech'),
                                           ('Urdu text to speech', '/urdu-text-to-speech'),
-                                          ('Hindi text to speech', '/hindi-text-to-speech')],
+                                          ('Hindi text to speech', '/hindi-text-to-speech'),
+                                          ('What is text to speech?', '/what-is-text-to-speech')],
                         'sub': 'Generate text to speech and download MP3 (or convert to other '
-                               'formats) for editors and LMS — free tier, no signup to start.'}}
+                               'formats) for editors and LMS — free tier, no signup to start.'},
+
+    # ── Gap-finder high-priority pages (added 2026-09-28) ──────────────────
+    # These close the main content gaps identified by the sitemap mind-map
+    # tool: missing "What is…" pillar, beginners guide, and a dedicated
+    # comparison landing. Each reuses the existing seo_page.html template
+    # and is automatically sitemapped + routed via /<slug>.
+
+    'what-is-text-to-speech': {
+        'title': 'What Is Text to Speech? Complete Guide (2026) | VoxCraft',
+        'meta_description': 'What is text to speech (TTS)? Plain-language guide to how AI voice '
+                            'works, when to use it for YouTube and courses, and how free neural '
+                            'TTS differs from older robotic voices.',
+        'eyebrow': 'TTS Basics',
+        'h1': 'What is text to speech? Complete guide',
+        'sub': 'Text to speech (TTS) turns written words into spoken audio with a computer voice. '
+               'Modern neural TTS sounds natural enough for YouTube, courses, and apps — and you '
+               'can try it free without recording yourself.',
+        'intro': [
+            'Text to speech (TTS) is software that reads text out loud. You paste a script, pick a '
+            'voice, and get an audio file you can drop into a video editor, LMS, or podcast. Older '
+            'systems sounded robotic; today’s neural voices handle pauses, numbers, and mixed-language '
+            'lines much more naturally.',
+            'Creators use TTS when they do not have a quiet room, a mic, or time to re-record every '
+            'revision. It is especially useful for faceless YouTube channels, multilingual channels '
+            '(Urdu, Hindi, Punjabi, and more), and short-form clips where speed matters more than a '
+            'celebrity voice.',
+            'On VoxCraft you open <a href="/studio">Voice Studio</a>, choose a language and voice, '
+            'generate a sample, and download MP3 or WAV. The free tier works without an account. '
+            'When the file is ready you can <a href="/tools/trim-cut-audio">trim</a>, '
+            '<a href="/tools/merge-audio-files">merge</a>, or '
+            '<a href="/tools/normalize-audio-volume">normalize</a> it with the free tools.',
+            'New to the workflow? Start with <a href="/text-to-speech-for-beginners">TTS for '
+            'beginners</a>. Comparing tools? See <a href="/voxcraft-vs-elevenlabs">VoxCraft vs '
+            'ElevenLabs</a> and <a href="/free-text-to-speech">free text to speech</a>.'
+        ],
+        'steps': [
+            'Write or paste a short script (one paragraph is enough for a first test).',
+            'Open Voice Studio and pick a language + voice; preview a line that includes a name and a number.',
+            'Generate the sample, listen on phone speakers, and fix any awkward spellings.',
+            'Generate the rest in sections, download, then trim or merge if needed.',
+            'Drop the audio into CapCut, Premiere, or your LMS and publish.'
+        ],
+        'use_cases': [
+            ('YouTube & Shorts', 'Faceless explainers and recaps without booking a booth or re-recording every edit.'),
+            ('Online courses', 'Lesson narration that stays consistent across modules and languages.'),
+            ('Apps & products', 'UI prompts, accessibility read-aloud, and demo videos.'),
+            ('Multilingual creators', 'Urdu, Hindi, Punjabi, Bengali and more from one browser workflow.')
+        ],
+        'faq': [
+            ('Is text to speech the same as AI voiceover?',
+             'AI voiceover usually means neural TTS used for video narration. “Text to speech” is the broader term.'),
+            ('Does free TTS sound robotic?',
+             'Older systems did. Modern neural voices (including those on VoxCraft) are built for natural pacing and clearer numbers/names.'),
+            ('Can I use TTS audio commercially?',
+             'On VoxCraft, audio you generate is allowed for commercial use under the current Terms — check the live Terms and pricing pages for limits.'),
+            ('Do I need to install software?',
+             'No. VoxCraft runs in the browser. Generate, download, and edit with the free tools if needed.'),
+            ('Which languages work best?',
+             'VoxCraft puts particular care into Urdu and Hindi while also supporting many other languages. Preview a real line from your script before committing a long file.')
+        ],
+        'cta_label': 'Try free text to speech',
+        'related_links': [
+            ('Open Voice Studio', '/studio'),
+            ('TTS for beginners', '/text-to-speech-for-beginners'),
+            ('Free text to speech', '/free-text-to-speech'),
+            ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
+            ('Urdu text to speech', '/urdu-text-to-speech'),
+            ('Hindi text to speech', '/hindi-text-to-speech'),
+            ('Text to speech for YouTube', '/text-to-speech-for-youtube'),
+        ],
+    },
+
+    'text-to-speech-for-beginners': {
+        'title': 'Text to Speech for Beginners — Free Step-by-Step (2026) | VoxCraft',
+        'meta_description': 'Text to speech for beginners: how to generate your first AI voiceover '
+                            'in minutes, free, no signup. Script tips, voice choice, and a simple '
+                            'YouTube workflow.',
+        'eyebrow': 'Getting Started',
+        'h1': 'Text to speech for beginners',
+        'sub': 'You do not need a mic, a quiet room, or software installs. Paste a short script, '
+               'pick a voice, generate, and download — free tier works without an account.',
+        'intro': [
+            'If you have never used AI text to speech, the process is simpler than most people expect. '
+            'You write a few lines, choose a voice, press generate, and get an audio file. The first '
+            'run takes under a minute once you know where the buttons are.',
+            'This page walks through a first successful generation, then the habits that keep quality '
+            'high: short test clips, native script for Urdu/Hindi, and listening on a phone instead of '
+            'only laptop speakers.',
+            'After you have a clean sample, you can scale up for <a href="/text-to-speech-for-youtube">'
+            'YouTube voiceovers</a>, use <a href="/urdu-text-to-speech">Urdu</a> or '
+            '<a href="/hindi-text-to-speech">Hindi</a> voices, or clean the file with '
+            '<a href="/tools">free audio tools</a> (trim, denoise, normalize).',
+            'Want the conceptual overview first? Read <a href="/what-is-text-to-speech">what is text '
+            'to speech</a>. Comparing free tools? See <a href="/voxcraft-vs-elevenlabs">VoxCraft vs '
+            'ElevenLabs</a>.'
+        ],
+        'steps': [
+            'Open Voice Studio (no account required on the free tier).',
+            'Paste 2–4 sentences from a real script — include one name and one number so you can judge clarity.',
+            'Select a language and voice, then tap Preview if available.',
+            'Generate the short clip and play it on your phone speakers.',
+            'Fix any misspelled words that tripped the voice, then generate longer sections and download.',
+            'Optional: trim silence, normalize volume, or convert format with the free tools before you edit video.'
+        ],
+        'use_cases': [
+            ('First YouTube video', 'Ship a faceless explainer without buying a microphone.'),
+            ('Course outline test', 'Hear how a lesson script sounds before you record or hire talent.'),
+            ('Social clips', 'Quick voiceovers for Shorts and Reels from a written caption.'),
+            ('Language practice', 'Listen to correct pronunciation of your own written sentences.')
+        ],
+        'faq': [
+            ('Do I need to create an account?',
+             'Not for the free tier. You can generate and download within published limits without signing up.'),
+            ('Should I write in English or my language’s script?',
+             'For Urdu and Hindi, native script (Nastaliq / Devanagari) usually sounds clearer than pure Roman. English works well in Latin script.'),
+            ('Why does a long paragraph sound rushed?',
+             'Add periods and commas. Generate in shorter blocks so you can fix one awkward phrase without re-running the whole script.'),
+            ('Is the free tier good enough for a first video?',
+             'Yes for testing and many published videos. Upgrade only if you need higher monthly character limits or Pro features like cloning and music.'),
+            ('Where do I go next?',
+             'Try a language landing (Urdu or Hindi TTS), the YouTube workflow page, or the tools hub for trim/merge/denoise.')
+        ],
+        'cta_label': 'Generate your first sample',
+        'related_links': [
+            ('Open Voice Studio', '/studio'),
+            ('What is text to speech?', '/what-is-text-to-speech'),
+            ('Free text to speech', '/free-text-to-speech'),
+            ('How to create a YouTube voiceover', '/how-to-create-youtube-voiceover'),
+            ('Urdu text to speech', '/urdu-text-to-speech'),
+            ('All audio tools', '/tools'),
+        ],
+    },
+
+    'voxcraft-vs-elevenlabs': {
+        'title': 'VoxCraft vs ElevenLabs Free Tier (2026) — Which Fits Creators? | VoxCraft',
+        'meta_description': 'VoxCraft vs ElevenLabs free tier compared for YouTube and multilingual '
+                            'creators: signup friction, Urdu/Hindi focus, extra audio tools, '
+                            'commercial use, and when each tool is the better fit.',
+        'eyebrow': 'Comparison',
+        'h1': 'VoxCraft vs ElevenLabs free tier',
+        'sub': 'ElevenLabs prioritizes premium neural voice quality across many languages. '
+               'VoxCraft prioritizes Urdu/Hindi-first workflows, no-signup trials, and a full set '
+               'of free browser audio tools next to TTS. Pick based on language and friction, not hype.',
+        'intro': [
+            'Both products turn text into speech. They optimize for different creator jobs. '
+            'ElevenLabs is widely known for English and multi-language voice quality. VoxCraft is '
+            'built so South-Asian language narration, free trials without an account, and everyday '
+            'audio fixes (trim, denoise, merge, extract) live in one place.',
+            'This page is a practical side-by-side for the free experiences as they are typically '
+            'used in 2026. Plan names and quotas change — always check each product’s live pricing '
+            'and terms before you commit a channel to one stack.',
+            'If you mainly need maximum English quality and are fine creating an account, ElevenLabs '
+            'is a strong default. If you need <a href="/urdu-text-to-speech">Urdu</a> or '
+            '<a href="/hindi-text-to-speech">Hindi</a> as a first-class workflow, want to try without '
+            'signup, or need convert/denoise/trim next to TTS, start with VoxCraft’s '
+            '<a href="/studio">Voice Studio</a> and <a href="/tools">tools</a>.',
+            'New to the category? Read <a href="/what-is-text-to-speech">what is text to speech</a> '
+            'and <a href="/text-to-speech-for-beginners">TTS for beginners</a> first.'
+        ],
+        'steps': [
+            'List your primary languages and whether you refuse to create an account for a first test.',
+            'Generate the same short paragraph on each tool (include a name, a number, and one English loanword if you write in Urdu/Hindi).',
+            'Listen on phone speakers and judge clarity, not just “demo polish”.',
+            'Check free limits, commercial-use rules, and whether you also need trim/denoise/merge.',
+            'Pick the stack that matches your weekly workflow, then standardize script format and export settings.'
+        ],
+        'use_cases': [
+            ('Urdu / Hindi YouTube', 'VoxCraft is designed around these languages as normal workflows, not afterthoughts.'),
+            ('English-first premium narration', 'ElevenLabs is often the quality benchmark when language is not the bottleneck.'),
+            ('No-signup trials', 'VoxCraft free tier lets you generate without an account within published limits.'),
+            ('TTS + audio toolkit', 'VoxCraft includes convert, denoise, trim, merge, extract and more in the same product.')
+        ],
+        'faq': [
+            ('Which is better overall?',
+             'Neither is best for every job. Match language priority, signup friction, and whether you need extra audio tools.'),
+            ('Can I use both?',
+             'Yes. Many creators prototype on one tool and finish on another. Keep exports organized by project.'),
+            ('Does VoxCraft support commercial use on free?',
+             'Audio you generate is allowed under current Terms subject to limits — read the live Terms and pricing pages.'),
+            ('Where is voice cloning?',
+             'VoxCraft offers voice cloning on higher plans. See the voice cloning page and pricing for current quotas.'),
+            ('How do I try VoxCraft quickly?',
+             'Open Voice Studio, paste a real paragraph, pick a voice, generate, and download — no account required on the free tier.')
+        ],
+        'cta_label': 'Try VoxCraft free',
+        'related_links': [
+            ('Open Voice Studio', '/studio'),
+            ('Free text to speech', '/free-text-to-speech'),
+            ('What is text to speech?', '/what-is-text-to-speech'),
+            ('TTS for beginners', '/text-to-speech-for-beginners'),
+            ('Urdu text to speech', '/urdu-text-to-speech'),
+            ('Hindi text to speech', '/hindi-text-to-speech'),
+            ('Pricing', '/pricing'),
+        ],
+    },
+
+    # ── Round 2 gap pages (best-of landings) ───────────────────────────────
+
+    'best-urdu-text-to-speech': {
+        'title': 'Best Urdu Text to Speech Tools 2026 (Free Options) | VoxCraft',
+        'meta_description': 'Best Urdu text to speech in 2026: what actually matters for natural '
+                            'narration, free options you can try without signup, and a practical '
+                            'way to test voices on real scripts.',
+        'eyebrow': 'Best Of',
+        'h1': 'Best Urdu text to speech tools 2026',
+        'sub': 'The best Urdu TTS is the one that pronounces names, numbers, and mixed Urdu–English '
+               'lines clearly on a real script — not the one with the flashiest demo. Free neural '
+               'options exist; test a short paragraph before you commit a full video.',
+        'intro': [
+            'Urdu text to speech is no longer a niche add-on. Creators use it for YouTube explainers, '
+            'course narration, and Shorts. The gap between tools is not “can it speak Urdu?” but how '
+            'it handles Nastaliq input, loanwords, and pacing when you listen on a phone.',
+            'When people search for the “best” Urdu TTS they usually mean: free or low friction to '
+            'try, downloadable audio, and voices that do not stumble on everyday words. VoxCraft’s '
+            '<a href="/urdu-text-to-speech">Urdu text to speech</a> page and '
+            '<a href="/studio">Voice Studio</a> are built for that workflow — no account required '
+            'on the free tier.',
+            'A fair test: paste the opening of your real script (include one city name and one number), '
+            'generate 20–40 seconds, and listen on phone speakers. That beats relying on a polished '
+            'marketing sample.',
+            'Also useful: <a href="/best-free-text-to-speech">best free text to speech</a>, '
+            '<a href="/hindi-text-to-speech">Hindi TTS</a>, and '
+            '<a href="/text-to-speech-for-youtube">TTS for YouTube</a>.'
+        ],
+        'steps': [
+            'Write or paste a real opening paragraph in Urdu script when possible.',
+            'Open Voice Studio, select Urdu, and preview two voices on the same line.',
+            'Generate a short clip and listen on a phone, not only laptop speakers.',
+            'Fix spellings that tripped the voice, then generate the rest in sections.',
+            'Trim, merge, or normalize with free tools if your editor needs a clean export.'
+        ],
+        'use_cases': [
+            ('YouTube Urdu channels', 'Steady narration without re-recording every script change.'),
+            ('Courses & explainers', 'Consistent voice across lessons in Nastaliq.'),
+            ('Shorts & Reels', 'Fast voiceovers from a written caption or outline.'),
+            ('Multilingual channels', 'Pair with Hindi/Punjabi workflows in the same product.')
+        ],
+        'faq': [
+            ('What makes one Urdu TTS better than another?',
+             'Clarity on names, numbers, and mixed English words on your real script — not only demo lines.'),
+            ('Is free Urdu TTS good enough to publish?',
+             'For many videos yes. Test a full scene first. Upgrade when free limits block your schedule.'),
+            ('Should I use Roman Urdu or Nastaliq?',
+             'Nastaliq usually produces clearer results. Roman is fine for quick tests; check hard words carefully.'),
+            ('Can I use the audio commercially?',
+             'On VoxCraft, generated audio is allowed under current Terms subject to limits — check Terms and pricing.'),
+            ('Where do I start?',
+             'Open the Urdu TTS page or Voice Studio, generate a short real paragraph, and download.')
+        ],
+        'cta_label': 'Try Urdu TTS free',
+        'related_links': [
+            ('Urdu text to speech', '/urdu-text-to-speech'),
+            ('Open Voice Studio', '/studio'),
+            ('Best free text to speech', '/best-free-text-to-speech'),
+            ('Hindi text to speech', '/hindi-text-to-speech'),
+            ('TTS for YouTube', '/text-to-speech-for-youtube'),
+            ('What is text to speech?', '/what-is-text-to-speech'),
+            ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
+        ],
+    },
+
+    'best-hindi-text-to-speech': {
+        'title': 'Best Hindi Text to Speech Tools 2026 (Free Options) | VoxCraft',
+        'meta_description': 'Best Hindi text to speech in 2026: how to judge natural narration, '
+                            'free tools you can try without signup, and a simple test on your '
+                            'own script.',
+        'eyebrow': 'Best Of',
+        'h1': 'Best Hindi text to speech tools 2026',
+        'sub': 'The best Hindi TTS is the one that stays clear on Devanagari text, numbers, and '
+               'English words inside Hindi sentences. Free neural options are usable — test a real '
+               'paragraph before you record a whole video around one voice.',
+        'intro': [
+            'Hindi text to speech is widely available, but quality varies. Some tools treat Hindi as '
+            'a secondary language; others are fine on demos and weaker on names, prices, and mixed '
+            'script lines. Creators care about downloadable files, commercial rules, and whether '
+            'they can try without creating an account.',
+            'VoxCraft’s <a href="/hindi-text-to-speech">Hindi text to speech</a> landing and '
+            '<a href="/studio">Voice Studio</a> are aimed at that practical workflow: paste text, '
+            'pick a Hindi voice, generate, download. Free tier works without signup within published limits.',
+            'Recommended test: use a sentence from your actual video with one proper name and one '
+            'number. Generate 20–40 seconds and listen on a phone. That is a better signal than a '
+            'generic sample sentence.',
+            'Related: <a href="/best-urdu-text-to-speech">best Urdu TTS</a>, '
+            '<a href="/best-free-text-to-speech">best free TTS</a>, and '
+            '<a href="/how-to-create-youtube-voiceover">YouTube voiceover workflow</a>.'
+        ],
+        'steps': [
+            'Paste a real Hindi paragraph (Devanagari when you can).',
+            'Choose Hindi in Voice Studio and preview more than one voice.',
+            'Generate a short clip; listen on phone speakers.',
+            'Correct any words that sound off, then generate longer sections.',
+            'Export and, if needed, trim or normalize with the free audio tools.'
+        ],
+        'use_cases': [
+            ('Hindi YouTube', 'Narration for explainers and list videos without daily recording.'),
+            ('Education', 'Lesson audio that matches written Devanagari materials.'),
+            ('Short-form video', 'Fast voiceovers from a script outline.'),
+            ('Bilingual channels', 'Pair Hindi and Urdu workflows in one toolkit.')
+        ],
+        'faq': [
+            ('Devanagari or Roman Hindi?',
+             'Devanagari usually sounds clearer. Roman can work for tests; check difficult words.'),
+            ('Is free Hindi TTS publishable?',
+             'Often yes for many videos. Always listen to a full scene before you publish.'),
+            ('How is this different from English TTS?',
+             'Pronunciation of mixed English terms and numbers inside Hindi lines is the usual weak spot — test those deliberately.'),
+            ('Commercial use?',
+             'VoxCraft allows commercial use of audio you generate under current Terms and plan limits.'),
+            ('Next step?',
+             'Open Hindi TTS or Studio, generate a short real sample, then scale up.')
+        ],
+        'cta_label': 'Try Hindi TTS free',
+        'related_links': [
+            ('Hindi text to speech', '/hindi-text-to-speech'),
+            ('Open Voice Studio', '/studio'),
+            ('Best Urdu text to speech', '/best-urdu-text-to-speech'),
+            ('Best free text to speech', '/best-free-text-to-speech'),
+            ('Urdu text to speech', '/urdu-text-to-speech'),
+            ('TTS for beginners', '/text-to-speech-for-beginners'),
+            ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
+        ],
+    },
+
+    'best-free-text-to-speech': {
+        'title': 'Best Free Text to Speech Tools 2026 (Tested for Creators) | VoxCraft',
+        'meta_description': 'Best free text to speech tools in 2026 for YouTube and multilingual '
+                            'creators — what to test, signup friction, Urdu/Hindi quality, and '
+                            'when free tiers are enough to publish.',
+        'eyebrow': 'Best Of',
+        'h1': 'Best free text to speech tools 2026',
+        'sub': 'The best free TTS tool is the one that passes your real-script test: clear voices, '
+               'downloadable audio, honest limits, and languages you actually use. Signup-free '
+               'trials matter when you only need a short sample today.',
+        'intro': [
+            '“Best free text to speech” lists change every year. What stays constant is the evaluation '
+            'method: paste a real paragraph, include hard words, listen on a phone, and check whether '
+            'you can download the file for editing. Marketing demos are not enough.',
+            'For many creators the shortlist comes down to: no or low signup friction, usable neural '
+            'voices, multilingual support (especially Urdu and Hindi for South-Asian channels), and '
+            'clear commercial terms. VoxCraft’s free tier is built around that checklist — try '
+            '<a href="/free-text-to-speech">free text to speech</a> or '
+            '<a href="/studio">Voice Studio</a> without an account.',
+            'Also compare focused pages: <a href="/best-urdu-text-to-speech">best Urdu TTS</a>, '
+            '<a href="/best-hindi-text-to-speech">best Hindi TTS</a>, and '
+            '<a href="/voxcraft-vs-elevenlabs">VoxCraft vs ElevenLabs</a>. For the conceptual '
+            'basics see <a href="/what-is-text-to-speech">what is text to speech</a>.',
+            'If you already publish, pair TTS with free tools for '
+            '<a href="/tools/trim-cut-audio">trim</a>, '
+            '<a href="/tools/remove-background-noise">denoise</a>, and '
+            '<a href="/tools/normalize-audio-volume">normalize</a> so the export matches your editor.'
+        ],
+        'steps': [
+            'Write one real test paragraph (name + number + one difficult word).',
+            'Generate the same paragraph on each free tool you are considering.',
+            'Listen on phone speakers and note clarity, not only “demo polish”.',
+            'Check signup requirement, daily/monthly limits, and commercial-use rules.',
+            'Pick one default stack and standardize script format + export settings.'
+        ],
+        'use_cases': [
+            ('Faceless YouTube', 'Ship narration without a booth while you validate a channel idea.'),
+            ('Multilingual creators', 'Test Urdu/Hindi/English in one place before paying for a plan.'),
+            ('Course pilots', 'Hear a lesson script before recording or hiring voice talent.'),
+            ('Social clips', 'Short free generations for Reels and Shorts within free limits.')
+        ],
+        'faq': [
+            ('Is free TTS good enough to publish?',
+             'Often yes for many videos. Limits and voice quality vary — always test a full scene.'),
+            ('Do free tools allow commercial use?',
+             'It depends on each product’s Terms. On VoxCraft, generated audio is allowed under current Terms and plan limits.'),
+            ('Why do some free tools sound great on demos but weak on my script?',
+             'Demos avoid hard names and mixed-language lines. Always test your own text.'),
+            ('Should I create accounts on every tool?',
+             'Not for a first pass. Prefer tools that let you generate a sample without signup when possible.'),
+            ('Where should I start on VoxCraft?',
+             'Open Voice Studio or the free TTS page, generate a short real paragraph, then explore language landings.')
+        ],
+        'cta_label': 'Try free TTS on VoxCraft',
+        'related_links': [
+            ('Free text to speech', '/free-text-to-speech'),
+            ('Open Voice Studio', '/studio'),
+            ('Best Urdu text to speech', '/best-urdu-text-to-speech'),
+            ('Best Hindi text to speech', '/best-hindi-text-to-speech'),
+            ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
+            ('What is text to speech?', '/what-is-text-to-speech'),
+            ('TTS for beginners', '/text-to-speech-for-beginners'),
+            ('All audio tools', '/tools'),
+        ],
+    },
+}
 
 
 # Fields the admin form (/admin/seo) is allowed to override — matches the
