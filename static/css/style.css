@@ -2523,6 +2523,7 @@ body.has-announce-ticker .nav{
   justify-content:center;
   flex:0 0 auto;
   height:56px;
+  min-width:max-content;
   padding:8px 16px;
   background:linear-gradient(165deg, rgba(28,40,52,0.92), rgba(18,26,34,0.96));
   border:1px solid var(--line-strong, rgba(255,255,255,0.1));
@@ -2574,11 +2575,19 @@ body.has-announce-ticker .nav{
   display:block;
   height:38px;
   width:auto;
-  max-width:180px;
+  max-width:none; /* don't clip wide badges (e.g. Launchpadly) */
   object-fit:contain;
+  object-position:left center;
   border-radius:5px;
   filter:saturate(0.92) brightness(1.02);
   transition:filter .25s ease, transform .3s ease;
+}
+
+/* Wider directory badges that need more horizontal room */
+.featured-badges__item img[alt*="Launchpadly"],
+.featured-badges__item img[src*="launchpadly"]{
+  height:36px;
+  max-width:min(280px, 70vw);
 }
 
 .featured-badges__item:hover img{
@@ -2600,7 +2609,9 @@ body.has-announce-ticker .nav{
     padding:6px 12px;
     border-radius:12px;
   }
-  .featured-badges__item img{height:32px;max-width:140px;}
+  .featured-badges__item img{height:32px;max-width:none;}
+  .featured-badges__item img[alt*="Launchpadly"],
+  .featured-badges__item img[src*="launchpadly"]{height:30px;max-width:min(240px, 75vw);}
   .featured-badges__viewport{
     mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
     -webkit-mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
