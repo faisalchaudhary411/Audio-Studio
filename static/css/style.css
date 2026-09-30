@@ -2450,7 +2450,7 @@ body.has-announce-ticker .nav{
 /* Ticker is exempt from reduced-motion (see rule near top of file) —
    it's treated as live content, not a decorative animation, so it
    always keeps scrolling regardless of the visitor's motion preference. */
-/* ===== As featured on — JS-cloned marquee (one set in HTML = no double logos) ===== */
+/* ===== As featured on — rAF scroll (reliable motion, no CSS keyframe issues) ===== */
 
 .featured-badges{
   position:relative;
@@ -2458,9 +2458,7 @@ body.has-announce-ticker .nav{
   margin:0;
   border-top:1px solid var(--line, rgba(255,255,255,0.08));
   overflow:hidden;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(79,166,156,0.06), transparent 70%),
-    transparent;
+  background:radial-gradient(ellipse 80% 60% at 50% 0%, rgba(79,166,156,0.06), transparent 70%);
 }
 
 .featured-badges__label{
@@ -2489,23 +2487,15 @@ body.has-announce-ticker .nav{
   position:relative;
   width:100%;
   overflow:hidden;
-  mask-image:linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
-  -webkit-mask-image:linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
 }
 
 .featured-badges__track{
   display:flex;
   width:max-content;
+  transform:translate3d(0,0,0);
   will-change:transform;
-}
-
-/* Animation only after JS marks the track ready (avoids double-set flash) */
-.featured-badges__track.is-animated{
-  animation:featuredMarquee var(--featured-duration, 45s) linear infinite;
-}
-
-.featured-badges__viewport:hover .featured-badges__track.is-animated{
-  animation-play-state:paused;
 }
 
 .featured-badges__set{
@@ -2532,30 +2522,14 @@ body.has-announce-ticker .nav{
   overflow:hidden;
   isolation:isolate;
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 14px rgba(0,0,0,0.22);
-  transition:border-color .28s ease, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .28s ease, background .28s ease;
-}
-
-.featured-badges__item::after{
-  content:"";
-  position:absolute;inset:0;
-  background:linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.09) 50%, transparent 60%);
-  transform:translateX(-130%);
-  pointer-events:none;
+  transition:border-color .28s ease, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .28s ease;
 }
 
 .featured-badges__item:hover{
   border-color:rgba(232,169,60,0.5);
-  background:linear-gradient(165deg, rgba(38,50,62,0.98), rgba(22,30,40,0.99));
   transform:translateY(-3px) scale(1.04);
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.07), 0 12px 28px rgba(0,0,0,0.38), 0 0 0 1px rgba(232,169,60,0.14);
   z-index:2;
-}
-.featured-badges__item:hover::after{
-  animation:featuredShine .7s cubic-bezier(.22,1,.36,1);
-}
-@keyframes featuredShine{
-  from{transform:translateX(-130%);}
-  to{transform:translateX(130%);}
 }
 
 .featured-badges__item img{
@@ -2565,39 +2539,23 @@ body.has-announce-ticker .nav{
   max-width:none;
   object-fit:contain;
   border-radius:6px;
-  filter:saturate(0.92) brightness(1.02);
-  transition:filter .25s ease, transform .3s ease;
 }
-.featured-badges__item:hover img{
-  filter:saturate(1.08) brightness(1.08);
-  transform:scale(1.03);
-}
-.featured-badges__item img[src*="launchpadly"]{
-  height:42px;
-}
-
-@keyframes featuredMarquee{
-  from{transform:translate3d(0,0,0);}
-  to{transform:translate3d(var(--featured-shift, -50%),0,0);}
-}
+.featured-badges__item img[src*="launchpadly"]{ height:42px; }
 
 @media (max-width:560px){
   .featured-badges{padding:28px 0 20px;}
-  .featured-badges__item{height:52px;padding:6px 10px;border-radius:12px;}
+  .featured-badges__item{height:52px;padding:6px 10px;}
   .featured-badges__item img{height:34px;}
   .featured-badges__item img[src*="launchpadly"]{height:36px;}
 }
 
 @media (prefers-reduced-motion: reduce){
-  .featured-badges__track.is-animated{animation:none !important;}
   .featured-badges__viewport{
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
     mask-image:none;
     -webkit-mask-image:none;
   }
-  .featured-badges__item:hover{transform:none;}
-  .featured-badges__item:hover::after{animation:none;}
 }
 
 
