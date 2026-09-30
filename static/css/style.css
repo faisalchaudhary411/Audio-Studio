@@ -2450,9 +2450,7 @@ body.has-announce-ticker .nav{
 /* Ticker is exempt from reduced-motion (see rule near top of file) —
    it's treated as live content, not a decorative animation, so it
    always keeps scrolling regardless of the visitor's motion preference. */
-/* ===== As featured on — fixed-height infinite marquee =====
-   Section height stays constant even with 5 or 50 badges.
-   Add badges only in HTML (.featured-badges__set); JS clones for seamless loop. */
+/* ===== As featured on — self-moving infinite marquee (pure CSS) ===== */
 
 .featured-badges{
   position:relative;
@@ -2477,32 +2475,30 @@ body.has-announce-ticker .nav{
   text-transform:uppercase;
   color:var(--text-dim, rgba(160,175,190,0.75));
 }
-
 .featured-badges__label::before,
 .featured-badges__label::after{
   content:"";
-  width:36px;
-  height:1px;
+  width:36px;height:1px;
   background:linear-gradient(90deg, transparent, rgba(232,169,60,0.45));
 }
 .featured-badges__label::after{
   background:linear-gradient(90deg, rgba(79,166,156,0.45), transparent);
 }
 
-/* Masked viewport — fixed visual height */
 .featured-badges__viewport{
   position:relative;
   width:100%;
   overflow:hidden;
-  mask-image:linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-  -webkit-mask-image:linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask-image:linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
 }
 
 .featured-badges__track{
   display:flex;
   width:max-content;
+  gap:0;
   will-change:transform;
-  animation:featuredMarquee 42s linear infinite;
+  animation:featuredMarquee 45s linear infinite;
 }
 
 .featured-badges__viewport:hover .featured-badges__track{
@@ -2513,7 +2509,7 @@ body.has-announce-ticker .nav{
   display:flex;
   align-items:center;
   gap:12px;
-  padding:4px 6px;
+  padding:6px 8px;
   flex-shrink:0;
 }
 
@@ -2522,9 +2518,9 @@ body.has-announce-ticker .nav{
   align-items:center;
   justify-content:center;
   flex:0 0 auto;
-  height:56px;
+  height:60px;
   min-width:max-content;
-  padding:8px 16px;
+  padding:8px 14px;
   background:linear-gradient(165deg, rgba(28,40,52,0.92), rgba(18,26,34,0.96));
   border:1px solid var(--line-strong, rgba(255,255,255,0.1));
   border-radius:14px;
@@ -2532,20 +2528,13 @@ body.has-announce-ticker .nav{
   position:relative;
   overflow:hidden;
   isolation:isolate;
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.04),
-    0 4px 14px rgba(0,0,0,0.22);
-  transition:
-    border-color .28s ease,
-    transform .3s cubic-bezier(.22,1,.36,1),
-    box-shadow .28s ease,
-    background .28s ease;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 14px rgba(0,0,0,0.22);
+  transition:border-color .28s ease, transform .3s cubic-bezier(.22,1,.36,1), box-shadow .28s ease, background .28s ease;
 }
 
 .featured-badges__item::after{
   content:"";
-  position:absolute;
-  inset:0;
+  position:absolute;inset:0;
   background:linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.09) 50%, transparent 60%);
   transform:translateX(-130%);
   pointer-events:none;
@@ -2555,17 +2544,12 @@ body.has-announce-ticker .nav{
   border-color:rgba(232,169,60,0.5);
   background:linear-gradient(165deg, rgba(38,50,62,0.98), rgba(22,30,40,0.99));
   transform:translateY(-3px) scale(1.04);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.07),
-    0 12px 28px rgba(0,0,0,0.38),
-    0 0 0 1px rgba(232,169,60,0.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.07), 0 12px 28px rgba(0,0,0,0.38), 0 0 0 1px rgba(232,169,60,0.14);
   z-index:2;
 }
-
 .featured-badges__item:hover::after{
   animation:featuredShine .7s cubic-bezier(.22,1,.36,1);
 }
-
 @keyframes featuredShine{
   from{transform:translateX(-130%);}
   to{transform:translateX(130%);}
@@ -2573,50 +2557,37 @@ body.has-announce-ticker .nav{
 
 .featured-badges__item img{
   display:block;
-  height:38px;
+  height:40px;
   width:auto;
-  max-width:none; /* don't clip wide badges (e.g. Launchpadly) */
+  max-width:none;
   object-fit:contain;
-  object-position:left center;
-  border-radius:5px;
+  border-radius:6px;
   filter:saturate(0.92) brightness(1.02);
   transition:filter .25s ease, transform .3s ease;
 }
-
-/* Wider directory badges that need more horizontal room */
-.featured-badges__item img[alt*="Launchpadly"],
-.featured-badges__item img[src*="launchpadly"]{
-  height:36px;
-  max-width:min(280px, 70vw);
-}
-
 .featured-badges__item:hover img{
   filter:saturate(1.08) brightness(1.08);
   transform:scale(1.03);
 }
 
-/* Continuous horizontal scroll — distance = one full set width (set by JS via --featured-shift) */
-@keyframes featuredMarquee{
-  from{transform:translate3d(0,0,0);}
-  to{transform:translate3d(var(--featured-shift, -50%),0,0);}
+/* Launchpadly full badge is 260×48 — give it room */
+.featured-badges__item img[src*="launchpadly"]{
+  height:42px;
+  width:auto;
 }
 
-/* Mobile: slightly tighter, still marquee */
+/* Exactly -50%: two equal sets side by side */
+@keyframes featuredMarquee{
+  from{transform:translate3d(0,0,0);}
+  to{transform:translate3d(-50%,0,0);}
+}
+
 @media (max-width:560px){
   .featured-badges{padding:28px 0 20px;}
-  .featured-badges__item{
-    height:48px;
-    padding:6px 12px;
-    border-radius:12px;
-  }
-  .featured-badges__item img{height:32px;max-width:none;}
-  .featured-badges__item img[alt*="Launchpadly"],
-  .featured-badges__item img[src*="launchpadly"]{height:30px;max-width:min(240px, 75vw);}
-  .featured-badges__viewport{
-    mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-    -webkit-mask-image:linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
-  }
-  .featured-badges__track{animation-duration:36s;}
+  .featured-badges__item{height:52px;padding:6px 10px;border-radius:12px;}
+  .featured-badges__item img{height:34px;}
+  .featured-badges__item img[src*="launchpadly"]{height:36px;}
+  .featured-badges__track{animation-duration:38s;}
 }
 
 @media (prefers-reduced-motion: reduce){
