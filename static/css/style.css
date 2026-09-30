@@ -75,7 +75,7 @@ img{max-width:100%;display:block;}
 }
 
 @media (prefers-reduced-motion: reduce){
-  *:not(.announce-banner__marquee){animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  *:not(.announce-banner__marquee):not(.featured-badges__marquee){animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
 }
 
 /* ===== Layout shell ===== */
@@ -2496,6 +2496,7 @@ body.has-announce-ticker .nav{
 }
 
 /* Same role as .announce-banner__marquee — reuses tickerScroll keyframes */
+.featured-badges .announce-banner__marquee,
 .featured-badges__marquee{
   display:flex;
   flex-wrap:nowrap;
@@ -2503,11 +2504,11 @@ body.has-announce-ticker .nav{
   width:max-content;
   align-items:center;
   will-change:transform;
-  animation:tickerScroll 40s linear infinite;
+  animation:tickerScroll 40s linear infinite !important;
 }
 
 .featured-badges__track:hover .featured-badges__marquee{
-  animation-play-state:paused;
+  animation-play-state:paused !important;
 }
 
 .featured-badges__group{
