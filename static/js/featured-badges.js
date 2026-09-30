@@ -1,66 +1,69 @@
 /**
- * Featured logos marquee — clones the badge set so CSS can scroll seamlessly.
- * Safe to call once on DOM ready. Does nothing if reduced-motion is preferred.
+ * Featured badges marquee
+ * - HTML has ONE set of badges (no doubles on screen)
+ * - This script clones the set, then starts CSS animation
  */
 (function () {
-  function initFeaturedMarquee() {
+  function init() {
     var track = document.querySelector('[data-featured-track]');
-    if (!track || track.dataset.featuredReady === '1') return;
+    if (!track || track.dataset.ready === '1') return;
 
-    var set = track.querySelector('.featured-badges__set');
+    var set = track.querySelector('[data-featured-set]');
     if (!set || !set.children.length) return;
 
-    // Respect accessibility
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      track.dataset.featuredReady = '1';
+      track.dataset.ready = '1';
       return;
     }
 
-    // Clone set enough times to always fill ~2 viewports (smooth loop)
+    // Clone until we cover ~2x viewport (smooth loop)
     var viewport = track.parentElement;
-    var minWidth = (viewport && viewport.offsetWidth ? viewport.offsetWidth : 800) * 2;
+    var need = (viewport && viewport.offsetWidth ? viewport.offsetWidth : 900) * 2;
     var guard = 0;
-    while (track.scrollWidth < minWidth && guard < 8) {
-      track.appendChild(set.cloneNode(true));
+    while (track.scrollWidth < need && guard < 6) {
+      var clone = set.cloneNode(true);
+      clone.removeAttribute('data-featured-set');
+      clone.setAttribute('aria-hidden', 'true');
+      track.appendChild(clone);
       guard++;
     }
-    // Always at least one clone for seamless -50% style loops
     if (track.querySelectorAll('.featured-badges__set').length < 2) {
-      track.appendChild(set.cloneNode(true));
+      var c = set.cloneNode(true);
+      c.removeAttribute('data-featured-set');
+      c.setAttribute('aria-hidden', 'true');
+      track.appendChild(c);
     }
 
-    // Shift by width of first set only
-    var first = track.querySelector('.featured-badges__set');
-    if (first) {
-      var shift = first.offsetWidth;
-      track.style.setProperty('--featured-shift', '-' + shift + 'px');
-      // Duration scales with content width so speed feels constant
-      var pxPerSec = 40; // gentle professional pace
-      var duration = Math.max(28, Math.round(shift / pxPerSec));
-      track.style.animationDuration = duration + 's';
+    // Shift by width of the original set only
+    var w = set.offsetWidth;
+    if (w < 10) {
+      // images may not be laid out yet — retry once
+      track.dataset.ready = '0';
+      setTimeout(init, 300);
+      return;
     }
 
-    track.dataset.featuredReady = '1';
+    track.style.setProperty('--featured-shift', '-' + w + 'px');
+    var duration = Math.max(25, Math.round(w / 35)); // ~35px/sec
+    track.style.setProperty('--featured-duration', duration + 's');
+    track.classList.add('is-animated');
+    track.dataset.ready = '1';
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initFeaturedMarquee);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    initFeaturedMarquee();
+    init();
   }
 
-  // Recalc on resize (debounced)
-  var t;
-  window.addEventListener('resize', function () {
-    clearTimeout(t);
-    t = setTimeout(function () {
-      var track = document.querySelector('[data-featured-track]');
-      if (!track) return;
-      var first = track.querySelector('.featured-badges__set');
-      if (!first) return;
-      var shift = first.offsetWidth;
-      track.style.setProperty('--featured-shift', '-' + shift + 'px');
-      track.style.animationDuration = Math.max(28, Math.round(shift / 40)) + 's';
-    }, 150);
+  window.addEventListener('load', function () {
+    var track = document.querySelector('[data-featured-track]');
+    if (track && track.dataset.ready !== '1') init();
+    else if (track) {
+      var set = track.querySelector('[data-featured-set]');
+      if (set && set.offsetWidth > 10) {
+        track.style.setProperty('--featured-shift', '-' + set.offsetWidth + 'px');
+      }
+    }
   });
 })();
