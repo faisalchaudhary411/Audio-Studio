@@ -497,6 +497,26 @@
   </div>
 
 
+    
+  <script>
+  (function () {
+    var mq = document.querySelector(".featured-badges__marquee");
+    if (!mq) return;
+    function resume() {
+      mq.style.animationPlayState = "running";
+    }
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) resume();
+    });
+    window.addEventListener("focus", resume);
+    document.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest(".featured-badges__item")) {
+        setTimeout(resume, 50);
+      }
+    }, true);
+  })();
+  </script>
+
     <div class="footer__top">
     <div class="footer__brand-col">
       <a href="{{ url_for('landing') }}" class="footer__brand">
