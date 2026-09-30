@@ -136,6 +136,11 @@
   // Tracks the reference_id from the most recent /api/clone/upload call for
   // the file currently sitting in cloneRefInput, so "Save this voice" and
   // "Clone & generate" don't each upload the same clip separately.
+  let pendingReferenceId = null;
+  // voice_id -> {ref_text, owned, access}, populated from /api/clone/voices
+  // (your own) and /api/clone/voices/public (the community library).
+  const savedVoiceMeta = {};
+
   async function refreshSavedVoices(selectId) {
     if (!cloneVoiceSelect) return;
     try {
