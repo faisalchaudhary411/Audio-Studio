@@ -2450,7 +2450,7 @@ body.has-announce-ticker .nav{
 /* Ticker is exempt from reduced-motion (see rule near top of file) —
    it's treated as live content, not a decorative animation, so it
    always keeps scrolling regardless of the visitor's motion preference. */
-/* ===== As featured on — self-moving infinite marquee (pure CSS) ===== */
+/* ===== As featured on — JS-cloned marquee (one set in HTML = no double logos) ===== */
 
 .featured-badges{
   position:relative;
@@ -2496,12 +2496,15 @@ body.has-announce-ticker .nav{
 .featured-badges__track{
   display:flex;
   width:max-content;
-  gap:0;
   will-change:transform;
-  animation:featuredMarquee 45s linear infinite;
 }
 
-.featured-badges__viewport:hover .featured-badges__track{
+/* Animation only after JS marks the track ready (avoids double-set flash) */
+.featured-badges__track.is-animated{
+  animation:featuredMarquee var(--featured-duration, 45s) linear infinite;
+}
+
+.featured-badges__viewport:hover .featured-badges__track.is-animated{
   animation-play-state:paused;
 }
 
@@ -2569,17 +2572,13 @@ body.has-announce-ticker .nav{
   filter:saturate(1.08) brightness(1.08);
   transform:scale(1.03);
 }
-
-/* Launchpadly full badge is 260×48 — give it room */
 .featured-badges__item img[src*="launchpadly"]{
   height:42px;
-  width:auto;
 }
 
-/* Exactly -50%: two equal sets side by side */
 @keyframes featuredMarquee{
   from{transform:translate3d(0,0,0);}
-  to{transform:translate3d(-50%,0,0);}
+  to{transform:translate3d(var(--featured-shift, -50%),0,0);}
 }
 
 @media (max-width:560px){
@@ -2587,11 +2586,10 @@ body.has-announce-ticker .nav{
   .featured-badges__item{height:52px;padding:6px 10px;border-radius:12px;}
   .featured-badges__item img{height:34px;}
   .featured-badges__item img[src*="launchpadly"]{height:36px;}
-  .featured-badges__track{animation-duration:38s;}
 }
 
 @media (prefers-reduced-motion: reduce){
-  .featured-badges__track{animation:none !important;}
+  .featured-badges__track.is-animated{animation:none !important;}
   .featured-badges__viewport{
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
