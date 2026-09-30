@@ -5,16 +5,16 @@
       <span style="font-family:var(--mono);font-size:0.7rem;color:var(--jade-hi);border:1px solid var(--jade);border-radius:999px;padding:2px 9px;">English, Hindi &amp; Urdu</span>
       <span style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;">Reference: 5–15s, one speaker</span>
     </div>
-    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:14px;">Use a short reference — upload a recording, pick a saved voice, or generate a sample from a Studio TTS voice. Then type what you want it to say.</p>
+    <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:14px;">Use a short reference — upload a recording of a real speaker, or pick a voice you already saved. Then type what you want it to say.</p>
 
     <div class="panel" style="margin-bottom:16px;background:rgba(232,169,60,0.06);border-color:rgba(232,169,60,0.25);padding:12px;">
       <span class="panel__label">Good reference tips</span>
       <ul style="margin:6px 0 0;padding-left:18px;color:var(--text-mid);font-size:0.82rem;line-height:1.65;">
         <li>5–15 seconds of <strong>one speaker</strong> only</li>
         <li>Quiet room — no music or other voices</li>
-        <li>Natural speech, clear mic — or a Studio voice sample for testing</li>
+        <li>Natural speech, clear mic (one real speaker)</li>
       </ul>
-      <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-dim);">Only clone voices you own or have permission to use. Studio voices are synthetic (best for tests).</p>
+      <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-dim);">Only clone voices you own or have permission to use. Stock Studio TTS voices are not used as clone references — upload a real sample instead.</p>
     </div>
     <div id="clone-quality-warn" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid rgba(232,169,60,0.4);color:var(--brass-hi);font-size:0.82rem;line-height:1.5;"></div>
 
@@ -23,7 +23,7 @@
     <div style="margin-bottom:14px;">
       <label class="studio-label" for="clone-voice-select">Saved / community voice</label>
       <select class="studio-select" id="clone-voice-select" aria-label="Voice source">
-        <option value="">Upload or use a Studio voice below…</option>
+        <option value="">Upload a reference clip below…</option>
       </select>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
         <button class="btn btn--ghost btn--sm" id="clone-delete-voice-btn" type="button" style="display:none;white-space:nowrap;" title="Delete this saved voice">Delete</button>
@@ -41,23 +41,6 @@
       </div>
     </div>
 
-    <div id="clone-studio-voice-row" class="panel" style="margin-bottom:16px;padding:14px;background:rgba(79,166,156,0.06);border-color:rgba(79,166,156,0.25);">
-      <span class="panel__label" style="color:var(--jade-hi);">Or use a Studio TTS voice</span>
-      <p style="color:var(--text-dim);font-size:0.8rem;margin:6px 0 12px;line-height:1.5;">Generate a short sample from a neural Studio voice and use it as the clone reference (no file upload).</p>
-      <label class="studio-label" for="clone-studio-voice-select">Studio voice</label>
-      <select class="studio-select" id="clone-studio-voice-select" aria-label="Studio TTS voice">
-        <option value="">Select a Studio voice…</option>
-        {% for v in studio_voice_options or [] %}
-        <option value="{{ v.voice_id }}">{{ v.label }}</option>
-        {% endfor %}
-      </select>
-      <label class="studio-label" for="clone-studio-sample-text" style="margin-top:10px;">Sample line (optional)</label>
-      <input type="text" class="studio-input" id="clone-studio-sample-text" placeholder="Leave blank for a built-in 5–15s sample in the voice’s language" maxlength="400" style="margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button class="btn btn--ghost btn--sm" id="clone-use-studio-voice-btn" type="button" style="border-color:var(--jade);color:var(--jade-hi);">Use as clone reference</button>
-        <span style="color:var(--text-dim);font-size:0.72rem;" id="clone-studio-voice-status"></span>
-      </div>
-    </div>
 
     <!-- Step 2: script -->
     <span class="studio-primary-label">2. Script to speak</span>
