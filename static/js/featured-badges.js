@@ -1,69 +1,63 @@
-/**
- * Featured badges marquee
- * - HTML has ONE set of badges (no doubles on screen)
- * - This script clones the set, then starts CSS animation
- */
 (function () {
-  function init() {
+  function startFeaturedMarquee() {
+    var viewport = document.querySelector('[data-featured-viewport]');
     var track = document.querySelector('[data-featured-track]');
-    if (!track || track.dataset.ready === '1') return;
-
-    var set = track.querySelector('[data-featured-set]');
-    if (!set || !set.children.length) return;
+    var set = document.querySelector('[data-featured-set]');
+    if (!viewport || !track || !set) return;
+    if (track.dataset.marquee === '1') return;
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      track.dataset.ready = '1';
+      track.dataset.marquee = '1';
       return;
     }
 
-    // Clone until we cover ~2x viewport (smooth loop)
-    var viewport = track.parentElement;
-    var need = (viewport && viewport.offsetWidth ? viewport.offsetWidth : 900) * 2;
-    var guard = 0;
-    while (track.scrollWidth < need && guard < 6) {
-      var clone = set.cloneNode(true);
-      clone.removeAttribute('data-featured-set');
-      clone.setAttribute('aria-hidden', 'true');
-      track.appendChild(clone);
-      guard++;
-    }
-    if (track.querySelectorAll('.featured-badges__set').length < 2) {
-      var c = set.cloneNode(true);
-      c.removeAttribute('data-featured-set');
-      c.setAttribute('aria-hidden', 'true');
-      track.appendChild(c);
-    }
-
-    // Shift by width of the original set only
-    var w = set.offsetWidth;
-    if (w < 10) {
-      // images may not be laid out yet — retry once
-      track.dataset.ready = '0';
-      setTimeout(init, 300);
+    // Measure after layout
+    var setWidth = set.getBoundingClientRect().width;
+    if (setWidth < 20) {
+      setTimeout(startFeaturedMarquee, 200);
       return;
     }
 
-    track.style.setProperty('--featured-shift', '-' + w + 'px');
-    var duration = Math.max(25, Math.round(w / 35)); // ~35px/sec
-    track.style.setProperty('--featured-duration', duration + 's');
-    track.classList.add('is-animated');
-    track.dataset.ready = '1';
+    // Clone once for seamless loop (only after we know we'll animate)
+    var clone = set.cloneNode(true);
+    clone.removeAttribute('data-featured-set');
+    clone.setAttribute('aria-hidden', 'true');
+    // neutralize links in clone for a11y / focus
+    clone.querySelectorAll('a').forEach(function (a) {
+      a.setAttribute('tabindex', '-1');
+    });
+    track.appendChild(clone);
+
+    track.dataset.marquee = '1';
+
+    var pos = 0;
+    var speed = 0.4; // px per frame ~24px/s at 60fps
+    var paused = false;
+
+    viewport.addEventListener('mouseenter', function () { paused = true; });
+    viewport.addEventListener('mouseleave', function () { paused = false; });
+    viewport.addEventListener('touchstart', function () { paused = true; }, { passive: true });
+    viewport.addEventListener('touchend', function () { paused = false; }, { passive: true });
+
+    function frame() {
+      if (!paused) {
+        pos += speed;
+        if (pos >= setWidth) pos -= setWidth;
+        track.style.transform = 'translate3d(' + (-pos) + 'px,0,0)';
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', function () {
+      setTimeout(startFeaturedMarquee, 100);
+    });
   } else {
-    init();
+    setTimeout(startFeaturedMarquee, 100);
   }
-
   window.addEventListener('load', function () {
-    var track = document.querySelector('[data-featured-track]');
-    if (track && track.dataset.ready !== '1') init();
-    else if (track) {
-      var set = track.querySelector('[data-featured-set]');
-      if (set && set.offsetWidth > 10) {
-        track.style.setProperty('--featured-shift', '-' + set.offsetWidth + 'px');
-      }
-    }
+    setTimeout(startFeaturedMarquee, 50);
   });
 })();
