@@ -2507,8 +2507,14 @@ body.has-announce-ticker .nav{
   animation:tickerScroll 40s linear infinite !important;
 }
 
-.featured-badges__track:hover .featured-badges__marquee{
-  animation-play-state:paused !important;
+/* Pause only for real mouse hover — tap/click on mobile must NOT stick paused */
+@media (hover: hover) and (pointer: fine){
+  .featured-badges__track:hover .featured-badges__marquee{
+    animation-play-state:paused;
+  }
+}
+.featured-badges__marquee:not(:hover){
+  animation-play-state:running;
 }
 
 .featured-badges__group{
