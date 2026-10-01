@@ -54,19 +54,12 @@
 
     <div class="redub-field">
       <label class="redub-label" for="redub-asr-engine">Transcription engine</label>
-      {% if redub_whisper_enabled %}
       <span class="redub-label-hint">Whisper = better Hindi / numbers</span>
       <select id="redub-asr-engine" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
-        <option value="auto" selected>Auto (Whisper if available)</option>
-        <option value="whisper">Whisper (GPU — best quality)</option>
+        <option value="auto" selected>Auto (Whisper, Google fallback)</option>
+        <option value="whisper">Whisper (best quality)</option>
         <option value="google">Google Speech (fast)</option>
       </select>
-      {% else %}
-      <span class="redub-label-hint">Free Google Speech recognition</span>
-      <select id="redub-asr-engine" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
-        <option value="google" selected>Google Speech (free)</option>
-      </select>
-      {% endif %}
     </div>
 
     <div class="redub-field">
