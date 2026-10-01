@@ -319,6 +319,7 @@ TRANSCRIBE_LANGS = {
 }
 
 MAX_VIDEO_MB = 50
+_LATIN_TARGETS = {"en", "es", "fr", "de", "it", "pt", "nl", "tr", "id", "pl", "sv", "ro", "cs", "da", "fi", "no", "hu", "vi"}
 MAX_DURATION_SEC = 10 * 60  # 10 minutes hard cap for Phase 1
 
 # Finished redub outputs live here briefly so the API can return a download
@@ -458,6 +459,33 @@ def _count_sentences(text: str) -> int:
         return 0
     parts = re.split(r"[.!?۔؟।॥。]+", text)
     return len([p for p in parts if p.strip()])
+
+
+_ARABIC_SCRIPT_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+_DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+
+
+def _segment_source_code(text: str, declared: Optional[str]) -> Optional[str]:
+    """Pick the translator's source-language hint from the script actually present.
+
+    Whisper with language=hi often writes spoken Hindi/Urdu in Urdu (Arabic)
+    script. Telling the translator "source = hi" for Arabic-script text makes it
+    return the text almost unchanged, so the English voice reads Urdu. Trust the
+    script over the dropdown when they disagree.
+    """
+    if _ARABIC_SCRIPT_RE.search(text or ""):
+        return "ur"
+    if _DEVANAGARI_RE.search(text or ""):
+        return "hi"
+    return declared
+
+
+def _non_latin_ratio(text: str) -> float:
+    letters = [c for c in (text or "") if c.isalpha()]
+    if not letters:
+        return 0.0
+    non_latin = [c for c in letters if ord(c) > 0x024F]
+    return len(non_latin) / len(letters)
 
 
 def translate_text(text: str, target_lang_code: str, source_lang_code: Optional[str] = None) -> str:
@@ -1293,7 +1321,19 @@ def redub_video(
             seg["translated"] = postprocess_translation(src) or src
         else:
             try:
-                seg["translated"] = translate_text(src, target_code, source_lang_code=source_code)
+                seg["translated"] = translate_text(
+                    src, target_code, source_lang_code=_segment_source_code(src, source_code)
+                )
+                # Latin-script target (English etc.) but result is still mostly
+                # foreign script -> translator ignored us. Retry with auto-detect,
+                # and if it is still untranslated keep the window silent rather
+                # than letting the English voice read Urdu/Arabic text.
+                if target_code.split("-")[0].lower() in _LATIN_TARGETS and \
+                        _non_latin_ratio(seg["translated"]) > 0.3:
+                    seg["translated"] = translate_text(src, target_code, source_lang_code=None)
+                    if _non_latin_ratio(seg["translated"]) > 0.3:
+                        print(f"[redub] untranslated segment dropped: {src[:60]!r}", flush=True)
+                        seg["translated"] = ""
             except UserFacingError:
                 seg["translated"] = ""
         if not (seg.get("translated") or "").strip():
