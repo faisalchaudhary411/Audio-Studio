@@ -150,6 +150,9 @@ def transcribe(audio_bytes: bytes, language: Optional[str] = None, timeout_sec: 
         ]
         if language and language.lower() not in {"auto", "none", "detect"}:
             cmd.extend(["-l", language.lower().split("-")[0]])
+        # The input audio MUST be passed, otherwise whisper-cli prints its usage
+        # text and exits with code 2 ("speech recognition ..." help banner).
+        cmd.extend(["-f", input_path])
 
         try:
             proc = subprocess.run(
