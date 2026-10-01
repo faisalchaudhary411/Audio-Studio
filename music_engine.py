@@ -29,7 +29,9 @@ import time
 import traceback
 import uuid
 
+import features
 import music_client
+import procedural_music
 
 # ── SQLite job store (same pattern as clone_engine.py) ─────────────────────
 
@@ -175,6 +177,25 @@ def _fetch_job(job_id: str):
 def _run_music_job(job_id: str, prompt: str, lyrics: str, duration: int,
                    seed: int = None, thinking: bool = True):
     _update_job(job_id, status="generating")
+    if not features.MUSIC_GPU_ENABLED:
+        # Default backend: built-in code-based generator (CPU only, no GPU,
+        # no external API). Lyrics are ignored — instrumental only.
+        try:
+            wav = procedural_music.generate_wav(prompt, duration, seed)
+            audio, fmt = wav, "wav"
+            try:
+                import io as _io
+                from pydub import AudioSegment
+                buf = _io.BytesIO()
+                AudioSegment.from_wav(_io.BytesIO(wav)).export(buf, format="mp3", bitrate="192k")
+                audio, fmt = buf.getvalue(), "mp3"   # ~10x smaller than WAV
+            except Exception:
+                print("[music] mp3 encode failed, serving wav", flush=True)
+            _update_job(job_id, status="done", audio=audio, audio_format=fmt)
+        except Exception:
+            print(f"[MUSIC JOB ERROR] job_id={job_id}\n{traceback.format_exc()}", flush=True)
+            _update_job(job_id, status="error", error="Music generation failed — please try again.")
+        return
     try:
         # "wav" matches static/js/music.js, which hardcodes
         # `data:audio/wav;base64,...` for the <audio> src and download link —
@@ -271,7 +292,7 @@ def start_music_job(tags: str, lyrics: str = "", duration: int = 60, seed: int =
     job_id = uuid.uuid4().hex
     _insert_job(job_id, license_key=license_key)
 
-    if not music_client.is_configured():
+    if features.MUSIC_GPU_ENABLED and not music_client.is_configured():
         _update_job(
             job_id,
             status="error",

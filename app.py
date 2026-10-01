@@ -61,6 +61,7 @@ import notifications
 import promo
 from errors import UserFacingError
 import rbac
+import features
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 import hmac
@@ -746,6 +747,15 @@ def _effective_license_key() -> str:
     return ""
 
 
+def _effective_plan(plan: str) -> str:
+    """Pro+ is retired while features.PRO_PLUS_ENABLED is off: existing Pro+
+    licenses are honoured as plain Pro (same TTS quota, no ads, redub), so
+    nobody loses access they paid for. Set PRO_PLUS_ENABLED=1 to restore."""
+    if plan == "pro_plus" and not features.PRO_PLUS_ENABLED:
+        return "pro"
+    return plan
+
+
 def _license_context() -> dict:
     """Single source of truth for paid plan status (Pro / Pro+).
 
@@ -773,7 +783,7 @@ def _license_context() -> dict:
         user = accounts.find_user(email) if email else {}
         ctx = {
             "valid": True,
-            "plan": "pro_plus",
+            "plan": "pro_plus" if features.PRO_PLUS_ENABLED else "pro",
             "name": (user.get("name") if user else "") or "Admin",
         }
         g.license_ctx = ctx
@@ -794,7 +804,7 @@ def _license_context() -> dict:
             name = (user.get("name") if user else "") or result.get("name") or "Pro User"
             ctx = {
                 "valid": True,
-                "plan": result.get("plan", "pro"),
+                "plan": _effective_plan(result.get("plan", "pro")),
                 "name": name,
             }
             g.license_ctx = ctx
@@ -812,7 +822,7 @@ def _license_context() -> dict:
                 name = (user.get("name") if user else "") or result.get("name") or "Pro User"
                 ctx = {
                     "valid": True,
-                    "plan": result.get("plan", "pro"),
+                    "plan": _effective_plan(result.get("plan", "pro")),
                     "name": name,
                 }
 
@@ -841,7 +851,7 @@ def get_license_name() -> str:
 
 
 def has_clone_and_music() -> bool:
-    return get_plan() == "pro_plus"
+    return features.PRO_PLUS_ENABLED and get_plan() == "pro_plus"
 
 
 def current_roles():
@@ -886,7 +896,7 @@ def require_permission(permission: str, *, api: bool = False):
             if api or request.path.startswith("/api/"):
                 return jsonify({"error": msg, "required": need}), 402
             # HTML: send them to pricing/upgrade
-            if need == rbac.ROLE_PRO_PLUS:
+            if need == rbac.ROLE_PRO_PLUS and features.PRO_PLUS_ENABLED:
                 return redirect(url_for("upgrade", plan="pro_plus"))
             return redirect(url_for("upgrade", plan="pro"))
         return wrapper
@@ -983,6 +993,11 @@ def inject_globals():
         "plan_ctx": get_plan() or "free",
         "license_name_ctx": get_license_name(),
         "has_clone_music_ctx": has_clone_and_music(),
+        # Feature switches (see features.py) — templates use these to show
+        # "coming soon" banners instead of the Pro+ upsell.
+        "pro_plus_enabled": features.PRO_PLUS_ENABLED,
+        "voice_clone_enabled": features.VOICE_CLONE_ENABLED,
+        "redub_whisper_enabled": features.REDUB_WHISPER_ENABLED,
         "roles_ctx": list(current_roles()),
         "can": can,
         "account_email_ctx": session.get("account_email", ""),
@@ -1165,8 +1180,10 @@ def landing():
     software_schema_offers = [
         {"name": "Free", "price": _price_num(_limits.get("FREE_PRICE_LABEL"), "$0")},
         {"name": "Pro", "price": _price_num(_limits.get("PRO_PRICE_USD_LABEL"), "$3")},
-        {"name": "Pro+", "price": _price_num(_limits.get("PRO_PLUS_PRICE_USD_LABEL"), "$6")},
     ]
+    if features.PRO_PLUS_ENABLED:
+        software_schema_offers.append(
+            {"name": "Pro+", "price": _price_num(_limits.get("PRO_PLUS_PRICE_USD_LABEL"), "$6")})
 
     return render_template(
         "landing.html",
@@ -1452,6 +1469,12 @@ def pricing():
          "cta": "Current plan" if current_plan == "pro_plus" else "Get Pro+",
          "cta_url": None if current_plan == "pro_plus" else url_for("upgrade", plan="pro_plus")},
     ]
+    if not features.PRO_PLUS_ENABLED:
+        # Pro+ retired for now (monthly AND annual) — code kept, card hidden.
+        plans = [p for p in plans if p["id"] != "pro_plus"]
+        for _p in plans:
+            if _p["id"] == "pro":
+                _p["featured"] = True  # Pro is now the headline plan
     compare = {
         "free_tts": f"{limits.get('FREE_DAILY_ACTIONS', 10)} gens/day · {int(limits.get('FREE_CHAR_LIMIT', 5000)):,} chars",
         "pro_tts": f"{_tts_pro:,} chars/mo",
@@ -1671,6 +1694,8 @@ def upgrade():
     checkout_url_pro_plus = lim.get("CHECKOUT_URL_PRO_PLUS") or None
     requested_plan = request.args.get("plan") if request.method == "GET" else request.form.get("plan")
     requested_plan = requested_plan if requested_plan in ("pro", "pro_plus") else "pro"
+    if requested_plan == "pro_plus" and not features.PRO_PLUS_ENABLED:
+        requested_plan = "pro"  # Pro+ retired — old links/forms fall back to Pro
     requested_billing = request.args.get("billing") if request.method == "GET" else request.form.get("billing")
     requested_billing = requested_billing if requested_billing == "annual" else "monthly"
     # Annual PKR = 10x monthly (2 months free), same math the pricing page
@@ -2036,7 +2061,7 @@ def sitemap():
     static_paths = [
         ("/", "1.0", "weekly", None),
         ("/studio", "0.9", "weekly", None),
-        ("/voice-cloning", "0.85", "monthly", None),
+        ("/voice-cloning", "0.3", "monthly", None),  # parked "coming soon" page — low priority until it launches
         ("/video-redub", "0.85", "monthly", None),
         ("/voices", "0.8", "monthly", None),
         ("/tools", "0.9", "weekly", None),
@@ -2117,8 +2142,8 @@ def llms_txt():
         "",
         "## Core product",
         f"- [Studio]({base}/studio): text-to-speech, voice cloning, and AI music generation in one workspace",
-        f"- [Voice Cloning]({base}/voice-cloning): clone a voice from a short reference clip (Chatterbox and F5-TTS engines)",
-        f"- [Pricing]({base}/pricing): free tier plus Pro/Pro+ paid plans",
+        f"- [Voice Cloning]({base}/voice-cloning): coming soon — currently paused while audio tools are the focus",
+        f"- [Pricing]({base}/pricing): free tier plus Pro plan (monthly or annual)",
         f"- [Developer API]({base}/developers): self-serve API keys, curl/Python/Node.js examples",
         "",
         "## Free audio tools",
@@ -4278,9 +4303,11 @@ def api_transcribe():
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        # Google Speech is always primary. Whisper is only a Pro/Pro+ fallback
-        # when Google returns no usable text (use_gpu=False never hits GPU).
-        result = audio_tools.transcribe(file.read(), file.filename, lang_code, use_gpu=is_pro())
+        # Google Speech is always primary. Whisper (GPU) is a Pro-only fallback
+        # and is OFF unless features.REDUB_WHISPER_ENABLED (use_gpu=False never
+        # hits GPU). Code kept so it can be switched back on without a rewrite.
+        result = audio_tools.transcribe(file.read(), file.filename, lang_code,
+                                        use_gpu=(features.REDUB_WHISPER_ENABLED and is_pro()))
         _bump_counter("usage_transcribe")
         resp = jsonify(result)
         # Explicit charset so clients never treat Urdu/Hindi JSON as Latin-1
@@ -4484,7 +4511,7 @@ def api_denoise():
             # gated to Pro/Pro+ the same way GPU Whisper is gated in
             # api_transcribe, so free-tier traffic can't spend it.
             if not is_pro():
-                return jsonify({"error": "Studio-quality denoise (AI speech enhancement) is a Pro/Pro+ feature. Upgrade, or use standard Denoise."}), 402
+                return jsonify({"error": "Studio-quality denoise (AI speech enhancement) is a Pro feature. Upgrade, or use standard Denoise."}), 402
             out_bytes = audio_tools.denoise_studio(file.read(), file.filename)
         else:
             out_bytes = audio_tools.denoise(file.read(), file.filename, strength,
@@ -5257,6 +5284,15 @@ def api_v1_tts():
     return resp
 
 
+@app.before_request
+def _voice_clone_coming_soon():
+    """Voice cloning is parked ("coming soon") while features.VOICE_CLONE_ENABLED
+    is off. One guard covers every /api/clone/* endpoint; the route code below
+    is untouched so setting VOICE_CLONE_ENABLED=1 brings it straight back."""
+    if not features.VOICE_CLONE_ENABLED and request.path.startswith("/api/clone/"):
+        return jsonify({"error": features.VOICE_CLONE_COMING_SOON, "coming_soon": True}), 503
+
+
 @app.route("/api/clone/upload", methods=["POST"])
 def api_clone_upload():
     """Pro+-only: upload a reference clip (~10s+) to clone a voice from.
@@ -5815,10 +5851,18 @@ MUSIC_MAX_DURATION_SEC = 120  # keep runs (and cost) bounded — tune in admin l
 
 @app.route("/api/music/generate", methods=["POST"])
 def api_music_generate():
-    if not can("music.use"):
+    # The built-in code-based generator is CPU-only, so it is open to everyone
+    # (free tier uses the shared daily-action counter; Pro is unlimited apart
+    # from the backstop below). The Pro+/GPU gate only applies if the ACE-Step
+    # backend is switched back on (features.MUSIC_GPU_ENABLED).
+    if features.MUSIC_GPU_ENABLED and not can("music.use"):
         return jsonify({"error": "Music generation is a Pro+ feature."}), 402
 
     license_key = _effective_license_key()
+    if not features.MUSIC_GPU_ENABLED and not is_pro():
+        _lim = get_limits()
+        if not _check_and_bump("usage_music", int(_lim["FREE_DAILY_ACTIONS"])):
+            return jsonify({"error": f"Free daily limit reached ({_lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
     _music_in_flight = 0
     if license_key:
         _music_in_flight = music_engine.count_active_jobs_for_license(license_key)
@@ -5828,7 +5872,7 @@ def api_music_generate():
         return jsonify({"error": f"Daily music-generation limit reached ({_music_day}/day). "
                                   f"This resets at midnight — contact support if you need a higher limit."}), 429
     _music_mo = int(get_limits().get("MUSIC_MONTHLY_LIMIT") or MUSIC_MONTHLY_LIMIT)
-    if license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") + _music_in_flight >= _music_mo:
+    if features.MUSIC_GPU_ENABLED and license_key and usage_tracking.get_license_monthly_counter(license_key, "music_gen") + _music_in_flight >= _music_mo:
         log_site_issue("limit", "music monthly quota", f"Monthly music-generation limit reached ({_music_mo}/month, {_music_in_flight} in progress)", status=429)
         return jsonify({"error": f"Monthly music-generation limit reached ({_music_mo}/month) for your plan. "
                                   f"It resets at the start of next month — contact support if you need more."}), 429
@@ -5838,6 +5882,8 @@ def api_music_generate():
     lyrics = (data.get("lyrics") or "").strip()
     duration = int(data.get("duration", 60))
     instrumental = bool(data.get("instrumental", True))
+    if not features.MUSIC_GPU_ENABLED:
+        instrumental = True  # code-based generator is instrumental-only
     # Fast path: instrumental beds with user-written tags skip LM CoT
     # (thinking=False). Sung tracks still use thinking so structure/BPM help.
     # Client can force either way via "thinking": true/false.
@@ -5877,7 +5923,8 @@ def api_music_status(job_id):
                 usage_tracking.bump_license_monthly_counter(bill_key, "music_gen")
         except Exception:
             app.logger.exception("music quota bill failed")
-        return jsonify({"status": "done", "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
+        return jsonify({"status": "done", "audio_format": job.get("audio_format") or "wav",
+                        "audio_b64": base64.b64encode(job["audio"]).decode("ascii")})
     if job["status"] == "error":
         return jsonify({"status": "error", "error": job["error"]})
     return jsonify({"status": job["status"]})

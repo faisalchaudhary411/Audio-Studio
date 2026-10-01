@@ -29,6 +29,7 @@ from errors import UserFacingError
 from audio_tools import video_to_audio, check_file_size
 from tts_engine import tts_dispatch
 
+import features
 try:
     import modal_whisper
 except ImportError:  # pragma: no cover
@@ -689,8 +690,10 @@ def mux_audio_onto_video(video_bytes: bytes, video_filename: str, audio_bytes: b
                     pass
 
 
-def _segment_windows_ms(audio) -> list[tuple[int, int]]:
-    """Build (start_ms, end_ms) speech windows via silence detection, else fixed chunks.
+def _segment_windows_ms_legacy(audio) -> list[tuple[int, int]]:
+    """OLD windowing (pydub silence detection). Kept as a fallback; see _segment_windows_ms.
+
+    Build (start_ms, end_ms) speech windows via silence detection, else fixed chunks.
 
     Silence cuts track dialogue turns much better than fixed 12s blocks
     (which mashed multiple speakers into one bad TTS blob on short reels).
@@ -742,6 +745,104 @@ def _segment_windows_ms(audio) -> list[tuple[int, int]]:
             pos = end
 
     return windows
+
+
+def _vad_windows_ms(audio) -> list[tuple[int, int]]:
+    """Speech windows with frame-accurate timestamps (replaces Whisper's timings).
+
+    Google Speech returns text only, so timing comes from our own voice-activity
+    detection: band-pass to the speech range (cuts music/bass rumble), measure
+    20 ms frame energy, pick an adaptive threshold between the file's noise floor
+    and its speech level, bridge short intra-sentence pauses, drop clicks, and
+    split over-long runs at the quietest point (never mid-word).
+    Returns [] when the clip has no clear speech/silence contrast.
+    """
+    import numpy as np
+    from scipy import signal as _sig
+
+    sr = audio.frame_rate
+    x = np.asarray(audio.get_array_of_samples(), dtype=np.float64)
+    if audio.channels > 1:
+        x = x.reshape(-1, audio.channels).mean(axis=1)
+    x /= float(1 << (8 * audio.sample_width - 1))
+    if len(x) < sr:  # < 1 s
+        return []
+    sos = _sig.butter(4, [250, min(3800, sr / 2 - 100)], btype="band", fs=sr, output="sos")
+    y = _sig.sosfilt(sos, x)
+
+    hop = int(sr * 0.02)
+    n = len(y) // hop
+    if n < 20:
+        return []
+    frames = y[: n * hop].reshape(n, hop)
+    db = 20.0 * np.log10(np.sqrt((frames ** 2).mean(axis=1)) + 1e-9)
+    db = _sig.medfilt(db, 3)
+
+    lo, hi = np.percentile(db, 15), np.percentile(db, 95)
+    if hi - lo < 9.0:
+        return []
+    thr = lo + 0.30 * (hi - lo)
+    active = db > thr
+
+    # runs of active frames -> [start_frame, end_frame)
+    runs: list[list[int]] = []
+    i = 0
+    while i < n:
+        if active[i]:
+            j = i
+            while j < n and active[j]:
+                j += 1
+            runs.append([i, j])
+            i = j
+        else:
+            i += 1
+    if not runs:
+        return []
+
+    BRIDGE = 15   # 300 ms: pauses shorter than this stay inside one segment
+    MIN_RUN = 8   # 160 ms: shorter blips are clicks/noise
+    merged = [runs[0]]
+    for a, b in runs[1:]:
+        if a - merged[-1][1] < BRIDGE:
+            merged[-1][1] = b
+        else:
+            merged.append([a, b])
+    merged = [r for r in merged if r[1] - r[0] >= MIN_RUN]
+
+    max_fr = REDUB_MAX_SEG_MS // 20
+    min_fr = max(REDUB_MIN_SEG_MS // 20, 12)
+    windows: list[tuple[int, int]] = []
+    for a, b in merged:
+        pos = a
+        while b - pos > max_fr:
+            # cut at the quietest frame in the back half of the allowed span
+            lo_f, hi_f = pos + max_fr // 2, pos + max_fr
+            cut = lo_f + int(np.argmin(db[lo_f:hi_f]))
+            windows.append((pos * 20, cut * 20))
+            pos = cut
+        if b - pos >= 1:
+            windows.append((pos * 20, b * 20))
+
+    # Merge sliver windows into a neighbour when the gap is tiny, else keep if usable
+    out: list[tuple[int, int]] = []
+    for s_ms, e_ms in windows:
+        if out and (e_ms - s_ms) < REDUB_MIN_SEG_MS and (s_ms - out[-1][1]) < 500 \
+                and (e_ms - out[-1][0]) <= REDUB_MAX_SEG_MS + 1500:
+            out[-1] = (out[-1][0], e_ms)
+        elif (e_ms - s_ms) >= 450:
+            out.append((s_ms, e_ms))
+    return out
+
+
+def _segment_windows_ms(audio) -> list[tuple[int, int]]:
+    """(start_ms, end_ms) speech windows: VAD first, legacy silence/fixed chunks as fallback."""
+    try:
+        wins = _vad_windows_ms(audio)
+    except Exception:
+        wins = []
+    if wins:
+        return wins
+    return _segment_windows_ms_legacy(audio)
 
 
 def _google_recognize_chunk(r, chunk, google_lang: str) -> str:
@@ -885,7 +986,7 @@ def google_transcribe_segments(
         pad = 80
         s = max(0, start_ms - pad)
         e = min(len(audio), end_ms + pad)
-        if e - s < REDUB_MIN_SEG_MS:
+        if e - s < 400:
             continue
         text = clean_asr_text(_google_recognize_chunk(r, audio[s:e], google_lang))
         if text:
@@ -921,7 +1022,8 @@ def assemble_timed_dub(
     total_ms = max(1000, int(float(total_duration_sec) * 1000))
     timeline = AudioSegment.silent(duration=total_ms, frame_rate=24000)
 
-    for start_sec, end_sec, mp3_bytes in segment_audio:
+    segment_audio = sorted(segment_audio, key=lambda t: float(t[0]))
+    for idx, (start_sec, end_sec, mp3_bytes) in enumerate(segment_audio):
         if not mp3_bytes:
             continue
         start_ms = max(0, int(float(start_sec) * 1000))
@@ -936,6 +1038,22 @@ def assemble_timed_dub(
         tts_ms = len(raw)
         if tts_ms < 80:
             continue
+
+        # Elastic window: a translated line is often longer than the original
+        # speech. Instead of only speeding it up, let it borrow the silence
+        # that follows (up to the next segment's start, a 80 ms guard, 1.5 s,
+        # and 60% of the window) so pacing stays natural and timing still lines up.
+        if tts_ms > window_ms:
+            next_start_ms = (
+                int(float(segment_audio[idx + 1][0]) * 1000)
+                if idx + 1 < len(segment_audio) else total_ms
+            )
+            room_ms = max(0, next_start_ms - 80 - end_ms)
+            borrow_ms = min(room_ms, 1500, int(0.6 * window_ms), tts_ms - window_ms)
+            if borrow_ms > 0:
+                end_ms += borrow_ms
+                window_ms += borrow_ms
+                window_sec = window_ms / 1000.0
 
         # Decide stretch vs pad:
         # - TTS longer than window → speed up (clamp) to fit
@@ -993,6 +1111,7 @@ def redub_video(
     voice_id / voice_id_b (cheap two-speaker approximation, no diarization).
 
     asr_engine: "auto" | "whisper" | "google"
+      (forced to "google" unless features.REDUB_WHISPER_ENABLED is on)
       - auto: Whisper first (if configured), Google fallback
       - whisper: Whisper only (error if unavailable)
       - google: Google only (previous behaviour)
@@ -1042,6 +1161,10 @@ def redub_video(
     asr_engine = (asr_engine or "auto").strip().lower()
     if asr_engine not in ("auto", "whisper", "google"):
         asr_engine = "auto"
+    if not features.REDUB_WHISPER_ENABLED:
+        # Whisper (GPU) is switched off — everything goes through free Google
+        # Speech. The Whisper code below is kept for when the flag is turned on.
+        asr_engine = "google"
 
     segments: list[dict] = []
     used_engine = "google"
@@ -1182,7 +1305,8 @@ def redub_video(
     asr_label = "Whisper (GPU)" if used_engine == "whisper" else "Google Speech"
     length_note = (
         f"Timed dub: {len(timed_clips)} speech window(s) via {asr_label}. "
-        "Natural pace preferred; light stretch only when a line overruns its window. "
+        "Segment times come from voice-activity detection on the original audio; lines may borrow "
+        "the pause after them and are only lightly sped up if they still overrun. "
         "Numbers and common Hinglish terms are cleaned before TTS. "
         "Faces are not re-animated. Set source language to Hindi (hi-IN) for best results on Indian clips."
     )
@@ -1231,6 +1355,9 @@ def redub_video(
         "voice_note": voice_note,
         "translation_note": translation_note,
         "timed_segments": len(timed_clips),
+        "segment_timeline": [
+            {"start": round(c[0], 2), "end": round(c[1], 2)} for c in timed_clips
+        ],
         "engine": f"{used_engine}_timed",
         "asr_engine": used_engine,
         "dual_voice": dual_voice,

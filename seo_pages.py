@@ -151,7 +151,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                    'Yes under current Terms for audio you generate — read the live '
                                    'Terms page.'),
                                   ('What about voice cloning?',
-                                   'Cloning is a separate Pro+ flow. Stock Hindi neural voices are '
+                                   'Voice cloning is coming soon. Stock Hindi neural voices are '
                                    'in Studio on free/Pro as published.'),
                                   ('How long should a test sample be?',
                                    'About 20–40 seconds of real script beats one polished demo '
@@ -337,8 +337,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                    'Rewrite it, add punctuation, or split a long sentence, then '
                                    'regenerate that section.'),
                                   ('Voice cloning for Tamil?',
-                                   'Stock Tamil voices are in Studio; cloning is a separate Pro+ '
-                                   'flow when your plan allows.'),
+                                   'Stock Tamil voices are in Studio; voice cloning is coming soon.'),
                                   ('Where are all Tamil voices?',
                                    'Studio language selector — live list is authoritative.')],
                           'cta_label': 'Try Tamil voices in Studio',
@@ -516,8 +515,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                   'They can change. Studio UI and pricing show current '
                                   'allowances.'),
                                  ('When should I upgrade?',
-                                  'When you hit caps, need batch volume, or want Pro+ features '
-                                  'like cloning.'),
+                                  'When you hit caps, need batch volume, or want video redub, studio-quality denoise and no ads.'),
                                  ('Which languages are free?',
                                   'Studio voice library under usage caps; Urdu and Hindi are '
                                   'first-class.'),
@@ -719,8 +717,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                 ('Commercial use?',
                                  'Generated audio is usable under current Terms.'),
                                 ('Cloning vs stock voices?',
-                                 'Stock neural voices are in Studio; cloning is a separate Pro+ '
-                                 'workflow.'),
+                                 'Stock neural voices are in Studio; voice cloning is coming soon.'),
                                 ('Which languages?',
                                  'Many, including Urdu and Hindi as first-class options — see '
                                  'Studio.')],
@@ -739,12 +736,11 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
  'free-voice-cloning': {'title': 'Voice Cloning Online — Clone a Sample | VoxCraft',
                         'meta_description': 'Voice cloning from a short clean sample for '
                                             'consistent narration. Stock Studio voices on free; '
-                                            'cloning on eligible Pro+ plans.',
+                                            'voice cloning is coming soon.',
                         'eyebrow': 'Voice Cloning',
                         'h1': 'Voice cloning online',
                         'intro': ['Upload a short clean sample, build a reusable voice, generate '
-                                  'new lines that stay consistent. Cloning is a Pro+ workflow with '
-                                  'consent checks. Stock neural voices stay available on free and '
+                                  'new lines that stay consistent. Voice cloning is coming soon and will include consent checks. Stock neural voices stay available on free and '
                                   'Pro without cloning.',
                                   'Best results: quiet, single-speaker audio — ideally 30+ seconds '
                                   'of varied speech. Music beds and heavy compression hurt '
@@ -753,7 +749,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                   'voices only, use <a href="/studio">Voice Studio</a>.'],
                         'steps': ['Prepare a clean sample (one speaker, little background noise).',
                                   'Open Voice Cloning and complete any consent steps shown.',
-                                  'Upload the sample and create the clone when your plan allows.',
+                                  'Voice cloning is coming soon — check back for the launch.',
                                   'Generate test lines, then use the clone for longer scripts.'],
                         'use_cases': [('Brand consistency', 'Same host voice across a series.'),
                                       ('Draft vs final',
@@ -761,8 +757,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                       ('Series production',
                                        'Reuse a voice without re-recording every episode.')],
                         'faq': [('Is voice cloning free?',
-                                 'Studio neural voices are free-tier friendly. Cloning needs an '
-                                 'eligible Pro+ plan — see pricing.'),
+                                 'Studio neural voices are free-tier friendly. Voice cloning is coming soon.'),
                                 ('Is cloning ethical?',
                                  'Only clone voices you own or have clear permission to use. '
                                  'Consent checks are part of the flow.'),
@@ -778,8 +773,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                           ('Pricing', '/pricing'),
                                           ('AI voice generator', '/ai-voice-generator')],
                         'sub': 'Voice cloning builds a reusable voice from a short clean sample. '
-                               'Stock Studio voices are free-tier friendly; cloning needs an '
-                               'eligible Pro+ plan.'},
+                               'Stock Studio voices are free-tier friendly; voice cloning is coming soon.'},
  'marathi-text-to-speech': {'title': 'Marathi Text to Speech Free — AI Voice Online | VoxCraft',
                             'meta_description': 'Free Marathi text to speech online. Devanagari '
                                                 'script, neural voices, download for YouTube or '
@@ -1223,7 +1217,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
             ('Does VoxCraft support commercial use on free?',
              'Audio you generate is allowed under current Terms subject to limits — read the live Terms and pricing pages.'),
             ('Where is voice cloning?',
-             'VoxCraft offers voice cloning on higher plans. See the voice cloning page and pricing for current quotas.'),
+             'Voice cloning is coming soon. See the voice cloning page for updates.'),
             ('How do I try VoxCraft quickly?',
              'Open Voice Studio, paste a real paragraph, pick a voice, generate, and download — no account required on the free tier.')
         ],
