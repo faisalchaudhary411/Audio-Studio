@@ -108,10 +108,20 @@ def _segments_to_srt(segments: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def transcribe(audio_bytes: bytes, language: Optional[str] = None, timeout_sec: int = 360) -> dict:
+def transcribe(
+    audio_bytes: bytes,
+    language: Optional[str] = None,
+    timeout_sec: int = 360,
+    *,
+    model_path: Optional[str] = None,
+    prompt: Optional[str] = None,
+) -> dict:
     """Run whisper.cpp locally and return text, real segments and SRT."""
     if not is_configured():
         return {"success": False, "error": "Local whisper.cpp is not installed/configured."}
+    use_model = WHISPER_MODEL
+    if model_path and os.path.isfile(model_path) and os.access(model_path, os.R_OK):
+        use_model = model_path
     if not audio_bytes:
         return {"success": False, "error": "Empty audio payload."}
 
@@ -138,7 +148,7 @@ def transcribe(audio_bytes: bytes, language: Optional[str] = None, timeout_sec: 
 
         cmd = [
             WHISPER_BIN,
-            "-m", WHISPER_MODEL,
+            "-m", use_model,
             "-vm", VAD_MODEL,
             "--vad",
             "-t", "1",
@@ -152,6 +162,9 @@ def transcribe(audio_bytes: bytes, language: Optional[str] = None, timeout_sec: 
             cmd.extend(["-l", language.lower().split("-")[0]])
         # The input audio MUST be passed, otherwise whisper-cli prints its usage
         # text and exits with code 2 ("speech recognition ..." help banner).
+        if prompt:
+            # Initial prompt biases script + vocabulary (e.g. Hinglish tech terms)
+            cmd.extend(["--prompt", prompt])
         cmd.extend(["-f", input_path])
 
         try:
