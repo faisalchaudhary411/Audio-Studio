@@ -21,9 +21,8 @@
   });
 
   const musicProgressBar = document.getElementById('music-progress');
-  // Align with music_client 12-min ceiling + job max age. Cold starts after
-  // scale-to-zero can take several minutes; give the GPU worker room before
-  // the UI gives up.
+  // Generous ceiling: the built-in generator finishes in seconds, but the
+  // optional GPU backend (MUSIC_GPU_ENABLED) can take minutes on a cold start.
   const POLL_TIMEOUT_MS = 12 * 60 * 1000;
   const pollDeadline = { value: 0 };
 
@@ -34,15 +33,18 @@
       status.textContent = 'Done.';
       if (status) status.classList.add('studio-status-ready');
       if (typeof voxButtonSuccess === 'function') voxButtonSuccess(generateBtn);
-      const fname = `VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.wav`;
-      // Shared handoff so Ace-Step music can be sent to Trim/Denoise/etc.
+      // Code-based generator returns MP3 (small); GPU/ACE-Step mode returns WAV.
+      const isMp3 = data.audio_format === 'mp3';
+      const mime = isMp3 ? 'audio/mpeg' : mime;
+      const fname = `VoxCraft-Music-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}.${isMp3 ? 'mp3' : 'wav'}`;
+      // Shared handoff so generated music can be sent to Trim/Denoise/etc.
       if (typeof voxAudioPlayerHtml === 'function') {
         // Normal path: main.js loaded fine. voxAudioPlayerHtml() only inserts
         // a placeholder shell — voxHydrateAudioResult() does the actual
         // decode-off-main-thread and wires up the real download link.
-        result.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, 'audio/wav');
+        result.innerHTML = voxAudioPlayerHtml(data.audio_b64, fname, mime);
         if (typeof voxHydrateAudioResult === 'function') {
-          voxHydrateAudioResult(result, data.audio_b64, fname, 'audio/wav');
+          voxHydrateAudioResult(result, data.audio_b64, fname, mime);
         }
       } else {
         // Defensive fallback only — main.js failed to load/define the
@@ -53,7 +55,7 @@
           sessionStorage.setItem('voxcraft_transfer_v1', JSON.stringify({
             b64: data.audio_b64,
             filename: fname,
-            mime: 'audio/wav',
+            mime: mime,
             ts: Date.now(),
           }));
         } catch (e) {}
@@ -80,18 +82,18 @@
           const dlEl = result.querySelector('[data-music-fallback-dl]');
           try {
             if (typeof voxB64ToObjectURL === 'function') {
-              const url = await voxB64ToObjectURL(data.audio_b64, 'audio/wav');
+              const url = await voxB64ToObjectURL(data.audio_b64, mime);
               audioEl.src = url;
               dlEl.href = url;
             } else {
               // True last resort: small enough files, main-thread atob.
-              audioEl.src = `data:audio/wav;base64,${data.audio_b64}`;
-              dlEl.href = `data:audio/wav;base64,${data.audio_b64}`;
+              audioEl.src = `data:${mime};base64,${data.audio_b64}`;
+              dlEl.href = `data:${mime};base64,${data.audio_b64}`;
             }
           } catch (e) {
             console.warn('[voxcraft] music fallback hydrate failed', e);
-            audioEl.src = `data:audio/wav;base64,${data.audio_b64}`;
-            dlEl.href = `data:audio/wav;base64,${data.audio_b64}`;
+            audioEl.src = `data:${mime};base64,${data.audio_b64}`;
+            dlEl.href = `data:${mime};base64,${data.audio_b64}`;
           }
           dlEl.removeAttribute('disabled');
         })();
@@ -107,7 +109,7 @@
       return;
     }
     if (Date.now() > pollDeadline.value) {
-      status.textContent = 'Timed out after 12 minutes. Cold starts can be slow — try Generate again; a warm run is usually much faster.';
+      status.textContent = 'Timed out. Please try Generate again.';
       voxSetBusy(generateBtn, false);
       voxShowProgress(musicProgressBar, false);
       return;
@@ -115,10 +117,10 @@
     const elapsedMin = Math.floor((Date.now() - (pollDeadline.value - POLL_TIMEOUT_MS)) / 60000);
     const labels = {
       queued: 'Queued…',
-      starting: 'Starting GPU worker…',
+      starting: 'Starting…',
       generating: elapsedMin >= 2
-        ? `Still generating (${elapsedMin} min) — cold starts can take several minutes…`
-        : 'Generating… (warm runs ~1 min; first run after idle may take longer)',
+        ? `Still generating (${elapsedMin} min)…`
+        : 'Composing your track…',
     };
     status.textContent = labels[data.status] || data.status;
     setTimeout(() => pollJob(jobId), 2500);
