@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Activate Your VoxCraft License{% endblock %}
 {% block robots %}<meta name="robots" content="noindex, follow">{% endblock %}
-{% block meta_description %}Activate a VoxCraft Pro or Pro+ license key — paid plans are tied to your account email after you log in.{% endblock %}
+{% block meta_description %}Activate a VoxCraft Pro license key — paid plans are tied to your account email after you log in.{% endblock %}
 
 {% block content %}
 <section class="section" style="max-width:640px;">
   <div class="section__head">
     <span class="section__eyebrow">Pro</span>
     <h1 class="section__title">Activate your license</h1>
-    <p class="section__sub">Pro and Pro+ are bound to your <strong>account</strong> (the email you paid with). Log in first, then enter your key — free tools still work without an account.</p>
+    <p class="section__sub">Pro is bound to your <strong>account</strong> (the email you paid with). Log in first, then enter your key — free tools still work without an account.</p>
   </div>
   <div class="panel">
     {% if success %}
       {% if needs_login %}
       <p style="color:var(--jade-hi);margin-bottom:12px;">Key accepted{% if name %} ({{ name }}){% endif %}.</p>
-      <p style="color:var(--text-mid);line-height:1.6;margin-bottom:16px;">{{ login_required_message or "Log in with the email used for this purchase to unlock Pro/Pro+ on your account." }}</p>
+      <p style="color:var(--text-mid);line-height:1.6;margin-bottom:16px;">{{ login_required_message or "Log in with the email used for this purchase to unlock Pro on your account." }}</p>
       <a href="{{ url_for('account_login', next=url_for('studio')) }}" class="btn btn--brass">Log in to unlock Pro</a>
       {% else %}
       <p style="color:var(--jade-hi);">Activated — welcome, {{ name }}. Open the <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a> to use Pro.</p>
@@ -23,7 +23,7 @@
       {% if error %}<p style="color:#e88;margin-bottom:12px;">{{ error }}</p>{% endif %}
       {% if needs_login and not logged_in %}
       <p style="background:rgba(232,169,60,0.1);border:1px solid rgba(232,169,60,0.3);border-radius:10px;padding:12px 14px;margin-bottom:14px;color:var(--text-mid);font-size:0.9rem;line-height:1.5;">
-        You’re not logged in. You can still validate a key here, but <strong>Pro/Pro+ only unlocks after you log in</strong> with the purchase email.
+        You’re not logged in. You can still validate a key here, but <strong>Pro only unlocks after you log in</strong> with the purchase email.
         <a href="{{ url_for('account_login', next=url_for('activate')) }}" style="color:var(--brass-hi);">Log in first</a>
       </p>
       {% endif %}
@@ -47,7 +47,7 @@
       <li><a href="{{ url_for('account_login') }}" style="color:var(--brass-hi)">Log in</a> with the email used when you paid (or set your password from the email we sent after purchase).</li>
       <li>Paste your license key exactly as given — no extra spaces.</li>
       <li>Tap Activate. The key is linked to your account email.</li>
-      <li>Pro/Pro+ features (higher batch limits, clone, music, etc.) unlock only while that account is logged in — not from a browser cookie alone.</li>
+      <li>Pro features (higher batch limits, video redub, unlimited audio tools, etc.) unlock only while that account is logged in — not from a browser cookie alone.</li>
     </ol>
 
     <h2 style="font-family:var(--display);color:var(--text-hi);font-size:1.15rem;margin:26px 0 10px;">Where to find your key</h2>
@@ -64,7 +64,7 @@
       </details>
       <details style="margin-top:10px;">
         <summary>Why do I need to log in for Pro?</summary>
-        <p style="color:var(--text-mid);line-height:1.7;">Paid plans are bound to your account so Pro+ batch limits and features cannot be shared via cookies or IP alone. Free tools still work without an account.</p>
+        <p style="color:var(--text-mid);line-height:1.7;">Paid plans are bound to your account so Pro batch limits and features cannot be shared via cookies or IP alone. Free tools still work without an account.</p>
       </details>
       <details style="margin-top:10px;">
         <summary>Can I use one license on multiple devices?</summary>

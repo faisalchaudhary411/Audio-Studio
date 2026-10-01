@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Video Audio Redub — Translate & Re-voice Online | VoxCraft{% endblock %}
-{% block meta_description %}Replace a video's spoken audio with a translated track in any of 40+ languages. Uses VoxCraft's 130+ neural voices. Pro feature — no GPU cloning required.{% endblock %}
+{% block meta_description %}Replace a video's spoken audio with a translated track in any of 40+ languages. Uses VoxCraft's 130+ neural voices. Pro feature.{% endblock %}
 
 {% block content %}
 <div class="section" style="padding-bottom:0;">
@@ -44,7 +44,7 @@
   </p>
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
     Redub is <strong>not</strong> automatic lip-sync acting and not a clone of the original speaker in Phase 1. It replaces the spoken track with a clear stock neural voice in the target language. That is the right tool when localization speed matters more than matching the original timbre. For same-language retakes in <em>your</em> voice, see
-    <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">Voice cloning</a> (Pro+).
+    <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">Voice cloning</a> (coming soon).
   </p>
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
     Character usage follows the same TTS quota rules as Studio. Long videos consume more quota — prefer clear speech, moderate length, and a short test clip when you are validating a new language pair.
@@ -97,7 +97,7 @@
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Does it clone the original speaker?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Not in Phase 1. It uses the same stock neural voices as Studio (130+ voices, 40+ languages). Cloned-speaker redub is a later Pro+ direction — today, use <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">Voice cloning</a> when you need a specific voice identity on new text.</p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Not in Phase 1. It uses the same stock neural voices as Studio (130+ voices, 40+ languages). Cloned-speaker redub may follow once voice cloning launches — it is coming soon; for now, see <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">Voice cloning</a> for updates on specific voice identities.</p>
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Which languages work?</summary>
@@ -158,7 +158,7 @@
   "@type": "FAQPage",
   "mainEntity": [
     {"@type": "Question", "name": "Is video redub free?", "acceptedAnswer": {"@type": "Answer", "text": "No. Redub is included with the Pro plan. Free accounts can still use Transcribe and Extract audio separately."}},
-    {"@type": "Question", "name": "Does it clone the original speaker?", "acceptedAnswer": {"@type": "Answer", "text": "Not in Phase 1. It uses stock neural voices from Voice Studio. Voice cloning is a separate Pro+ workflow."}},
+    {"@type": "Question", "name": "Does it clone the original speaker?", "acceptedAnswer": {"@type": "Answer", "text": "Not in Phase 1. It uses stock neural voices from Voice Studio. Voice cloning is a separate feature that is coming soon."}},
     {"@type": "Question", "name": "Which languages work?", "acceptedAnswer": {"@type": "Answer", "text": "Pairs with stock voice and translation coverage, including Urdu, Hindi, Bengali, Punjabi, Tamil, Telugu, Arabic, and English variants."}},
     {"@type": "Question", "name": "How long can a video be?", "acceptedAnswer": {"@type": "Answer", "text": "About 10 minutes and 50 MB in Phase 1."}},
     {"@type": "Question", "name": "Is lip-sync perfect?", "acceptedAnswer": {"@type": "Answer", "text": "No. This replaces the audio track; it is not a full lip-sync performance model."}}

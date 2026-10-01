@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png') }}">
 <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest') }}">
 <meta name="theme-color" content="#0c1117">
-<meta name="description" content="{% block meta_description %}Free AI text to speech and voice generator — neural voices in Urdu, Hindi, English & 45+ languages, voice cloning, AI music, and free audio tools. No signup needed to start.{% endblock %}">
+<meta name="description" content="{% block meta_description %}Free AI text to speech and voice generator — neural voices in Urdu, Hindi, English & 45+ languages, a free music generator, and free audio tools. No signup needed to start.{% endblock %}">
 
 <!-- Open Graph / Twitter Card — controls how links look when shared on
      WhatsApp, Facebook, LinkedIn, X/Twitter, Slack, iMessage, etc. This
@@ -27,8 +27,8 @@
 <meta property="og:site_name" content="VoxCraft">
 <meta property="og:type" content="website">
 <meta property="og:url" content="{{ request.url }}">
-<meta property="og:title" content="{% block og_title %}VoxCraft — AI Voice Generator & Multilingual Text-to-Speech{% endblock %}">
-<meta property="og:description" content="{% block og_description %}Generate natural AI voices in Urdu, Hindi & more. Free text to speech, voice cloning, AI music generator, and audio tools — no signup to start.{% endblock %}">
+<meta property="og:title" content="{% block og_title %}VoxCraft — Free Online Audio Tools & Text-to-Speech{% endblock %}">
+<meta property="og:description" content="{% block og_description %}Generate natural AI voices in Urdu, Hindi & more. Free text to speech, a free music generator, and audio tools — no signup to start.{% endblock %}">
 <meta property="og:image" content="{% block og_image %}{{ url_for('static', filename='favicons/android-chrome-512x512.png', _external=True) }}{% endblock %}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ self.og_title() }}">
@@ -81,7 +81,7 @@
         "width": 512,
         "height": 512
       },
-      "description": "VoxCraft is a multilingual neural text-to-speech and online audio toolkit for creators, with strong Urdu, Hindi and South Asian language support, voice cloning, AI music, and free browser-based audio tools.",
+      "description": "VoxCraft is a multilingual neural text-to-speech and online audio toolkit for creators, with strong Urdu, Hindi and South Asian language support, a free music generator, and free browser-based audio tools.",
       "foundingDate": "2025",
       "areaServed": "Worldwide",
       "contactPoint": {
@@ -98,7 +98,7 @@
       "@id": "https://voxcraft.site/#website",
       "name": "VoxCraft",
       "url": "https://voxcraft.site/",
-      "description": "Neural text-to-speech, voice cloning, AI music, and free online audio tools — no signup required.",
+      "description": "Neural text-to-speech, a free music generator, and free online audio tools — no signup required.",
       "publisher": {"@id": "https://voxcraft.site/#organization"},
       "inLanguage": "en",
       "potentialAction": {
@@ -199,7 +199,7 @@
       </button>
       <div class="nav__more-menu" role="menu">
         <a href="{{ url_for('video_redub') }}" role="menuitem"><span class="nav__mi-title">Video Redub</span><span class="nav__mi-sub">Translate &amp; re-voice video</span></a>
-        <a href="{{ url_for('voice_cloning') }}" role="menuitem"><span class="nav__mi-title">Voice Cloning</span><span class="nav__mi-sub">Clone a short sample</span></a>
+        <a href="{{ url_for('voice_cloning') }}" role="menuitem"><span class="nav__mi-title">Voice Cloning</span><span class="nav__mi-sub">Coming soon</span></a>
         <a href="{{ url_for('studio') }}" role="menuitem"><span class="nav__mi-title">Voice Studio</span><span class="nav__mi-sub">130+ neural TTS voices</span></a>
         <a href="{{ url_for('tools_hub') }}" role="menuitem"><span class="nav__mi-title">Audio Tools</span><span class="nav__mi-sub">Convert, trim, denoise…</span></a>
       </div>
@@ -388,7 +388,7 @@
     <p class="perm-sheet__sub">VoxCraft works without an account. These only improve the experience when you allow them.</p>
     <ul class="perm-sheet__list">
       <li><strong>Notifications</strong> — discounts and product updates (you can decline).</li>
-      <li><strong>Microphone</strong> — only when you use voice cloning, asked at that moment.</li>
+      <li><strong>Microphone</strong> — only when a tool needs to record audio, asked at that moment.</li>
       <li><strong>Storage</strong> — recent generations stay in this browser only.</li>
     </ul>
     <div class="perm-sheet__actions">

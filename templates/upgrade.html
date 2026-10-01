@@ -7,7 +7,7 @@
   <div class="section__head" style="text-align:center;max-width:36ch;margin-left:auto;margin-right:auto;">
     <span class="section__eyebrow">Upgrade</span>
     <h1 class="section__title">Choose your plan, then how to pay</h1>
-    <p class="section__sub">Both Pro and Pro+ stay visible — pick one, then pay by card or PKR transfer.</p>
+    <p class="section__sub">Choose monthly or annual, then pay by card or PKR transfer.</p>
   </div>
 
   {# ---- Billing period: carries through to both card checkout (as
@@ -28,7 +28,7 @@
              data-usd-monthly="{{ pro_price_usd }}"
              data-usd-annual="{{ pro_price_annual_usd }}"
              data-label="Pro"
-             {% if requested_plan != 'pro_plus' %}checked{% endif %}>
+             {% if requested_plan != 'pro_plus' or not pro_plus_enabled %}checked{% endif %}>
       <span class="upgrade-plan__badge">TTS</span>
       <span class="upgrade-plan__name">Pro</span>
       <span class="upgrade-plan__price"><span class="upgrade-plan__price-val">{{ pro_price_usd }}</span><span class="upgrade-plan__price-period">/mo</span></span>
@@ -42,6 +42,7 @@
       </ul>
     </label>
 
+{% if pro_plus_enabled %}
     <label class="upgrade-plan {% if requested_plan == 'pro_plus' %}is-selected{% endif %}" data-plan-card="pro_plus">
       <input type="radio" name="plan" value="pro_plus" form="upgrade-form"
              data-checkout-url="{{ checkout_url_pro_plus or '' }}"
@@ -62,9 +63,10 @@
         <li>Priority generation</li>
       </ul>
     </label>
+{% endif %}
   </div>
 
-  {% if checkout_url or checkout_url_pro_plus %}
+  {% if checkout_url or (pro_plus_enabled and checkout_url_pro_plus) %}
   <div class="panel upgrade-pay">
     <span class="panel__label">Pay by card (international)</span>
     <p class="upgrade-pay__hint">Instant activation via Freemius — card or PayPal. Uses the plan and billing period selected above.</p>
@@ -98,7 +100,7 @@
       {% if error %}<p class="upgrade-err">{{ error }}</p>{% endif %}
 
       <div class="upgrade-amount">
-        <span class="upgrade-amount__label">Amount for <strong id="voxcraft-plan-label">{{ 'Pro+' if requested_plan == 'pro_plus' else 'Pro' }}</strong> (<span id="voxcraft-billing-label">{{ 'annual' if requested_billing == 'annual' else 'monthly' }}</span>)</span>
+        <span class="upgrade-amount__label">Amount for <strong id="voxcraft-plan-label">{{ 'Pro+' if (requested_plan == 'pro_plus' and pro_plus_enabled) else 'Pro' }}</strong> (<span id="voxcraft-billing-label">{{ 'annual' if requested_billing == 'annual' else 'monthly' }}</span>)</span>
         <div class="upgrade-amount__value" id="voxcraft-pkr-amount">Rs {{ pro_plus_price_pkr_annual if (requested_plan == 'pro_plus' and requested_billing == 'annual') else (pro_plus_price_pkr if requested_plan == 'pro_plus' else (pro_price_pkr_annual if requested_billing == 'annual' else pro_price_pkr)) }}</div>
       </div>
 

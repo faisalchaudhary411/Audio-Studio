@@ -105,7 +105,7 @@
     <span class="panel__label">App license</span>
     {% if license_info.valid %}
       <p style="color:var(--jade-hi);font-weight:600;margin:8px 0 12px;">
-        Active — {{ 'Pro+' if license_info.plan == 'pro_plus' else 'Pro' }}
+        Active — {{ 'Pro+' if (license_info.plan == 'pro_plus' and pro_plus_enabled) else 'Pro' }}
       </p>
       <div style="background:var(--ink);border-radius:8px;padding:14px;font-family:var(--mono);font-size:0.85rem;color:var(--brass-hi);word-break:break-all;">{{ license_key }}</div>
       <p style="color:var(--text-dim);font-size:0.78rem;margin-top:10px;">Enter this on the <a href="{{ url_for('activate') }}" style="color:var(--brass-hi);">Activate</a> page on any device to unlock Pro there.</p>
@@ -122,12 +122,12 @@
     {% if usage_full %}
     <div class="usage-alert usage-alert--full" role="status">
       <strong>Monthly limit reached.</strong> One or more quotas are used up until next month.
-      <a href="{{ url_for('contact') }}">Contact support</a> if you need more{% if license_info.plan != 'pro_plus' %}, or <a href="{{ url_for('pricing') }}">upgrade to Pro+</a>{% endif %}.
+      <a href="{{ url_for('contact') }}">Contact support</a> if you need more{% if pro_plus_enabled and license_info.plan != 'pro_plus' %}, or <a href="{{ url_for('pricing') }}">upgrade to Pro+</a>{% endif %}.
     </div>
     {% elif usage_near %}
     <div class="usage-alert usage-alert--near" role="status">
       <strong>You're close to a monthly limit</strong> (80%+ used). Resets next month.
-      {% if license_info.plan != 'pro_plus' %}<a href="{{ url_for('pricing') }}">See Pro+</a> for higher quotas.{% else %}<a href="{{ url_for('contact') }}">Contact support</a> if you need a top-up.{% endif %}
+      {% if pro_plus_enabled and license_info.plan != 'pro_plus' %}<a href="{{ url_for('pricing') }}">See Pro+</a> for higher quotas.{% else %}<a href="{{ url_for('contact') }}">Contact support</a> if you need a top-up.{% endif %}
     </div>
     {% endif %}
 
@@ -173,7 +173,7 @@
   <div class="panel" style="margin-top:16px;border-color:rgba(232,169,60,0.35);">
     <span class="panel__label" style="color:var(--brass-hi);">Site admin</span>
     <p style="color:var(--text-dim);font-size:0.85rem;margin:8px 0 14px;">
-      You’re signed in as the configured admin account (full Pro+ + admin panel).
+      You’re signed in as the configured admin account (full Pro access + admin panel).
     </p>
     <a href="{{ url_for('admin_dashboard') }}" class="btn btn--brass btn--sm">Open admin panel</a>
   </div>

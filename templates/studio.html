@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "partials/usage_bar.html" import usage_bar %}
 {% block title %}AI Voice Studio — Free Text to Speech Online | VoxCraft{% endblock %}
-{% block meta_description %}Free text to speech online in Urdu, Hindi, English and 40+ languages. 130+ neural voices, batch mode, voice cloning and AI music on Pro+. No signup required on the free tier.{% endblock %}
+{% block meta_description %}Free text to speech online in Urdu, Hindi, English and 40+ languages. 130+ neural voices and batch mode. No signup required on the free tier.{% endblock %}
 
 {% block content %}
 <div class="studio">
@@ -87,8 +87,8 @@
       </button>
     </div>
     <div class="mode-pro-links">
-      <a href="{{ url_for('voice_cloning') }}" class="mode-pro-chip">Voice cloning{% if not has_clone_music_ctx %} · Pro+{% endif %}</a>
-      <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" class="mode-pro-chip">AI music{% if not has_clone_music_ctx %} · Pro+{% endif %}</a>
+      <a href="{{ url_for('voice_cloning') }}" class="mode-pro-chip">Voice cloning · Coming soon</a>
+      <a href="{{ url_for('tool_page', slug='ai-music-generator') }}" class="mode-pro-chip">Music generator · Free</a>
     </div>
   </div>
 <!-- ===== Single tab ===== -->
@@ -272,7 +272,7 @@
     </div>
     <div class="panel">
       <h3 style="font-family:var(--display);margin-bottom:7px;">Podcasters &amp; audiobook narrators</h3>
-      <p style="color:var(--text-mid);line-height:1.7;margin:0;">On Pro+, <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">clone a reference voice</a> for consistent narration across episodes or chapters.</p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:0;"><a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">Voice cloning</a> for consistent narration across episodes is coming soon; until then, pick one stock voice and reuse it across episodes.</p>
     </div>
   </div>
 
@@ -294,8 +294,8 @@
       <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">The free tier includes a daily generation limit and monthly character quota — shown above the script box. It's enough for occasional use; frequent or long-form creators typically move to Pro.</p>
     </details>
     <details style="margin-top:10px;">
-      <summary style="font-weight:600;cursor:pointer;">What's the difference between Pro and Pro+?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Pro raises the TTS character quota substantially and removes daily generation caps. Pro+ adds higher TTS quota plus <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">voice cloning</a> and AI music generation (with monthly limits). See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">pricing</a> for the exact numbers.</p>
+      <summary style="font-weight:600;cursor:pointer;">What does Pro include?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Pro raises the TTS character quota substantially, removes daily generation caps and ads, and unlocks video redub, studio-quality denoise and unlimited audio tools. See <a href="{{ url_for('pricing') }}" style="color:var(--brass-hi)">pricing</a> for the exact numbers.</p>
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Can I use generated narration commercially?</summary>
@@ -303,7 +303,7 @@
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Do I need an account to try Voice Studio?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">No. The free tier works immediately with no signup. Create an account only if you want Pro limits or Pro+ features like voice cloning.</p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">No. The free tier works immediately with no signup. Create an account only if you want Pro limits and features.</p>
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">How good is Urdu and Hindi compared to English?</summary>
@@ -311,7 +311,7 @@
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Studio vs voice cloning — which should I use?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Use Studio for stock neural voices and fast multilingual narration. Use <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">voice cloning</a> when you need a specific reference voice identity (Pro+).</p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Use Studio for stock neural voices and fast multilingual narration. Use <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">voice cloning</a> when it launches (coming soon) if you need a specific reference voice identity.</p>
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Can I redub an existing video instead of typing a script?</summary>
@@ -356,10 +356,10 @@
   "@type": "FAQPage",
   "mainEntity": [
     {"@type": "Question", "name": "Is the free tier enough for regular use?", "acceptedAnswer": {"@type": "Answer", "text": "The free tier includes a daily generation limit and monthly character quota. It is enough for occasional use; frequent creators typically move to Pro."}},
-    {"@type": "Question", "name": "What's the difference between Pro and Pro+?", "acceptedAnswer": {"@type": "Answer", "text": "Pro raises TTS quota and removes daily caps. Pro+ adds higher quota plus voice cloning and AI music generation."}},
+    {"@type": "Question", "name": "What does Pro include?", "acceptedAnswer": {"@type": "Answer", "text": "Pro raises TTS quota, removes daily caps and ads, and unlocks video redub, studio-quality denoise and unlimited audio tools."}},
     {"@type": "Question", "name": "Can I use generated narration commercially?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Narration you generate is yours to use in your own videos, courses, or projects, subject to the Terms of Service."}},
     {"@type": "Question", "name": "Do I need an account to try Voice Studio?", "acceptedAnswer": {"@type": "Answer", "text": "No. The free tier works immediately with no signup."}},
-    {"@type": "Question", "name": "Studio vs voice cloning — which should I use?", "acceptedAnswer": {"@type": "Answer", "text": "Use Studio for stock neural voices. Use voice cloning when you need a specific reference voice identity (Pro+)."}},
+    {"@type": "Question", "name": "Studio vs voice cloning — which should I use?", "acceptedAnswer": {"@type": "Answer", "text": "Use Studio for stock neural voices. Voice cloning, for a specific reference voice identity, is coming soon."}},
     {"@type": "Question", "name": "Can I redub an existing video instead of typing a script?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Video redub (Pro) transcribes, translates, and replaces the spoken track while keeping the picture."}}
   ]
 }
