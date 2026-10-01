@@ -1,3 +1,15 @@
+{% if not voice_clone_enabled %}
+<span class="panel__label">Coming soon</span>
+<div class="coming-soon-banner" role="status" style="padding:14px 16px;border-radius:10px;background:rgba(232,169,60,0.08);border:1px solid rgba(232,169,60,0.3);">
+  <strong style="color:var(--brass-hi);display:block;margin-bottom:6px;">Voice cloning is coming soon</strong>
+  <p style="color:var(--text-mid);font-size:0.9rem;line-height:1.6;margin:0 0 12px;">We're focusing on our free audio tools first and will bring voice cloning back soon. In the meantime, try the stock neural voices in Studio or the audio tools.</p>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    <a href="{{ url_for('studio') }}" class="btn btn--brass btn--sm">Open Voice Studio</a>
+    <a href="{{ url_for('tools_hub') }}" class="btn btn--ghost btn--sm">Browse audio tools</a>
+  </div>
+</div>
+{% else %}
 <span class="panel__label">Pro+ feature</span>
 <p style="color:var(--text-mid);font-size:0.9rem;margin-bottom:14px;">Voice cloning and AI music generation are part of the Pro+ plan.</p>
 <a href="{{ url_for('pricing') }}" class="btn btn--brass">Upgrade to Pro+ →</a>
+{% endif %}
