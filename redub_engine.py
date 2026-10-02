@@ -954,15 +954,10 @@ def local_whisper_transcribe_segments(
     #   REDUB_WHISPER_MODEL=/home/deploy/whisper.cpp/models/ggml-small-q5_1.bin
     # Optional prompt to bias script/vocabulary; set REDUB_ASR_PROMPT="" to disable.
     model_path = (os.environ.get("REDUB_WHISPER_MODEL") or "").strip() or None
-    prompt = os.environ.get("REDUB_ASR_PROMPT")
-    if prompt is None:
-        prompt = (
-            "यह हिंदी और हिंग्लिश बातचीत है। Computer shop: RTX 5080, Intel i9 14th Gen, "
-            "32 GB RAM, 1 TB SSD, Microsoft Windows. Sir, बिल्कुल, price लाख रुपये।"
-        )
-    prompt = prompt.strip() or None
-    if whisper_lang not in (None, "hi"):
-        prompt = None  # the default prompt is Hindi/Hinglish only
+    # Prompt is OFF by default: a short mixed Hindi/English prompt made Whisper
+    # imitate its style and emit romanised gibberish. Opt in per server with
+    #   REDUB_ASR_PROMPT="your vocabulary hint"
+    prompt = (os.environ.get("REDUB_ASR_PROMPT") or "").strip() or None
     result = local_whisper.transcribe(
         wav_bytes, language=whisper_lang, timeout_sec=int(timeout_sec),
         model_path=model_path, prompt=prompt,

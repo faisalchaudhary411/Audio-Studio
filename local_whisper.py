@@ -166,13 +166,16 @@ def transcribe(
             "-otxt",
             "-of", out_prefix,
             "-np",
-            # No carry-over context between windows: stops repetition loops
-            "-mc", "0",
         ]
         if language and language.lower() not in {"auto", "none", "detect"}:
             cmd.extend(["-l", language.lower().split("-")[0]])
         # The input audio MUST be passed, otherwise whisper-cli prints its usage
         # text and exits with code 2 ("speech recognition ..." help banner).
+        # Opt-in: VOXCRAFT_WHISPER_MAX_CONTEXT=0 stops carry-over between windows
+        # (can cure repetition loops, can also hurt accuracy; off by default).
+        _mc = (os.environ.get("VOXCRAFT_WHISPER_MAX_CONTEXT") or "").strip()
+        if _mc.lstrip("-").isdigit():
+            cmd.extend(["-mc", _mc])
         if prompt:
             # Initial prompt biases script + vocabulary (e.g. Hinglish tech terms)
             cmd.extend(["--prompt", prompt])
