@@ -5932,6 +5932,87 @@ def api_music_status(job_id):
     return jsonify({"status": job["status"]})
 
 
+
+# ---------------------------------------------------------------------------
+# Network-drop recovery for /api/tools/* (see resume_cache.py)
+# The page tags each tool POST with X-Request-Key. If the browser loses the
+# connection while the server is still working, the finished response is kept
+# for a few minutes and the page fetches it from /api/tools/result/<key>
+# instead of showing an error / re-running the job (no double usage counting).
+# Registered last so every earlier before_request guard still runs first.
+# ---------------------------------------------------------------------------
+import resume_cache
+
+_RESUME_PREFIXES = ("/api/tools/",)
+
+
+def _resume_owner() -> str:
+    return resume_cache.owner_id(session.get("csrf_token"))
+
+
+@app.before_request
+def _resume_before():
+    if request.method != "POST" or not request.path.startswith(_RESUME_PREFIXES):
+        return None
+    key = request.headers.get("X-Request-Key", "")
+    if not resume_cache.valid_key(key):
+        return None
+    owner = _resume_owner()
+    state = resume_cache.claim(key, owner)
+    if state == "claimed":
+        g.resume_key = key
+        g.resume_owner = owner
+        return None
+    if state == "pending":
+        return jsonify({"pending": True}), 202
+    if state == "forbidden":
+        return None
+    status, ctype, body = state
+    return Response(body, status=status, content_type=ctype)
+
+
+@app.after_request
+def _resume_after(response):
+    key = getattr(g, "resume_key", None)
+    if key and not response.direct_passthrough:
+        try:
+            resume_cache.store(
+                key, g.resume_owner, response.status_code,
+                response.headers.get("Content-Type", "application/json"),
+                response.get_data(),
+            )
+        except Exception:
+            resume_cache.release(key)
+    return response
+
+
+@app.teardown_request
+def _resume_teardown(_exc):
+    key = getattr(g, "resume_key", None)
+    if key:
+        resume_cache.release(key)
+
+
+@app.route("/api/tools/result/<key>", methods=["GET"])
+def api_tools_result(key):
+    """Polled by the page after a dropped connection."""
+    if not resume_cache.valid_key(key):
+        return jsonify({"error": "Bad key."}), 400
+    state = resume_cache.lookup(key, _resume_owner())
+    if state is None or state == "forbidden":
+        return jsonify({"error": "No result found."}), 404
+    if state == "pending":
+        resp = jsonify({"pending": True})
+        resp.status_code = 202
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    status, ctype, body = state
+    resp = Response(body, status=200, content_type=ctype)
+    resp.headers["X-Original-Status"] = str(status)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 if __name__ == "__main__":
     # HARDENING: debug=True enables the Werkzeug interactive debugger, which
     # allows arbitrary remote code execution if the debug console is ever

@@ -115,6 +115,7 @@ def transcribe(
     *,
     model_path: Optional[str] = None,
     prompt: Optional[str] = None,
+    wait_sec: float = 0.0,
 ) -> dict:
     """Run whisper.cpp locally and return text, real segments and SRT."""
     if not is_configured():
@@ -132,12 +133,20 @@ def transcribe(
     try:
         # One local inference at a time: this VPS has only one CPU core.
         lock_file = open(LOCK_PATH, "a+")
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            acquired = True
-        except BlockingIOError:
-            lock_file.close()
-            return {"success": False, "error": "Local transcription is busy."}
+        # wait_sec > 0: queue behind the running job instead of failing at once
+        # (used by Video Redub so a second request waits rather than using Google).
+        deadline = time.monotonic() + max(0.0, float(wait_sec or 0.0))
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    lock_file.close()
+                    lock_file = None
+                    return {"success": False, "error": "Local transcription is busy."}
+                time.sleep(1.0)
 
         tmpdir = tempfile.mkdtemp(prefix="voxcraft-whisper-")
         input_path = os.path.join(tmpdir, "input.wav")
@@ -157,6 +166,8 @@ def transcribe(
             "-otxt",
             "-of", out_prefix,
             "-np",
+            # No carry-over context between windows: stops repetition loops
+            "-mc", "0",
         ]
         if language and language.lower() not in {"auto", "none", "detect"}:
             cmd.extend(["-l", language.lower().split("-")[0]])

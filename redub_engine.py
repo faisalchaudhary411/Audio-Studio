@@ -966,6 +966,7 @@ def local_whisper_transcribe_segments(
     result = local_whisper.transcribe(
         wav_bytes, language=whisper_lang, timeout_sec=int(timeout_sec),
         model_path=model_path, prompt=prompt,
+        wait_sec=float(os.environ.get("REDUB_WHISPER_QUEUE_SEC", "180")),
     )
     if not result.get("success"):
         err = (result.get("error") or "local Whisper failed").strip()[:180]
