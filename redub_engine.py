@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import os
 import re
 import subprocess
@@ -1123,6 +1124,73 @@ def google_transcribe_segments(
     return segments
 
 
+def sanitize_segments(segments: list[dict]) -> list[dict]:
+    """Make segment times safe for dubbing: sorted, positive length, and no
+    segment running into the next one (overlap = two dubbed lines "mingling")."""
+    segs = sorted((dict(s) for s in segments), key=lambda s: float(s.get("start_sec", 0.0)))
+    out: list[dict] = []
+    for s in segs:
+        start = max(0.0, float(s.get("start_sec", 0.0)))
+        end = float(s.get("end_sec", start))
+        if out and start < out[-1]["end_sec"]:
+            # Overlaps the previous line: pull the previous one back if that
+            # still leaves it a usable length, otherwise start this one later.
+            if start - out[-1]["start_sec"] >= 0.35:
+                out[-1]["end_sec"] = round(start - 0.03, 3)
+            else:
+                start = round(out[-1]["end_sec"] + 0.03, 3)
+        if end - start < 0.25:
+            end = start + 0.4
+        s["start_sec"], s["end_sec"] = round(start, 3), round(end, 3)
+        out.append(s)
+    return out
+
+
+def hybrid_transcribe_segments(audio_bytes: bytes, lang_code: str = "auto") -> list[dict]:
+    """Whisper for WHEN, Google for WHAT (all free).
+
+    local whisper.cpp + Silero VAD gives reliable speech boundaries; Google
+    Speech usually writes Hindi/Urdu words better than the small CPU model.
+    Each Whisper segment is cut out of the audio and sent to Google; if Google
+    returns nothing for a slice, that slice keeps Whisper's own text.
+    """
+    import speech_recognition as sr
+    from pydub import AudioSegment
+
+    segs = local_whisper_transcribe_segments(audio_bytes, lang_code)
+    google_lang = (
+        lang_code
+        if lang_code and str(lang_code).lower() not in ("auto", "none", "detect", "")
+        else "hi-IN"
+    )
+    audio = AudioSegment.from_file(io.BytesIO(audio_bytes)).set_frame_rate(16000).set_channels(1)
+    r = sr.Recognizer()
+    r.energy_threshold = 300
+    r.dynamic_energy_threshold = True
+    r.operation_timeout = 25
+
+    out: list[dict] = []
+    google_hits = 0
+    for seg in segs:
+        seg = dict(seg)
+        st = int(float(seg["start_sec"]) * 1000)
+        en = int(float(seg["end_sec"]) * 1000)
+        chunk = audio[max(0, st - 100): min(len(audio), en + 100)]
+        # Very short slices give Google nothing; very long ones often time out.
+        if 500 <= len(chunk) <= 14000:
+            try:
+                txt = clean_asr_text(_google_recognize_chunk(r, chunk, google_lang))
+            except Exception:
+                txt = ""
+            if txt:
+                seg["text"] = txt
+                google_hits += 1
+        seg["_engine"] = "hybrid"
+        out.append(seg)
+    print(f"[redub] hybrid: Google text for {google_hits}/{len(out)} Whisper-timed segments", flush=True)
+    return out
+
+
 def assemble_timed_dub(
     segment_audio: list[tuple[float, float, bytes]],
     total_duration_sec: float,
@@ -1199,6 +1267,9 @@ def assemble_timed_dub(
             clip = clip[:max_len]
         # Also never spill past this segment's original end by more than 120ms
         hard_cap = min(max_len, window_ms + 120)
+        if idx + 1 < len(segment_audio):
+            nxt_ms = int(float(segment_audio[idx + 1][0]) * 1000)
+            hard_cap = min(hard_cap, max(200, nxt_ms - start_ms - 30))
         if len(clip) > hard_cap:
             clip = clip[:hard_cap]
         timeline = timeline.overlay(clip, position=start_ms)
@@ -1208,33 +1279,133 @@ def assemble_timed_dub(
     return buf.getvalue()
 
 
-def redub_video(
+def _translate_segment(src: str, source_code: Optional[str], target_code: str, same_lang: bool) -> str:
+    """Translate one line (same rules as the full pipeline). Returns "" if it
+    cannot be translated, so that window stays silent instead of failing the job."""
+    if same_lang:
+        return (postprocess_translation(src) or src or "").strip()
+    try:
+        out = translate_text(src, target_code, source_lang_code=_segment_source_code(src, source_code))
+        # Latin-script target but the result is still mostly foreign script ->
+        # retry with auto-detect; if still untranslated keep the window silent.
+        if target_code.split("-")[0].lower() in _LATIN_TARGETS and _non_latin_ratio(out) > 0.3:
+            out = translate_text(src, target_code, source_lang_code=None)
+            if _non_latin_ratio(out) > 0.3:
+                print(f"[redub] untranslated segment dropped: {src[:60]!r}", flush=True)
+                return ""
+        return (out or "").strip()
+    except UserFacingError:
+        return ""
+
+
+def translate_line(text: str, source_lang: str, target_studio_lang: str) -> str:
+    """Re-translate one edited line (used by the review screen)."""
+    text = (text or "").strip()
+    if not text:
+        return ""
+    source_lang = (source_lang or "auto").strip()
+    if source_lang not in TRANSCRIBE_LANGS:
+        source_lang = "auto"
+    target_code = _code_for_studio_lang(target_studio_lang)
+    source_code = None
+    if source_lang != "auto":
+        source_code = source_lang.split("-")[0].lower()
+        if source_code == "zh":
+            source_code = "zh-Hans"
+    same_lang = bool(source_code and source_code.split("-")[0] == target_code.split("-")[0])
+    return _translate_segment(clean_asr_text(text), source_code, target_code, same_lang)
+
+
+# ---------------------------------------------------------------------------
+# Review sessions: phase 1 (transcribe + translate) stores the video and the
+# editable lines on disk so phase 2 (voice + mux) can run after the user has
+# fixed the text, and can be re-run with another voice without re-uploading.
+# ---------------------------------------------------------------------------
+REDUB_JOB_DIR = os.environ.get("REDUB_JOB_DIR", "/tmp/voxcraft_redub_jobs")
+REDUB_JOB_MAX_AGE_SEC = 45 * 60
+_JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def sweep_redub_jobs() -> None:
+    import shutil
+    cutoff = time.time() - REDUB_JOB_MAX_AGE_SEC
+    try:
+        for name in os.listdir(REDUB_JOB_DIR):
+            path = os.path.join(REDUB_JOB_DIR, name)
+            try:
+                if os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+                    shutil.rmtree(path, ignore_errors=True)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def save_redub_job(video_bytes: bytes, filename: str, analysis: dict, owner: str) -> str:
+    import secrets
+    os.makedirs(REDUB_JOB_DIR, mode=0o700, exist_ok=True)
+    sweep_redub_jobs()
+    job_id = secrets.token_hex(16)
+    d = os.path.join(REDUB_JOB_DIR, job_id)
+    os.makedirs(d, mode=0o700)
+    with open(os.path.join(d, "video.bin"), "wb") as f:
+        f.write(video_bytes)
+    state = dict(analysis)
+    state.update({"filename": filename or "video.mp4", "owner": owner, "ts": time.time()})
+    with open(os.path.join(d, "state.json"), "w", encoding="utf-8") as f:
+        json.dump(state, f, ensure_ascii=False)
+    return job_id
+
+
+def check_redub_job(job_id: str, owner: str) -> bool:
+    """Cheap ownership/expiry check (reads only state.json, not the video)."""
+    if not _JOB_ID_RE.match(job_id or ""):
+        return False
+    try:
+        with open(os.path.join(REDUB_JOB_DIR, job_id, "state.json"), "r", encoding="utf-8") as f:
+            state = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return state.get("owner") == owner and (time.time() - float(state.get("ts") or 0)) < 24 * 3600
+
+
+def load_redub_job(job_id: str, owner: str) -> tuple[bytes, str, dict]:
+    expired = UserFacingError(
+        "This review session has expired (they are kept for 45 minutes). "
+        "Please upload the video and transcribe it again."
+    )
+    if not _JOB_ID_RE.match(job_id or ""):
+        raise expired
+    d = os.path.join(REDUB_JOB_DIR, job_id)
+    try:
+        with open(os.path.join(d, "state.json"), "r", encoding="utf-8") as f:
+            state = json.load(f)
+        with open(os.path.join(d, "video.bin"), "rb") as f:
+            video = f.read()
+    except (OSError, ValueError):
+        raise expired
+    if state.get("owner") != owner:
+        raise expired
+    try:
+        os.utime(d, None)  # active session: keep it alive
+    except OSError:
+        pass
+    return video, state.get("filename") or "video.mp4", state
+
+
+def redub_analyze(
     video_bytes: bytes,
     filename: str,
     *,
     source_lang: str = "auto",
     target_studio_lang: str = "US English",
-    voice_id: str = "en-US-JennyNeural",
-    voice_id_b: Optional[str] = None,
-    speed_pct: int = 100,
-    match_length: bool = True,
     asr_engine: str = "auto",
     denoise_audio: bool = False,
 ) -> dict:
-    """
-    Full redub pipeline. Returns dict with download tokens (not base64) for
-    video/audio, plus transcript metadata.
+    """Phase 1: extract audio -> (denoise) -> transcribe -> translate.
 
-    voice_id_b: optional second stock voice. When set, segments alternate
-    voice_id / voice_id_b (cheap two-speaker approximation, no diarization).
-
-    asr_engine: "auto" | "whisper" | "google"
-      (forced to "google" unless features.REDUB_WHISPER_ENABLED is on)
-      - auto: Whisper first (if configured), Google fallback
-      - whisper: Whisper only (error if unavailable)
-      - google: Google only (previous behaviour)
-    """
-    check_file_size(video_bytes, max_mb=MAX_VIDEO_MB)
+    Returns the editable lines plus what phase 2 needs. Nothing is voiced and
+    no TTS characters are used."""
     sweep_redub_outputs()
 
     # Early duration reject — before extract/transcribe/TTS burn CPU
@@ -1248,7 +1419,6 @@ def redub_video(
     source_lang = (source_lang or "auto").strip()
     if source_lang not in TRANSCRIBE_LANGS:
         source_lang = "auto"
-    voice_id_b = (voice_id_b or "").strip() or None
 
     # ---- 1. Extract audio ----
     audio_bytes = video_to_audio(video_bytes, filename, output_format="mp3", quality_kbps=192)
@@ -1310,9 +1480,13 @@ def redub_video(
         and modal_whisper.is_configured()
     )
 
+    src_base = (source_lang or "").split("-")[0].strip().lower()
     if asr_engine == "google":
         order = ["google"]
-    else:  # "auto" and "whisper": best engine first, Google is always the last resort
+    elif asr_engine == "auto" and local_ok and src_base in ("hi", "ur"):
+        # Hindi/Urdu: Whisper's timestamps + Google's words (best free combo)
+        order = ["hybrid", "local"] + (["modal"] if modal_ok else []) + ["google"]
+    else:  # "whisper" (Whisper text only), or "auto" for other languages
         order = (["local"] if local_ok else []) + (["modal"] if modal_ok else []) + ["google"]
 
     segments: list[dict] = []
@@ -1320,6 +1494,7 @@ def redub_video(
     asr_note = None
 
     runners = {
+        "hybrid": (lambda: hybrid_transcribe_segments(asr_audio, source_lang), "hybrid"),
         "local": (lambda: local_whisper_transcribe_segments(asr_audio, source_lang), "local_whisper"),
         "modal": (lambda: whisper_transcribe_segments(asr_audio, source_lang, timeout_sec=150.0), "whisper"),
         "google": (lambda: google_transcribe_segments(asr_audio, "extracted.mp3", source_lang), "google"),
@@ -1333,7 +1508,7 @@ def redub_video(
         except Exception as e:
             if name == "google":
                 raise
-            asr_note = f"{name} Whisper unavailable ({str(e)[:120]}); used Google Speech."
+            asr_note = f"{name} transcription unavailable ({str(e)[:120]}); used the next engine."
             print(f"[redub] {name} Whisper failed, falling back: {e}", flush=True)
     else:
         raise UserFacingError("No transcription engine available.")
@@ -1343,6 +1518,7 @@ def redub_video(
     print(f"[redub] ASR engine used: {used_engine} (requested={asr_engine}, order={order})", flush=True)
     if denoise_note:
         asr_note = f"{asr_note} {denoise_note}".strip() if asr_note else denoise_note
+    segments = sanitize_segments(segments)
 
     if segments and segments[0].get("_total_duration_sec"):
         original_dur = float(segments[0]["_total_duration_sec"]) or original_dur
@@ -1363,32 +1539,9 @@ def redub_video(
     translation_note = None
     translated_parts: list[str] = []
     for seg in segments:
-        src = seg["text"]
-        if same_lang:
-            # Still run number / Hinglish cleanup even when not translating
-            seg["translated"] = postprocess_translation(src) or src
-        else:
-            try:
-                seg["translated"] = translate_text(
-                    src, target_code, source_lang_code=_segment_source_code(src, source_code)
-                )
-                # Latin-script target (English etc.) but result is still mostly
-                # foreign script -> translator ignored us. Retry with auto-detect,
-                # and if it is still untranslated keep the window silent rather
-                # than letting the English voice read Urdu/Arabic text.
-                if target_code.split("-")[0].lower() in _LATIN_TARGETS and \
-                        _non_latin_ratio(seg["translated"]) > 0.3:
-                    seg["translated"] = translate_text(src, target_code, source_lang_code=None)
-                    if _non_latin_ratio(seg["translated"]) > 0.3:
-                        print(f"[redub] untranslated segment dropped: {src[:60]!r}", flush=True)
-                        seg["translated"] = ""
-            except UserFacingError:
-                seg["translated"] = ""
-        if not (seg.get("translated") or "").strip():
-            # Keep window silent rather than failing the whole job
-            seg["translated"] = ""
-        else:
-            translated_parts.append(seg["translated"].strip())
+        seg["translated"] = _translate_segment(seg["text"], source_code, target_code, same_lang)
+        if seg["translated"]:
+            translated_parts.append(seg["translated"])
 
     translated = " ".join(translated_parts).strip()
     if not translated:
@@ -1403,6 +1556,50 @@ def redub_video(
                 f"(source ~{src_sentences} sentences, translation ~{tgt_sentences}). "
                 "Check the transcript below and try again if something important is missing."
             )
+
+    for seg in segments:
+        seg.pop("_total_duration_sec", None)
+        seg.pop("_engine", None)
+    return {
+        "segments": segments,
+        "original_dur": float(original_dur or 0),
+        "used_engine": used_engine,
+        "asr_note": asr_note,
+        "translation_note": translation_note,
+        "same_lang": bool(same_lang),
+        "source_lang": source_lang,
+        "target_studio_lang": target_studio_lang,
+    }
+
+
+def redub_render(
+    video_bytes: bytes,
+    filename: str,
+    analysis: dict,
+    *,
+    voice_id: str = "en-US-JennyNeural",
+    voice_id_b: Optional[str] = None,
+    speed_pct: int = 100,
+    match_length: bool = True,
+    edited: bool = False,
+) -> dict:
+    """Phase 2: voice every (possibly edited) line, place it on the timeline,
+    mux onto the original picture. `analysis` comes from redub_analyze, with
+    the user's edits already merged into analysis["segments"]."""
+    segments = [dict(sg) for sg in analysis["segments"]]
+    original_dur = float(analysis.get("original_dur") or 0)
+    used_engine = analysis.get("used_engine") or "google"
+    asr_note = analysis.get("asr_note")
+    translation_note = None if edited else analysis.get("translation_note")
+    same_lang = bool(analysis.get("same_lang"))
+    target_studio_lang = analysis.get("target_studio_lang") or "US English"
+    voice_id_b = (voice_id_b or "").strip() or None
+    transcript = " ".join((sg.get("text") or "").strip() for sg in segments).strip()
+    translated = " ".join(
+        (sg.get("translated") or "").strip() for sg in segments if (sg.get("translated") or "").strip()
+    ).strip()
+    if not translated:
+        raise UserFacingError("Nothing to voice: every line is empty or skipped.")
 
     # ---- 4. TTS per segment + place on timeline (timed dub) ----
     speed_pct = max(50, min(200, int(speed_pct or 100)))
@@ -1456,7 +1653,11 @@ def redub_video(
     tts_dur_final = total_dur
     silent_tail_sec = 0.0
     trimmed_sec = 0.0
-    asr_label = {"local_whisper": "Whisper (CPU)", "whisper": "Whisper (GPU)"}.get(used_engine, "Google Speech")
+    asr_label = {
+        "hybrid": "Whisper timing + Google text",
+        "local_whisper": "Whisper (CPU)",
+        "whisper": "Whisper (GPU)",
+    }.get(used_engine, "Google Speech")
     length_note = (
         f"Timed dub: {len(timed_clips)} speech window(s) via {asr_label}. "
         "Segment times come from voice-activity detection on the original audio; lines may borrow "
@@ -1516,3 +1717,29 @@ def redub_video(
         "asr_engine": used_engine,
         "dual_voice": dual_voice,
     }
+
+
+def redub_video(
+    video_bytes: bytes,
+    filename: str,
+    *,
+    source_lang: str = "auto",
+    target_studio_lang: str = "US English",
+    voice_id: str = "en-US-JennyNeural",
+    voice_id_b: Optional[str] = None,
+    speed_pct: int = 100,
+    match_length: bool = True,
+    asr_engine: str = "auto",
+    denoise_audio: bool = False,
+) -> dict:
+    """One-step redub (no review): redub_analyze() then redub_render()."""
+    analysis = redub_analyze(
+        video_bytes, filename,
+        source_lang=source_lang, target_studio_lang=target_studio_lang,
+        asr_engine=asr_engine, denoise_audio=denoise_audio,
+    )
+    return redub_render(
+        video_bytes, filename, analysis,
+        voice_id=voice_id, voice_id_b=voice_id_b,
+        speed_pct=speed_pct, match_length=match_length,
+    )

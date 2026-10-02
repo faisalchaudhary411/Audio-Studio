@@ -4969,6 +4969,233 @@ def api_redub():
     })
 
 
+# ---------------------------------------------------------------------------
+# Redub with a review step: analyze (transcribe + translate) -> user edits the
+# lines -> render (voice + mux). Counters are bumped when analysis succeeds
+# (that is the expensive part); re-rendering with another voice only uses TTS
+# characters.
+# ---------------------------------------------------------------------------
+_REDUB_ENGINE_LABELS = {
+    "hybrid": "Whisper timing + Google text",
+    "local_whisper": "Whisper (CPU)",
+    "whisper": "Whisper (GPU)",
+    "google": "Google Speech",
+}
+
+
+def _redub_gate_error():
+    """Pro + daily/monthly limit checks shared by the review flow. Returns a
+    (response, status) tuple to send, or None when the request may proceed."""
+    if not can("redub.use"):
+        return jsonify({
+            "error": "Video redub is a Pro feature. Upgrade to Pro to redub videos with any of the 88 stock voices.",
+            "upgrade_url": "/pricing",
+        }), 402
+    lim = get_limits()
+    daily_limit = int(lim.get("REDUB_DAILY_LIMIT_PRO") or 0)
+    monthly_limit = int(lim.get("REDUB_MONTHLY_LIMIT_PRO") or 0)
+    if daily_limit > 0:
+        if usage_tracking.get_daily_counter(request, "usage_redub") >= daily_limit:
+            return jsonify({
+                "error": f"Daily redub limit reached ({daily_limit}/day). Try again tomorrow, or contact support if you need more.",
+            }), 429
+    if monthly_limit > 0:
+        lk = _effective_license_key()
+        used_m = usage_tracking.get_license_monthly_counter(lk, "usage_redub") if lk else 0
+        if used_m >= monthly_limit:
+            return jsonify({
+                "error": f"Monthly redub limit reached ({monthly_limit}/month). Resets next billing cycle.",
+            }), 429
+    return None
+
+
+@app.route("/api/tools/redub/analyze", methods=["POST"])
+def api_redub_analyze():
+    """Phase 1: transcribe + translate, return editable lines (nothing is voiced)."""
+    gate = _redub_gate_error()
+    if gate:
+        return gate
+
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No video file uploaded."}), 400
+    source_lang = (request.form.get("source_lang") or "auto").strip()
+    target_lang = (request.form.get("target_lang") or "US English").strip()
+    asr_engine = (request.form.get("asr_engine") or "auto").strip().lower()
+    if asr_engine not in ("auto", "whisper", "google"):
+        asr_engine = "auto"
+    denoise_audio = (request.form.get("denoise_audio") or "0").strip().lower() in ("1", "true", "on", "yes")
+    if target_lang not in VOICES:
+        return jsonify({"error": "Unknown target language."}), 400
+    video_bytes = file.read()
+    if not video_bytes:
+        return jsonify({"error": "Empty file."}), 400
+
+    try:
+        analysis = redub_engine.redub_analyze(
+            video_bytes, file.filename or "video.mp4",
+            source_lang=source_lang, target_studio_lang=target_lang,
+            asr_engine=asr_engine, denoise_audio=denoise_audio,
+        )
+        job_id = redub_engine.save_redub_job(
+            video_bytes, file.filename or "video.mp4", analysis, _resume_owner()
+        )
+    except Exception as e:
+        return api_error(e, "transcribe this video")
+
+    _bump_counter("usage_redub")
+    lk = _effective_license_key()
+    if lk:
+        usage_tracking.bump_license_monthly_counter(lk, "usage_redub", 1)
+
+    return jsonify({
+        "job_id": job_id,
+        "segments": [
+            {
+                "i": i,
+                "start": round(float(sg["start_sec"]), 2),
+                "end": round(float(sg["end_sec"]), 2),
+                "text": sg.get("text") or "",
+                "translated": sg.get("translated") or "",
+            }
+            for i, sg in enumerate(analysis["segments"])
+        ],
+        "duration_sec": round(float(analysis.get("original_dur") or 0), 2),
+        "same_lang": bool(analysis.get("same_lang")),
+        "source_lang": analysis.get("source_lang"),
+        "target_lang": target_lang,
+        "engine_label": _REDUB_ENGINE_LABELS.get(analysis.get("used_engine"), "Google Speech"),
+        "notes": [n for n in (analysis.get("translation_note"),) if n],
+    })
+
+
+@app.route("/api/tools/redub/translate-line", methods=["POST"])
+def api_redub_translate_line():
+    """Re-translate one edited line (only for an active review session)."""
+    if not can("redub.use"):
+        return jsonify({"error": "Video redub is a Pro feature.", "upgrade_url": "/pricing"}), 402
+    data = request.get_json(silent=True) or {}
+    if not redub_engine.check_redub_job(str(data.get("job_id") or ""), _resume_owner()):
+        return jsonify({"error": "This review session has expired. Transcribe the video again."}), 410
+    text = str(data.get("text") or "").strip()[:1000]
+    target_lang = str(data.get("target_lang") or "US English").strip()
+    if target_lang not in VOICES:
+        return jsonify({"error": "Unknown target language."}), 400
+    if not text:
+        return jsonify({"translated": ""})
+    try:
+        out = redub_engine.translate_line(text, str(data.get("source_lang") or "auto"), target_lang)
+    except Exception as e:
+        return api_error(e, "translate this line")
+    return jsonify({"translated": out})
+
+
+@app.route("/api/tools/redub/render", methods=["POST"])
+def api_redub_render():
+    """Phase 2: voice the (edited) lines and mux onto the original video."""
+    if not can("redub.use"):
+        return jsonify({
+            "error": "Video redub is a Pro feature. Upgrade to Pro to redub videos with any of the 88 stock voices.",
+            "upgrade_url": "/pricing",
+        }), 402
+    data = request.get_json(silent=True) or {}
+    voice_id = str(data.get("voice_id") or "").strip()
+    voice_id_b = str(data.get("voice_id_b") or "").strip()
+    try:
+        speed_pct = int(data.get("speed_pct") or 100)
+    except (TypeError, ValueError):
+        speed_pct = 100
+    match_length = bool(data.get("match_length", True))
+
+    try:
+        video_bytes, filename, state = redub_engine.load_redub_job(
+            str(data.get("job_id") or ""), _resume_owner()
+        )
+    except redub_engine.UserFacingError as e:
+        return jsonify({"error": str(e)}), 410
+
+    if not voice_id:
+        return jsonify({"error": "Pick a target voice."}), 400
+    lang_voices = set((VOICES.get(state.get("target_studio_lang")) or {}).values())
+    if voice_id not in lang_voices or (voice_id_b and voice_id_b not in lang_voices):
+        return jsonify({
+            "error": "That voice doesn't match the language this transcript was translated into. "
+                     "Choose a voice for the same language, or press Redub video again after changing the language."
+        }), 400
+
+    # Merge the user's edits into the stored lines
+    edits = {}
+    for e in (data.get("segments") or []):
+        if isinstance(e, dict):
+            try:
+                edits[int(e.get("i"))] = e
+            except (TypeError, ValueError):
+                continue
+    total_chars = 0
+    for i, seg in enumerate(state.get("segments") or []):
+        e = edits.get(i)
+        if e is not None:
+            if e.get("skip"):
+                seg["translated"] = ""
+            else:
+                seg["translated"] = str(e.get("translated") or "").strip()[:1500]
+            new_text = str(e.get("text") or "").strip()[:1000]
+            if new_text:
+                seg["text"] = new_text
+        total_chars += len((seg.get("translated") or "").strip())
+    if total_chars <= 0:
+        return jsonify({"error": "Nothing to voice: every line is empty or skipped."}), 400
+    if total_chars > 20000:
+        return jsonify({"error": "That is too much text for one redub (20,000 characters max)."}), 400
+    if _would_exceed_pro_tts_quota(total_chars):
+        return jsonify({
+            "error": f"This redub would use {total_chars:,} characters and exceed your monthly TTS quota "
+                     f"({_tts_monthly_quota_for_plan():,}/month). Quota resets next month."
+        }), 429
+
+    try:
+        result = redub_engine.redub_render(
+            video_bytes, filename, state,
+            voice_id=voice_id, voice_id_b=voice_id_b or None,
+            speed_pct=speed_pct, match_length=match_length, edited=True,
+        )
+    except Exception as e:
+        return api_error(e, "redub this video")
+
+    char_count = int(result.get("char_count") or 0)
+    if char_count:
+        try:
+            _bump_monthly_chars(char_count)
+            _bump_pro_tts_chars(char_count)
+        except Exception:
+            pass
+
+    return jsonify({
+        "download_video_url": result.get("download_video_url"),
+        "download_audio_url": result.get("download_audio_url"),
+        "video_token": result.get("video_token"),
+        "audio_token": result.get("audio_token"),
+        "filename": result["filename"],
+        "audio_filename": result["audio_filename"],
+        "transcript": result["transcript"],
+        "translated": result["translated"],
+        "length_matched": result.get("length_matched", False),
+        "original_duration_sec": result.get("original_duration_sec"),
+        "length_note": result.get("length_note"),
+        "voice_note": result.get("voice_note"),
+        "translation_note": result.get("translation_note"),
+        "char_count": char_count,
+        "size_kb": result["size_kb"],
+        "audio_size_kb": result["audio_size_kb"],
+        "skipped_translation": result.get("skipped_translation", False),
+        "target_lang": result.get("target_lang"),
+        "voice_id": result.get("voice_id"),
+        "timed_segments": result.get("timed_segments", 0),
+        "engine": result.get("engine", "google_timed"),
+        "job_id": str(data.get("job_id") or ""),
+    })
+
+
 @app.route("/api/tools/redub/download/<token>", methods=["GET"])
 def api_redub_download(token):
     """Serve a short-lived redub output file (video or audio). Tokens expire in ~10 min."""
