@@ -1,5 +1,53 @@
 // ===== VoxCraft — Tools hub (shared with /tools/<slug> pages) =====
 (function () {
+  // ---- Network-drop recovery ----
+  // Tool requests can outlive the phone's connection (screen off, tab in the
+  // background, network switch). The server keeps working and saves the result
+  // under X-Request-Key; if fetch() throws we poll for that saved result and
+  // hand back a normal Response, so every caller's existing res.ok/res.json()
+  // code works unchanged and nothing is re-run or double-counted.
+  async function resumableFetch(url, opts) {
+    opts = opts || {};
+    let key = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID().replace(/-/g, '')
+      : (Date.now().toString(16) + Math.random().toString(16).slice(2) + '0000000000000000');
+    key = key.slice(0, 48);
+    const headers = new Headers(opts.headers || {});
+    headers.set('X-Request-Key', key);
+    try {
+      return await fetch(url, Object.assign({}, opts, { headers: headers }));
+    } catch (netErr) {
+      return await pollResumedResult(key, netErr);
+    }
+  }
+
+  async function pollResumedResult(key, netErr) {
+    const deadline = Date.now() + 11 * 60 * 1000;   // server gives up at ~11 min
+    let notFound = 0;
+    while (Date.now() < deadline) {
+      await new Promise(function (r) { setTimeout(r, 3000); });
+      let r;
+      try {
+        r = await resumableFetch('/api/tools/result/' + key, { cache: 'no-store' });
+      } catch (_) { continue; }                    // still offline: keep trying
+      if (r.status === 202) { notFound = 0; continue; }   // server still working
+      if (r.status === 404) {                      // never reached the server
+        if (++notFound >= 8) break;                // ~25s grace for queued requests
+        continue;
+      }
+      if (r.ok) {
+        const status = parseInt(r.headers.get('X-Original-Status') || '200', 10);
+        const body = await r.arrayBuffer();
+        return new Response(body, {
+          status: status,
+          headers: { 'Content-Type': r.headers.get('Content-Type') || 'application/json' },
+        });
+      }
+      break;
+    }
+    throw netErr;
+  }
+
   // ---- Tab switching (hub only; individual tool pages have one panel) ----
   const tabs = document.querySelectorAll('[data-tool-tab]');
   const panels = {
@@ -375,7 +423,7 @@
     form.append('file', file);
     form.append('lang_code', document.getElementById('transcribe-lang').value);
     try {
-      const res = await fetch('/api/tools/transcribe', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/transcribe', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(transcribeResult, transcribeStatus, data, 'Transcription failed.');
@@ -505,7 +553,7 @@
     const presetEl = document.getElementById('convert-preset');
     if (presetEl && presetEl.value) form.append('preset', presetEl.value);
     try {
-      const res = await fetch('/api/tools/convert', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/convert', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(convertResult, convertStatus, data, 'Conversion failed.');
@@ -545,7 +593,7 @@
     form.append('file', file);
     form.append('level', document.getElementById('compress-level').value);
     try {
-      const res = await fetch('/api/tools/compress', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/compress', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(compressResult, compressStatus, data, 'Compression failed.');
@@ -590,7 +638,7 @@
     form.append('file', file);
     form.append('preset', preset);
     try {
-      const res = await fetch('/api/tools/decompress', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/decompress', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(decompressResult, decompressStatus, data, 'Decompression failed.');
@@ -695,7 +743,7 @@
     form.append('crossfade_ms', cf && cf.value !== '' ? cf.value : '0');
     form.append('output_format', document.getElementById('merge-format').value);
     try {
-      const res = await fetch('/api/tools/merge', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/merge', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(mergeResult, mergeStatus, data, 'Merge failed.');
@@ -746,7 +794,7 @@
       const form = new FormData();
       form.append('file', file);
       try {
-        const res = await fetch('/api/tools/cutter/duration', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/cutter/duration', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           if (cutterDuration) cutterDuration.textContent = friendlyError(data, 'Could not read file.');
@@ -783,7 +831,7 @@
     try {
       if (cutterMode === 'auto') {
         if (cutterStatus) cutterStatus.textContent = 'Auto-trimming silence…';
-        const res = await fetch('/api/tools/cutter/auto-trim', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/cutter/auto-trim', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           setToolError(cutterResult, cutterStatus, data, 'Auto-trim failed.');
@@ -795,7 +843,7 @@
         if (cutterStatus) cutterStatus.textContent = 'Trimming…';
         form.append('start_sec', document.getElementById('cutter-start').value);
         form.append('end_sec', document.getElementById('cutter-end').value);
-        const res = await fetch('/api/tools/cutter/trim', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/cutter/trim', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           setToolError(cutterResult, cutterStatus, data, 'Trim failed.');
@@ -807,7 +855,7 @@
         if (cutterStatus) cutterStatus.textContent = 'Splitting…';
         const splitEl = document.getElementById('cutter-split') || document.getElementById('cutter-split-at');
         form.append('split_sec', splitEl ? splitEl.value : '0');
-        const res = await fetch('/api/tools/cutter/split', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/cutter/split', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           setToolError(cutterResult, cutterStatus, data, 'Split failed.');
@@ -914,7 +962,7 @@
     const ps = document.getElementById('denoise-preserve-stereo');
     form.append('preserve_stereo', ps && ps.checked ? '1' : '0');
     try {
-      const res = await fetch('/api/tools/denoise', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/denoise', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(denoiseResult, denoiseStatus, data, 'Denoise failed.');
@@ -1013,7 +1061,7 @@
       if (vcDecay) form.append('decay', vcDecay.value);
     }
     try {
-      const res = await fetch('/api/tools/voicechange', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/voicechange', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(vcResult, vcStatus, data, 'Effect failed.');
@@ -1074,7 +1122,7 @@
     if (vxs && vxs.value !== '') form.append('start_sec', vxs.value);
     if (vxe && vxe.value !== '') form.append('end_sec', vxe.value);
     try {
-      const res = await fetch('/api/tools/videoxtract', { method: 'POST', body: form });
+      const res = await resumableFetch('/api/tools/videoxtract', { method: 'POST', body: form });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setToolError(vxResult, vxStatus, data, 'Extraction failed.');
@@ -1156,7 +1204,7 @@
       form.append('target_lufs', currentTargetLufs());
       form.append('output_format', (document.getElementById('normalize-format') || {}).value || 'mp3');
       try {
-        const res = await fetch('/api/tools/normalize', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/normalize', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Normalize failed.'); return; }
         let statusText = `Done · ${data.size_kb || ''} KB`;
@@ -1193,7 +1241,7 @@
       form.append('gain_db', gain ? gain.value : '0');
       form.append('output_format', (document.getElementById('volume-format') || {}).value || 'mp3');
       try {
-        const res = await fetch('/api/tools/volume', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/volume', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Volume adjust failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
@@ -1237,7 +1285,7 @@
       const pp = document.getElementById('speed-preserve-pitch');
       form.append('preserve_pitch', pp && pp.checked ? '1' : '0');
       try {
-        const res = await fetch('/api/tools/speed', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/speed', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Speed change failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
@@ -1273,7 +1321,7 @@
       form.append('fade_out_ms', fout ? fout.value : '0');
       form.append('output_format', (document.getElementById('fade-format') || {}).value || 'mp3');
       try {
-        const res = await fetch('/api/tools/fade', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/fade', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Fade failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
@@ -1309,7 +1357,7 @@
       form.append('silence_thresh_db', thr ? thr.value : '-40');
       form.append('output_format', (document.getElementById('split-format') || {}).value || 'mp3');
       try {
-        const res = await fetch('/api/tools/split-silence', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/split-silence', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Split failed.'); return; }
         const clips = data.clips || [];
@@ -1402,7 +1450,7 @@
       form.append('file', file);
       if (opts.append) opts.append(form);
       try {
-        const res = await fetch(opts.url, { method: 'POST', body: form });
+        const res = await resumableFetch(opts.url, { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
@@ -1582,7 +1630,7 @@
       form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
 
       try {
-        const res = await fetch('/api/tools/redub', { method: 'POST', body: form });
+        const res = await resumableFetch('/api/tools/redub', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           const msg = data.error || 'Redub failed.';
