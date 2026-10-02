@@ -1578,6 +1578,8 @@
       form.append('speed_pct', speed ? speed.value : '100');
       const matchEl = document.getElementById('redub-match-length');
       form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
+      const dnEl = document.getElementById('redub-denoise-audio');
+      form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
 
       try {
         const res = await fetch('/api/tools/redub', { method: 'POST', body: form });
