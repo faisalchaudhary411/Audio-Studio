@@ -54,11 +54,11 @@
 
     <div class="redub-field">
       <label class="redub-label" for="redub-asr-engine">Transcription engine</label>
-      <span class="redub-label-hint">Whisper = better Hindi / numbers</span>
+      <span class="redub-label-hint">Auto is best for Hindi / Urdu</span>
       <select id="redub-asr-engine" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
-        <option value="auto" selected>Auto (Whisper, Google fallback)</option>
-        <option value="whisper">Whisper (best quality)</option>
-        <option value="google">Google Speech (fast)</option>
+        <option value="auto" selected>Auto (Whisper timing + Google words)</option>
+        <option value="whisper">Whisper only</option>
+        <option value="google">Google only</option>
       </select>
     </div>
 
@@ -121,6 +121,15 @@
     </span>
   </label>
 
+  <label class="redub-review-opt" style="display:flex;align-items:center;gap:8px;margin:0 0 14px;cursor:pointer;">
+    <input type="checkbox" id="redub-review" checked {% if not is_pro_ctx %}disabled{% endif %}
+           style="width:16px;height:16px;accent-color:var(--brass);">
+    <span style="font-size:0.88rem;color:var(--text-mid);">
+      Review and edit the transcript before the voice is made
+      <span style="color:var(--text-dim);font-size:0.8rem;"> — recommended: fix misheard words, then generate</span>
+    </span>
+  </label>
+
   <div class="render-bar redub-actions">
     <button class="btn btn--brass" id="redub-btn" {% if not is_pro_ctx %}disabled{% endif %}>Redub video</button>
     <span class="render-status" data-redub-status></span>
@@ -128,6 +137,8 @@
   <div class="progress-bar" id="redub-progress" aria-hidden="true">
     <div class="progress-bar__fill"></div>
   </div>
+
+  <div id="redub-review-box" class="redub-review" hidden></div>
 
   <div id="redub-result" class="redub-result"></div>
 </div>
