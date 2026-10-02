@@ -111,7 +111,8 @@ _TRANSLATE_GLOSSARY = [
     # --- Microsoft Word punchline (many ASR/MT variants) ---
     (r"\bmico\s*(?:soft)?\b", "Microsoft Word", re.I),
     (r"\bso\s+mico\b", "Microsoft Word", re.I),
-    (r"\bmicro\s*soft(?:\s*word)?\b", "Microsoft Word", re.I),
+    (r"\bmicro\s*soft\s+word\b", "Microsoft Word", re.I),
+    (r"\bmicro\s+soft\b", "Microsoft", re.I),
     (r"\bmicrosoft\s+word\b", "Microsoft Word", re.I),
     (r"\bms\s+word\b", "Microsoft Word", re.I),
     (r"\brun\s+uber\b", "run Microsoft Word", re.I),
@@ -156,11 +157,25 @@ def _apply_pattern_list(text: str, patterns: list) -> str:
     return out
 
 
+_REPEAT_RE = re.compile(r"(\b[\w'’]+(?:\s+[\w'’]+){0,5})(?:[\s,.]+\1\b){2,}", re.I)
+
+
+def collapse_repeats(text: str) -> str:
+    """Whisper sometimes loops ("price of the price of the ..."). Keep one copy
+    of any 1-6 word phrase repeated 3+ times in a row."""
+    prev = None
+    while prev != text:
+        prev = text
+        text = _REPEAT_RE.sub(r"\1", text)
+    return text
+
+
 def clean_asr_text(text: str) -> str:
     """Light cleanup of ASR output (Hinglish typos, clipped words)."""
     text = (text or "").strip()
     if not text:
         return ""
+    text = collapse_repeats(text)
     text = _apply_pattern_list(text, _ASR_FIXES)
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"\s+([,.!?])", r"\1", text)
@@ -1208,6 +1223,7 @@ def redub_video(
     speed_pct: int = 100,
     match_length: bool = True,
     asr_engine: str = "auto",
+    denoise_audio: bool = False,
 ) -> dict:
     """
     Full redub pipeline. Returns dict with download tokens (not base64) for
@@ -1263,6 +1279,26 @@ def redub_video(
             f"{MAX_DURATION_SEC // 60} minutes. Trim the video first, or wait for longer limits."
         )
 
+    # ---- 1b. Optional: denoise the extracted AUDIO (never the video) ----
+    # The cleaned copy is used ONLY as input to speech recognition. Segment times
+    # are unchanged (same duration), and the original picture/video is untouched.
+    asr_audio = audio_bytes
+    denoise_note = None
+    if denoise_audio:
+        try:
+            import audio_tools
+            try:
+                asr_audio = audio_tools.denoise_studio(audio_bytes, "extracted.mp3", "mp3")
+                denoise_note = "Audio denoised (AI speech enhancement) before transcription."
+            except Exception as e_studio:
+                print(f"[redub] studio denoise unavailable, using standard: {e_studio}", flush=True)
+                asr_audio = audio_tools.denoise(audio_bytes, "extracted.mp3", strength=0.7, stationary=False)
+                denoise_note = "Audio denoised (standard) before transcription."
+        except Exception as e_std:
+            print(f"[redub] denoise failed, transcribing original audio: {e_std}", flush=True)
+            asr_audio = audio_bytes
+            denoise_note = "Denoise failed; used the original audio for transcription."
+
     # ---- 2. Transcribe timed segments (Whisper preferred, Google fallback) ----
     asr_engine = (asr_engine or "auto").strip().lower()
     if asr_engine not in ("auto", "whisper", "google"):
@@ -1288,9 +1324,9 @@ def redub_video(
     asr_note = None
 
     runners = {
-        "local": (lambda: local_whisper_transcribe_segments(audio_bytes, source_lang), "local_whisper"),
-        "modal": (lambda: whisper_transcribe_segments(audio_bytes, source_lang, timeout_sec=150.0), "whisper"),
-        "google": (lambda: google_transcribe_segments(audio_bytes, "extracted.mp3", source_lang), "google"),
+        "local": (lambda: local_whisper_transcribe_segments(asr_audio, source_lang), "local_whisper"),
+        "modal": (lambda: whisper_transcribe_segments(asr_audio, source_lang, timeout_sec=150.0), "whisper"),
+        "google": (lambda: google_transcribe_segments(asr_audio, "extracted.mp3", source_lang), "google"),
     }
     for name in order:
         fn, label = runners[name]
@@ -1309,6 +1345,8 @@ def redub_video(
     if asr_engine != "google" and not local_ok and not modal_ok:
         asr_note = "Whisper not configured — using Google Speech."
     print(f"[redub] ASR engine used: {used_engine} (requested={asr_engine}, order={order})", flush=True)
+    if denoise_note:
+        asr_note = f"{asr_note} {denoise_note}".strip() if asr_note else denoise_note
 
     if segments and segments[0].get("_total_duration_sec"):
         original_dur = float(segments[0]["_total_duration_sec"]) or original_dur

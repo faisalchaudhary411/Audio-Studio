@@ -4882,6 +4882,7 @@ def api_redub():
     except (TypeError, ValueError):
         speed_pct = 100
     match_length = (request.form.get("match_length") or "1").strip().lower() not in ("0", "false", "off", "no")
+    denoise_audio = (request.form.get("denoise_audio") or "0").strip().lower() in ("1", "true", "on", "yes")
 
     if not voice_id:
         return jsonify({"error": "Pick a target voice."}), 400
@@ -4916,6 +4917,7 @@ def api_redub():
             speed_pct=speed_pct,
             match_length=match_length,
             asr_engine=asr_engine,
+            denoise_audio=denoise_audio,
         )
     except Exception as e:
         return api_error(e, "redub this video")
