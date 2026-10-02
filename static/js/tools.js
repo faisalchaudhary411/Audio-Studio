@@ -1594,54 +1594,8 @@
         .replace(/"/g, '&quot;');
     }
 
-    btn.addEventListener('click', async () => {
-      const file = fileInput.files && fileInput.files[0];
-      if (!file) {
-        if (status) status.textContent = 'Choose a video file first.';
-        return;
-      }
-      if (!voiceSelect || !voiceSelect.value) {
-        if (status) status.textContent = 'Pick a target voice.';
-        return;
-      }
-
-      setBusy(true);
-      if (result) result.innerHTML = '';
-      const asrChoice = (document.getElementById('redub-asr-engine') || {}).value || 'auto';
-      const slowHint = (asrChoice === 'whisper' || asrChoice === 'auto')
-        ? 'Whisper GPU may take 30–90s on first run…'
-        : 'this can take a minute.';
-      if (status) status.textContent = 'Extracting · transcribing · translating · re-voicing… ' + slowHint;
-
-      const form = new FormData();
-      form.append('file', file);
-      form.append('source_lang', sourceLang ? sourceLang.value : 'auto');
-      form.append('target_lang', targetLang ? targetLang.value : 'US English');
-      form.append('voice_id', voiceSelect.value);
-      if (voiceSelectB && voiceSelectB.value) {
-        form.append('voice_id_b', voiceSelectB.value);
-      }
-      const asrEl = document.getElementById('redub-asr-engine');
-      form.append('asr_engine', asrEl ? asrEl.value : 'auto');
-      form.append('speed_pct', speed ? speed.value : '100');
-      const matchEl = document.getElementById('redub-match-length');
-      form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
-      const dnEl = document.getElementById('redub-denoise-audio');
-      form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
-
-      try {
-        const res = await resumableFetch('/api/tools/redub', { method: 'POST', body: form });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const msg = data.error || 'Redub failed.';
-          if (status) status.textContent = msg;
-          if (result && data.upgrade_url) {
-            result.innerHTML = '<div class="limit-toast">' + msg +
-              ' <a href="' + data.upgrade_url + '" style="color:var(--brass-hi);margin-left:6px;">See plans →</a></div>';
-          }
-          return;
-        }
-
+    // ---- Render the finished dub (shared by one-step and reviewed flows) ----
+    function showResult(data) {
         if (status) {
           let msg = data.skipped_translation
             ? ('Done · same language, voice replaced · ' + (data.size_kb || '') + ' KB')
@@ -1743,6 +1697,288 @@
             if (placeholder) placeholder.textContent = 'Preview unavailable — use the download button below.';
           }
         }
+    }
+
+    // ---- Review step: edit transcript / translation before the voice is made ----
+    const reviewEl = document.getElementById('redub-review');
+    const reviewBox = document.getElementById('redub-review-box');
+    let reviewState = null; // { jobId, targetLang, sourceLang }
+
+    function hideReview() {
+      reviewState = null;
+      if (reviewBox) { reviewBox.hidden = true; reviewBox.innerHTML = ''; }
+    }
+    fileInput.addEventListener('change', hideReview);
+
+    function fmtTime(sec) {
+      const s = Math.max(0, Math.round(Number(sec) || 0));
+      return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+    }
+
+    const TA_STYLE = 'width:100%;box-sizing:border-box;background:transparent;color:var(--text-hi);' +
+      'border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px;font:inherit;' +
+      'font-size:0.92rem;line-height:1.5;resize:vertical;';
+    const CAP_STYLE = 'font-size:0.7rem;letter-spacing:0.04em;color:var(--text-dim);margin:8px 0 3px;';
+
+    function showReview(data) {
+      if (!reviewBox) return;
+      reviewState = {
+        jobId: data.job_id,
+        targetLang: data.target_lang,
+        sourceLang: data.source_lang || 'auto',
+      };
+      const rows = (data.segments || []).map(function (seg) {
+        return '<div class="redub-seg" data-seg-i="' + seg.i + '" style="border:1px solid rgba(255,255,255,0.10);' +
+          'border-radius:10px;padding:10px;margin-bottom:10px;background:var(--ink);">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+            '<span style="font-family:var(--mono);font-size:0.78rem;color:var(--brass);">' +
+              fmtTime(seg.start) + ' – ' + fmtTime(seg.end) + '</span>' +
+            '<label style="font-size:0.8rem;color:var(--text-mid);display:flex;align-items:center;gap:6px;cursor:pointer;">' +
+              '<input type="checkbox" data-skip style="accent-color:var(--brass);"> Skip line</label>' +
+          '</div>' +
+          '<div style="' + CAP_STYLE + '">WHAT WAS HEARD · edit if wrong</div>' +
+          '<textarea data-orig dir="auto" rows="2" style="' + TA_STYLE + '">' + escapeHtml(seg.text || '') + '</textarea>' +
+          (data.same_lang ? '' :
+            '<button type="button" class="btn btn--ghost btn--sm" data-retr style="margin-top:6px;">' +
+            'Re-translate from edited text</button>') +
+          '<div style="' + CAP_STYLE + '">VOICED LINE · edit if wrong</div>' +
+          '<textarea data-tr dir="auto" rows="2" style="' + TA_STYLE + '">' + escapeHtml(seg.translated || '') + '</textarea>' +
+        '</div>';
+      }).join('');
+      const notes = (data.notes || []).map(function (n) {
+        return '<div class="limit-toast" style="margin-bottom:10px;">⚠ ' + escapeHtml(n) + '</div>';
+      }).join('');
+      reviewBox.innerHTML =
+        '<div class="result-panel">' +
+          '<div class="result-panel__label">Review transcript</div>' +
+          notes +
+          '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 12px;">' +
+            (data.segments || []).length + ' lines · heard with ' + escapeHtml(data.engine_label || 'speech recognition') +
+            '. Fix anything that is wrong, skip lines you do not want voiced, then generate. ' +
+            'Pick the voice and options above first.' +
+          '</p>' +
+          rows +
+          '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">' +
+            '<button type="button" class="btn btn--brass" data-gen>Generate dubbed video</button>' +
+            '<button type="button" class="btn btn--ghost btn--sm" data-cancel>Start over</button>' +
+          '</div>' +
+          '<p style="color:var(--text-dim);font-size:0.78rem;margin:10px 0 0;">' +
+            'Characters are counted when you generate. You can edit and generate again, for example with another voice, for the next 45 minutes without uploading again.' +
+          '</p>' +
+        '</div>';
+      reviewBox.hidden = false;
+      if (reviewBox.scrollIntoView) reviewBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    async function runAnalyze(file) {
+      setBusy(true);
+      hideReview();
+      if (result) result.innerHTML = '';
+      if (status) {
+        status.classList.remove('studio-status-ready');
+        status.textContent = 'Extracting · transcribing · translating… this can take a minute or two.';
+      }
+      const form = new FormData();
+      form.append('file', file);
+      form.append('source_lang', sourceLang ? sourceLang.value : 'auto');
+      form.append('target_lang', targetLang ? targetLang.value : 'US English');
+      const asrEl = document.getElementById('redub-asr-engine');
+      form.append('asr_engine', asrEl ? asrEl.value : 'auto');
+      const dnEl = document.getElementById('redub-denoise-audio');
+      form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
+      try {
+        const res = await resumableFetch('/api/tools/redub/analyze', { method: 'POST', body: form });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          const msg = data.error || 'Transcription failed.';
+          if (status) status.textContent = msg;
+          if (result && data.upgrade_url) {
+            result.innerHTML = '<div class="limit-toast">' + escapeHtml(msg) +
+              ' <a href="' + data.upgrade_url + '" style="color:var(--brass-hi);margin-left:6px;">See plans →</a></div>';
+          }
+          return;
+        }
+        showReview(data);
+        if (status) {
+          status.textContent = 'Transcribed · ' + (data.segments || []).length + ' lines · review below, then generate.';
+          status.classList.add('studio-status-ready');
+        }
+      } catch (e) {
+        if (status) status.textContent = 'Network error — check your connection and try again.';
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function generateFromReview(genBtn) {
+      if (!reviewState || !reviewBox) return;
+      if (!voiceSelect || !voiceSelect.value) {
+        if (status) status.textContent = 'Pick a target voice.';
+        return;
+      }
+      if (targetLang && targetLang.value !== reviewState.targetLang) {
+        if (status) status.textContent = 'The target language changed after transcription. Press Redub video again to translate into the new language.';
+        return;
+      }
+      const segments = Array.from(reviewBox.querySelectorAll('[data-seg-i]')).map(function (row) {
+        return {
+          i: parseInt(row.getAttribute('data-seg-i'), 10),
+          text: row.querySelector('[data-orig]').value,
+          translated: row.querySelector('[data-tr]').value,
+          skip: row.querySelector('[data-skip]').checked,
+        };
+      });
+      const matchEl = document.getElementById('redub-match-length');
+      const payload = {
+        job_id: reviewState.jobId,
+        segments: segments,
+        voice_id: voiceSelect.value,
+        voice_id_b: voiceSelectB && voiceSelectB.value ? voiceSelectB.value : '',
+        speed_pct: speed ? parseInt(speed.value, 10) : 100,
+        match_length: !(matchEl && !matchEl.checked),
+      };
+      setBusy(true);
+      if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating…'; }
+      if (result) result.innerHTML = '';
+      if (status) {
+        status.classList.remove('studio-status-ready');
+        status.textContent = 'Generating the dubbed voice… this can take a minute.';
+      }
+      try {
+        const res = await resumableFetch('/api/tools/redub/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          const msg = data.error || 'Could not generate the dubbed video.';
+          if (status) status.textContent = msg;
+          if (result && data.upgrade_url) {
+            result.innerHTML = '<div class="limit-toast">' + escapeHtml(msg) +
+              ' <a href="' + data.upgrade_url + '" style="color:var(--brass-hi);margin-left:6px;">See plans →</a></div>';
+          }
+          return;
+        }
+        showResult(data);
+        if (result && result.scrollIntoView) result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {
+        if (status) status.textContent = 'Network error — check your connection and try again.';
+      } finally {
+        if (genBtn) { genBtn.disabled = false; genBtn.textContent = 'Generate dubbed video'; }
+        setBusy(false);
+      }
+    }
+
+    async function retranslateRow(retrBtn) {
+      const row = retrBtn.closest('[data-seg-i]');
+      if (!row || !reviewState) return;
+      const orig = row.querySelector('[data-orig]').value.trim();
+      const trEl = row.querySelector('[data-tr]');
+      if (!orig) { trEl.value = ''; return; }
+      const label = retrBtn.textContent;
+      retrBtn.disabled = true;
+      retrBtn.textContent = 'Translating…';
+      try {
+        const res = await resumableFetch('/api/tools/redub/translate-line', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            job_id: reviewState.jobId,
+            text: orig,
+            source_lang: reviewState.sourceLang,
+            target_lang: reviewState.targetLang,
+          }),
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (res.ok) {
+          trEl.value = data.translated || '';
+          if (!data.translated && status) status.textContent = 'That line could not be translated. Type the voiced line by hand.';
+        } else if (status) {
+          status.textContent = data.error || 'Could not translate that line.';
+        }
+      } catch (e) {
+        if (status) status.textContent = 'Network error — check your connection and try again.';
+      } finally {
+        retrBtn.disabled = false;
+        retrBtn.textContent = label;
+      }
+    }
+
+    if (reviewBox) {
+      reviewBox.addEventListener('click', function (ev) {
+        const t = ev.target.closest('button');
+        if (!t) return;
+        if (t.hasAttribute('data-gen')) generateFromReview(t);
+        else if (t.hasAttribute('data-retr')) retranslateRow(t);
+        else if (t.hasAttribute('data-cancel')) {
+          hideReview();
+          if (result) result.innerHTML = '';
+          if (status) { status.textContent = ''; status.classList.remove('studio-status-ready'); }
+        }
+      });
+      reviewBox.addEventListener('change', function (ev) {
+        const cb = ev.target;
+        if (cb && cb.hasAttribute && cb.hasAttribute('data-skip')) {
+          const row = cb.closest('[data-seg-i]');
+          if (row) row.style.opacity = cb.checked ? '0.45' : '1';
+        }
+      });
+    }
+
+    btn.addEventListener('click', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        if (status) status.textContent = 'Choose a video file first.';
+        return;
+      }
+      if (!voiceSelect || !voiceSelect.value) {
+        if (status) status.textContent = 'Pick a target voice.';
+        return;
+      }
+      if (reviewEl && reviewEl.checked) {
+        await runAnalyze(file);
+        return;
+      }
+
+      setBusy(true);
+      if (result) result.innerHTML = '';
+      const asrChoice = (document.getElementById('redub-asr-engine') || {}).value || 'auto';
+      const slowHint = (asrChoice === 'whisper' || asrChoice === 'auto')
+        ? 'Whisper GPU may take 30–90s on first run…'
+        : 'this can take a minute.';
+      if (status) status.textContent = 'Extracting · transcribing · translating · re-voicing… ' + slowHint;
+
+      const form = new FormData();
+      form.append('file', file);
+      form.append('source_lang', sourceLang ? sourceLang.value : 'auto');
+      form.append('target_lang', targetLang ? targetLang.value : 'US English');
+      form.append('voice_id', voiceSelect.value);
+      if (voiceSelectB && voiceSelectB.value) {
+        form.append('voice_id_b', voiceSelectB.value);
+      }
+      const asrEl = document.getElementById('redub-asr-engine');
+      form.append('asr_engine', asrEl ? asrEl.value : 'auto');
+      form.append('speed_pct', speed ? speed.value : '100');
+      const matchEl = document.getElementById('redub-match-length');
+      form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
+      const dnEl = document.getElementById('redub-denoise-audio');
+      form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
+
+      try {
+        const res = await resumableFetch('/api/tools/redub', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data.error || 'Redub failed.';
+          if (status) status.textContent = msg;
+          if (result && data.upgrade_url) {
+            result.innerHTML = '<div class="limit-toast">' + msg +
+              ' <a href="' + data.upgrade_url + '" style="color:var(--brass-hi);margin-left:6px;">See plans →</a></div>';
+          }
+          return;
+        }
+
+        showResult(data);
       } catch (e) {
         if (status) status.textContent = 'Network error — check your connection and try again.';
       } finally {
