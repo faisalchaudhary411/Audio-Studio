@@ -5142,7 +5142,20 @@ def api_redub_render():
             new_text = str(e.get("text") or "").strip()[:1000]
             if new_text:
                 seg["text"] = new_text
+            # Optional timing fix from the review screen (seconds)
+            try:
+                st_v, en_v = float(e.get("start")), float(e.get("end"))
+                dur_v = float(state.get("original_dur") or 0)
+                if 0 <= st_v < en_v and (dur_v <= 0 or en_v <= dur_v + 0.5):
+                    seg["start_sec"], seg["end_sec"] = round(st_v, 3), round(en_v, 3)
+            except (TypeError, ValueError):
+                pass
         total_chars += len((seg.get("translated") or "").strip())
+    # Skipped / merged-away lines are voiced as nothing, so they must not squeeze
+    # the lines that remain: sanitize only the lines that will actually be voiced.
+    state["segments"] = redub_engine.sanitize_segments(
+        [sg for sg in (state.get("segments") or []) if (sg.get("translated") or "").strip()]
+    )
     if total_chars <= 0:
         return jsonify({"error": "Nothing to voice: every line is empty or skipped."}), 400
     if total_chars > 20000:
@@ -5194,6 +5207,26 @@ def api_redub_render():
         "engine": result.get("engine", "google_timed"),
         "job_id": str(data.get("job_id") or ""),
     })
+
+
+@app.route("/api/tools/redub/source/<job_id>", methods=["GET"])
+def api_redub_source(job_id):
+    """Serve the uploaded video back to its owner so the review screen can play
+    one line at a time. Range requests are supported (seeking)."""
+    if not can("redub.use"):
+        return jsonify({"error": "Video redub is a Pro feature."}), 402
+    path = redub_engine.redub_job_video_path(job_id, _resume_owner())
+    if not path:
+        return jsonify({"error": "This review session has expired."}), 410
+    import mimetypes
+    try:
+        _, fname, _st = redub_engine.load_redub_job(job_id, _resume_owner())
+    except Exception:
+        fname = "video.mp4"
+    mime = mimetypes.guess_type(fname)[0] or "video/mp4"
+    resp = send_file(path, mimetype=mime, conditional=True, max_age=0)
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
 
 
 @app.route("/api/tools/redub/download/<token>", methods=["GET"])

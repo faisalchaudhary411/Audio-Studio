@@ -116,6 +116,7 @@ def transcribe(
     model_path: Optional[str] = None,
     prompt: Optional[str] = None,
     wait_sec: float = 0.0,
+    max_len: Optional[int] = None,
 ) -> dict:
     """Run whisper.cpp locally and return text, real segments and SRT."""
     if not is_configured():
@@ -176,6 +177,10 @@ def transcribe(
         _mc = (os.environ.get("VOXCRAFT_WHISPER_MAX_CONTEXT") or "").strip()
         if _mc.lstrip("-").isdigit():
             cmd.extend(["-mc", _mc])
+        if max_len and int(max_len) > 0:
+            # Break long lines at word boundaries so each line is short enough
+            # to line up with its own moment in the video.
+            cmd.extend(["-ml", str(int(max_len)), "-sow"])
         if prompt:
             # Initial prompt biases script + vocabulary (e.g. Hinglish tech terms)
             cmd.extend(["--prompt", prompt])

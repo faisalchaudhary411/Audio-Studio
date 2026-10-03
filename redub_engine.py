@@ -959,9 +959,15 @@ def local_whisper_transcribe_segments(
     # imitate its style and emit romanised gibberish. Opt in per server with
     #   REDUB_ASR_PROMPT="your vocabulary hint"
     prompt = (os.environ.get("REDUB_ASR_PROMPT") or "").strip() or None
+    # Optional: shorter lines (better timing on long, run-on speech), e.g.
+    #   REDUB_WHISPER_MAX_LEN=60   (characters per line; 0/empty = Whisper's own)
+    try:
+        max_len = int((os.environ.get("REDUB_WHISPER_MAX_LEN") or "0").strip() or 0)
+    except ValueError:
+        max_len = 0
     result = local_whisper.transcribe(
         wav_bytes, language=whisper_lang, timeout_sec=int(timeout_sec),
-        model_path=model_path, prompt=prompt,
+        model_path=model_path, prompt=prompt, max_len=max_len or None,
         wait_sec=float(os.environ.get("REDUB_WHISPER_QUEUE_SEC", "180")),
     )
     if not result.get("success"):
@@ -1367,6 +1373,15 @@ def check_redub_job(job_id: str, owner: str) -> bool:
     except (OSError, ValueError):
         return False
     return state.get("owner") == owner and (time.time() - float(state.get("ts") or 0)) < 24 * 3600
+
+
+def redub_job_video_path(job_id: str, owner: str) -> Optional[str]:
+    """Path of the stored upload for an active review session (for the in-page
+    "play this line" buttons), or None."""
+    if not check_redub_job(job_id, owner):
+        return None
+    path = os.path.join(REDUB_JOB_DIR, job_id, "video.bin")
+    return path if os.path.isfile(path) else None
 
 
 def load_redub_job(job_id: str, owner: str) -> tuple[bytes, str, dict]:
