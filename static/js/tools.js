@@ -1812,6 +1812,8 @@
       form.append('asr_engine', asrEl ? asrEl.value : 'auto');
       const dnEl = document.getElementById('redub-denoise-audio');
       form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
+      const musicEl = document.getElementById('redub-music');
+      form.append('music', musicEl ? musicEl.value : 'normal');
       const t0 = Date.now();
       try {
         const res = await resumableFetch('/api/tools/redub/analyze', { method: 'POST', body: form });
@@ -1865,6 +1867,7 @@
         voice_id_b: voiceSelectB && voiceSelectB.value ? voiceSelectB.value : '',
         speed_pct: speed ? parseInt(speed.value, 10) : 100,
         match_length: !(matchEl && !matchEl.checked),
+        music: (document.getElementById('redub-music') || {}).value || 'normal',
       };
       setBusy(true);
       if (genBtn) { genBtn.disabled = true; genBtn.textContent = 'Generating…'; }
@@ -2048,6 +2051,8 @@
       form.append('match_length', matchEl && matchEl.checked ? '1' : '0');
       const dnEl = document.getElementById('redub-denoise-audio');
       form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
+      const musicEl = document.getElementById('redub-music');
+      form.append('music', musicEl ? musicEl.value : 'normal');
 
       const t0 = Date.now();
       try {
