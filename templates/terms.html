@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Terms of Service — VoxCraft{% endblock %}
-{% block meta_description %}Terms for using VoxCraft's text-to-speech, voice cloning, transcription, and audio editing tools, including Free and Pro tier rules.{% endblock %}
+{% block meta_description %}Terms for using VoxCraft's text-to-speech, video redub, transcription, and audio editing tools, including Free and Pro tier rules.{% endblock %}
 
 {% block content %}
 <section class="section" style="max-width:760px;">
   <div class="section__head">
     <span class="section__eyebrow">Legal</span>
     <h1 class="section__title">Terms of Service</h1>
-    <p class="section__sub">Last updated: 4 September 2026</p>
+    <p class="section__sub">Last updated: 3 October 2026</p>
   </div>
 
   <div class="panel" style="color:var(--text-mid);line-height:1.75;">
     <h2 style="color:var(--text-hi);margin-bottom:8px;font-size:1.1rem;">Using VoxCraft</h2>
-    <p>You may use VoxCraft's text-to-speech, voice cloning, transcription, conversion, and editing tools to generate and process audio for lawful purposes. You're responsible for the content you submit and for having the rights to any voice, audio, or text you upload — including reference clips used for voice cloning.</p>
+    <p>You may use VoxCraft's text-to-speech, video redub, voice cloning, transcription, conversion, and editing tools to generate and process audio and video for lawful purposes. You're responsible for the content you submit and for having the rights to any voice, audio, video, music, or text you upload — including the speech and background music in videos you redub and reference clips used for voice cloning.</p>
 
     <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Free and Pro tiers</h2>
     <p>The Free tier includes a daily action limit and monthly character quota, enforced per device using a hashed IP and browser fingerprint — not a login. Pro ($3/mo or $30/yr) unlocks unlimited text-to-speech, unlimited audio tools and video redub. Pro licenses are tied to a single device at a time and are non-transferable except through <a href="{{ url_for('contact') }}" style="color:var(--brass-hi)">support</a>. We may adjust free-tier limits at our discretion to keep the service sustainable for everyone.</p>
@@ -22,12 +22,19 @@
     <p>Free and paid users may use browser audio tools subject to daily limits on free tiers. Tools are provided for legitimate creative and productivity use. You are responsible for the content of files you upload and for any rights needed to process them.</p>
     <p>Optional “Send to another tool” keeps a short-lived copy of generated audio in your browser only, so you can continue a workflow without re-uploading. Clearing site data removes that copy.</p>
 
+    <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Video redub</h2>
+    <p>Video redub is a Pro feature. It transcribes the speech in your video, translates it, creates a new voice with a stock synthetic voice, and can keep the original background music. These steps are automated and can make mistakes: words may be misheard or mistranslated, timing may need adjusting, and the AI separation of voice and music is best-effort, so faint traces of the original voice may remain and the background may not be preserved exactly. You are responsible for reviewing and, where needed, correcting the transcript and the voiced text before you generate the video, and for checking the result before you publish it.</p>
+    <p style="margin-top:10px;">Each redub run counts toward your daily and monthly redub allowance, and the characters of the text you voice count toward your text-to-speech quota every time you generate. Your review session and generated files are temporary (see the <a href="{{ url_for('privacy') }}" style="color:var(--brass-hi)">Privacy Policy</a>): download your result promptly, because we do not keep a library of your videos and cannot guarantee that a file will still be available later.</p>
+    <p style="margin-top:10px;">The voices used are synthetic. Where a platform's rules or the law require it, you are responsible for labelling dubbed or AI-generated content as such.</p>
+
     <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Voice cloning specifically</h2>
     <p>Voice cloning must only be used on voices you own or have explicit permission to clone. Generating cloned speech to impersonate a real person without their consent, for fraud, harassment, or to create misleading content, is prohibited and may result in immediate license revocation without refund.</p>
 
     <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Prohibited use</h2>
     <ul style="padding-left:18px;">
       <li>Impersonating a real person via generated voice without consent.</li>
+      <li>Using video redub or edited transcripts to make a real person appear to say things they did not say, in order to deceive or defraud others.</li>
+      <li>Uploading video or music you do not have the right to process or redistribute.</li>
       <li>Generating or processing illegal content.</li>
       <li>Attempting to circumvent free-tier usage limits (e.g. spoofing device fingerprints or IP headers).</li>
       <li>Reverse-engineering, scraping, or automating bulk use of the service outside a paid plan's intended scope.</li>
@@ -38,7 +45,7 @@
     <p>Card/PayPal payments are processed through Freemius; manual payments (for regions without card support) are verified by our team, typically within the grace window shown at checkout. Refund requests are handled case by case — contact support with your request ID.</p>
 
     <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Availability and liability</h2>
-    <p>VoxCraft is provided "as is." We aim for reliable uptime but don't guarantee uninterrupted availability, and we're not liable for losses arising from service interruptions, generation errors, or reliance on tool output. Generated audio may occasionally contain artifacts or inaccuracies — review output before publishing or relying on it.</p>
+    <p>VoxCraft is provided "as is." We aim for reliable uptime but don't guarantee uninterrupted availability, and we're not liable for losses arising from service interruptions, generation errors, or reliance on tool output. Generated audio, transcripts, translations, and dubbed videos may contain artifacts or inaccuracies — review output before publishing or relying on it.</p>
 
     <h2 style="color:var(--text-hi);margin:20px 0 8px;font-size:1.1rem;">Changes to these terms</h2>
     <p>We may update these terms as the product evolves; the date at the top reflects the latest revision. Continued use after a change means you accept the updated terms.</p>

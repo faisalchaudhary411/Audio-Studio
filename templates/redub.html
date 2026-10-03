@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Video Audio Redub — Translate & Re-voice Online | VoxCraft{% endblock %}
-{% block meta_description %}Replace a video's spoken audio with a translated track in any of 40+ languages. Uses VoxCraft's 130+ neural voices. Pro feature.{% endblock %}
+{% block meta_description %}Dub a video into 40+ languages with 130+ neural voices. Review and edit the transcript, fix timing, keep the background music. Pro feature.{% endblock %}
 
 {% block content %}
 <div class="section" style="padding-bottom:0;">
@@ -8,8 +8,8 @@
     <span class="section__eyebrow">Video redub</span>
     <h1 class="section__title">Redub a video into another language</h1>
     <p class="section__sub">
-      Upload a video, pick a target language and voice, get a new dubbed track muxed back onto the original picture.
-      Pro plan · stock neural voices · no cloning required.
+      Upload a video, check and fix the transcript, pick a voice, and get a new dubbed track on the original picture,
+      with the background music kept. Pro plan · stock neural voices · no cloning required.
     </p>
   </div>
 </div>
@@ -31,33 +31,87 @@
   </p>
 
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;font-size:1.05rem;">
-    Redub video audio online with VoxCraft: upload a clip, choose a target language and neural voice, and download a new dubbed MP4 that keeps the original picture. The pipeline extracts audio, transcribes speech, translates the script, re-voices it, then muxes the new track — without requiring voice cloning or a local GPU.
+    Redub video audio online with VoxCraft: upload a clip, choose a target language and neural voice, and download a new dubbed MP4 that keeps the original picture. The pipeline extracts audio, transcribes speech, translates the script, lets you <strong>review and correct every line</strong>, re-voices it, then adds the new track back onto the video, <strong>with the original background music kept underneath</strong>. No voice cloning or local GPU needed.
   </p>
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
     Built for creators who need an Urdu, Hindi, Tamil, Telugu, Arabic, or English version of an existing explainer without re-recording. Voices come from the same library as
     <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a>.
-    If the source is noisy, clean the track first with
-    <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi)">Remove background noise</a>
-    or extract audio via
-    <a href="{{ url_for('tool_page', slug='extract-audio-from-video') }}" style="color:var(--brass-hi)">Extract audio from video</a>
-    and test transcription quality before a full redub.
+    If the source is noisy, tick <strong>Denoise audio before transcribing</strong> on the form, or clean the track first with
+    <a href="{{ url_for('tool_page', slug='remove-background-noise') }}" style="color:var(--brass-hi)">Remove background noise</a>.
   </p>
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
     Redub is <strong>not</strong> automatic lip-sync acting and not a clone of the original speaker in Phase 1. It replaces the spoken track with a clear stock neural voice in the target language. That is the right tool when localization speed matters more than matching the original timbre. For same-language retakes in <em>your</em> voice, see
     <a href="{{ url_for('voice_cloning') }}" style="color:var(--brass-hi)">Voice cloning</a> (coming soon).
   </p>
   <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
-    Character usage follows the same TTS quota rules as Studio. Long videos consume more quota — prefer clear speech, moderate length, and a short test clip when you are validating a new language pair.
+    Character usage follows the same TTS quota rules as Studio. Long videos consume more quota, so prefer clear speech, moderate length, and a short test clip when you are trying a new language pair. See <a href="#redub-quota" style="color:var(--brass-hi)">what counts toward your limits</a> below.
   </p>
 
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">How it works</h2>
   <ol style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
-    <li>Upload an MP4/MOV/WebM/MKV (up to about 50&nbsp;MB / ~10 minutes in Phase 1).</li>
-    <li>Choose the source language for transcription (or leave Auto when speech is clear).</li>
-    <li>Pick the target language and any stock neural voice from the Studio library.</li>
-    <li>VoxCraft transcribes, translates (when languages differ), generates the new voice, and muxes it onto your video.</li>
-    <li>Download the dubbed MP4, or take the new audio track only if you prefer to re-mux yourself.</li>
+    <li><strong>Upload</strong> an MP4, MOV, WebM or MKV (up to about 50&nbsp;MB / ~10 minutes).</li>
+    <li><strong>Set your options</strong>: source and target language, voice, speech rate, background music and transcription engine (all explained below).</li>
+    <li>Tap <strong>Redub video</strong>. VoxCraft extracts the audio, transcribes it with timestamps, and translates each line.</li>
+    <li><strong>Review the lines.</strong> Press Play to hear each one, fix wrong words, adjust the timing, merge or skip lines.</li>
+    <li>Tap <strong>Generate dubbed video</strong>. The new voice is created, placed on the original timeline and mixed over the background music.</li>
+    <li><strong>Download</strong> the dubbed MP4 or the audio-only track. Not happy? Change the voice, speed or music and generate again without uploading.</li>
   </ol>
+  <p style="color:var(--text-mid);line-height:1.8;margin:6px 0 0;font-size:0.95rem;">
+    Prefer one tap? Untick <em>Review and edit the transcript</em> and VoxCraft does everything in a single step.
+  </p>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Options before you start</h2>
+  <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
+    <li><strong>Source language</strong>: the language spoken in the video. Choose it explicitly for the best result (for example Hindi for Hindi/Urdu clips); leave Auto only when speech is very clear.</li>
+    <li><strong>Transcription engine</strong>: <em>Auto</em> is recommended. For Hindi and Urdu it uses Whisper to find <em>when</em> each line is spoken and Google Speech to write <em>what</em> was said; for other languages it uses Whisper first and falls back to Google. You can also force <em>Whisper only</em> or <em>Google only</em>.</li>
+    <li><strong>Target language and voice</strong>: any of the 130+ stock voices. Pick a voice that matches the target language.</li>
+    <li><strong>Second voice (optional)</strong>: alternates voices line by line, useful for two-speaker clips.</li>
+    <li><strong>Speech rate</strong>: 50% to 150% of the voice’s normal speed.</li>
+    <li><strong>Match original video length</strong>: keeps each line on the original timeline at a natural pace. A line may borrow the pause after it and is only lightly sped up if it still runs long.</li>
+    <li><strong>Background music</strong>: <em>Keep (normal volume)</em>, <em>Keep (quiet)</em> or <em>Remove</em>. See below.</li>
+    <li><strong>Denoise audio before transcribing</strong>: cleans the extracted audio so noisy speech is recognised better. Only the copy used for transcription is cleaned; your video and its picture are not changed. It makes the first step slower.</li>
+    <li><strong>Review and edit the transcript</strong>: on by default and recommended.</li>
+  </ul>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Review and fix every line</h2>
+  <p style="color:var(--text-mid);line-height:1.8;margin-bottom:10px;">
+    No speech recognition is perfect on noisy audio, mixed languages, numbers or product names. The review screen shows each spoken line as a card so you can correct it <em>before</em> any voice is made:
+  </p>
+  <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
+    <li><strong>▶ Play</strong> plays that exact stretch of your original video so you can hear what was said.</li>
+    <li><strong>What was heard</strong>: edit the text if the words are wrong.</li>
+    <li><strong>Re-translate from edited text</strong>: after fixing the heard text, refresh the translation for that line.</li>
+    <li><strong>Voiced line</strong>: the exact words the new voice will say. Edit them freely.</li>
+    <li><strong>Start / End (seconds)</strong>: move a line earlier or later if it is out of sync with the speaker.</li>
+    <li><strong>Merge with next</strong>: joins two lines when one sentence was split in the wrong place.</li>
+    <li><strong>Skip line</strong>: leaves that stretch silent, for example for music, noise or a line you do not want voiced.</li>
+  </ul>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;" id="redub-music">Keeping the background music</h2>
+  <p style="color:var(--text-mid);line-height:1.8;margin-bottom:10px;">
+    With <em>Keep</em> selected, VoxCraft uses AI speech isolation to separate the original voice from the music and ambient sound, then mixes that background back in under the new voice. The music is turned down while the new voice speaks and comes back up in the pauses.
+  </p>
+  <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
+    <li><strong>Keep (normal volume)</strong> is the default. <strong>Keep (quiet)</strong> hides any leftover traces of the original voice better. <strong>Remove</strong> gives the new voice only.</li>
+    <li>This is a separation trick, not a studio stem: faint traces of the original voice can remain, especially in echoey rooms.</li>
+    <li>It works on clips up to about 6 minutes. If there is no music in the clip, or separation is not possible, the dub is made with the new voice only and the result note tells you why.</li>
+  </ul>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Controls after your video is dubbed</h2>
+  <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
+    <li><strong>Preview</strong> the dubbed video in the page, then <strong>Download dubbed MP4</strong> or <strong>Download audio only</strong> (the new voice with the music, ready to re-mux in your own editor).</li>
+    <li><strong>Show transcript &amp; translation</strong> lists the original and voiced text. The note under the video says which engine was used, how many lines were timed and what happened with the music.</li>
+    <li><strong>Try another voice, speed or music level</strong>: change them in the form, edit any line and tap <strong>Generate dubbed video</strong> again. Your review session stays available for 45 minutes, so there is no need to upload again.</li>
+    <li><strong>Changing the target language</strong> needs a fresh transcription: press Redub video again so the lines are translated into the new language.</li>
+    <li>After 45 minutes the review session, including your uploaded video, is deleted automatically. Upload the video again if you need more changes.</li>
+  </ul>
+
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;" id="redub-quota">What counts toward your limits</h2>
+  <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
+    <li>Each <strong>Redub video</strong> run counts once toward your daily and monthly redub allowance, when the transcription finishes. Editing lines and generating again does not add another run.</li>
+    <li><strong>TTS characters</strong> (your voiced text) are counted every time you tap Generate, the same way as in Studio. Skipped lines use no characters.</li>
+    <li>If a redub would go over your monthly TTS quota, you are told before any voice is made.</li>
+  </ul>
 
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Who uses video redub</h2>
   <div class="card-grid">
@@ -81,11 +135,13 @@
 
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 12px;font-size:1.25rem;">Tips for better redubs</h2>
   <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
-    <li>Clear speech transcribes better than music-heavy or noisy tracks — denoise first if the room tone is strong.</li>
+    <li>Always use the review step on noisy or Hinglish clips. Play each line, then fix numbers, names and product terms by hand.</li>
+    <li>Clear speech transcribes better than music-heavy or noisy tracks. Tick <em>Denoise audio before transcribing</em> if the room tone is strong.</li>
+    <li>If a voiced line starts too early or late, adjust its Start/End seconds. If one sentence was cut in two, use <em>Merge with next</em>.</li>
+    <li>Music-heavy clip? Try <em>Keep (quiet)</em> so any leftover voice traces stay hidden.</li>
     <li>If source and target are the same language, translation is skipped and only the voice is replaced.</li>
     <li>Match the target voice’s language to the target language for natural pronunciation.</li>
-    <li>Start with a 30–60 second sample before redubbing a full 10-minute lesson.</li>
-    <li>Long videos use TTS character quota the same way Studio does — watch remaining quota on Pro.</li>
+    <li>Start with a 30 to 60 second sample before redubbing a full 10-minute lesson.</li>
     <li>For script-first narration (no existing video), use <a href="{{ url_for('studio') }}" style="color:var(--brass-hi)">Voice Studio</a> instead of redub.</li>
   </ul>
 
@@ -113,11 +169,31 @@
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">What if transcription is wrong?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Improve the source: less music, less noise, clearer speech. Optionally extract and review text with the <a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" style="color:var(--brass-hi)">transcribe tool</a> before relying on a full redub.</p>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Use the review step. Press Play on each line, correct the words, and use Re-translate for the voiced text. You can also improve the source (less noise, clearer speech) or tick Denoise audio before transcribing.</p>
     </details>
     <details style="margin-top:10px;">
-      <summary style="font-weight:600;cursor:pointer;">Can I keep background music?</summary>
-      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">The pipeline replaces the spoken track from the mixed audio path. Music-heavy mixes can confuse transcription — prefer voice-forward sources or separate music in post.</p>
+      <summary style="font-weight:600;cursor:pointer;">Can I edit the transcript before the voice is made?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Yes. After transcription, every line appears in an editable card. Fix the heard text and the voiced text, adjust Start and End times, merge lines, or skip lines, then tap Generate dubbed video.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">Can I keep the background music?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Yes. Background music is kept by default. VoxCraft separates the original voice from the music with AI and mixes the music back under the new voice, lowering it while the voice speaks. Choose Keep (quiet) or Remove if you prefer. Faint traces of the original voice can remain, and the feature works on clips up to about 6 minutes.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">How do I fix lines that are out of sync?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">In the review screen, change a line’s Start and End seconds, use Play to check it, and use Merge with next when one sentence was split into two. Each dubbed line is placed using those times.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">Can I try another voice without uploading again?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Yes. Your review session, including the uploaded video, is kept for 45 minutes. Change the voice, speed or music level, edit any line, and tap Generate dubbed video again. Changing the target language needs a fresh transcription.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">What counts toward my quota?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">Each Redub video run counts once toward your daily and monthly redub allowance. TTS characters are counted each time you generate a voice, and skipped lines use none. You are warned before a redub that would exceed your monthly TTS quota.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary style="font-weight:600;cursor:pointer;">How long is my video kept?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;margin:8px 0 0;">If you use the review step, your upload is kept for up to 45 minutes so you can generate again, then deleted automatically. Generated files are kept only briefly for download.</p>
     </details>
     <details style="margin-top:10px;">
       <summary style="font-weight:600;cursor:pointer;">Redub vs generating a new voiceover in Studio?</summary>
@@ -145,10 +221,11 @@
   "description": "Replace a video's spoken audio with a translated neural voice track while keeping the original picture.",
   "step": [
     {"@type": "HowToStep", "position": 1, "text": "Upload an MP4, MOV, WebM, or MKV video."},
-    {"@type": "HowToStep", "position": 2, "text": "Choose source language for transcription or leave Auto."},
-    {"@type": "HowToStep", "position": 3, "text": "Pick target language and a stock neural voice."},
-    {"@type": "HowToStep", "position": 4, "text": "Run redub to transcribe, translate, generate, and mux."},
-    {"@type": "HowToStep", "position": 5, "text": "Download the dubbed MP4 or audio-only track."}
+    {"@type": "HowToStep", "position": 2, "text": "Choose the source language, target language, voice, speech rate, background music and transcription engine."},
+    {"@type": "HowToStep", "position": 3, "text": "Run redub to transcribe the video with timestamps and translate each line."},
+    {"@type": "HowToStep", "position": 4, "text": "Review the lines: play each one, fix wrong words, adjust timing, merge or skip lines."},
+    {"@type": "HowToStep", "position": 5, "text": "Generate the dubbed video, with the new voice mixed over the original background music."},
+    {"@type": "HowToStep", "position": 6, "text": "Download the dubbed MP4 or audio-only track, or change the voice and generate again without uploading."}
   ]
 }
 </script>
@@ -161,7 +238,10 @@
     {"@type": "Question", "name": "Does it clone the original speaker?", "acceptedAnswer": {"@type": "Answer", "text": "Not in Phase 1. It uses stock neural voices from Voice Studio. Voice cloning is a separate feature that is coming soon."}},
     {"@type": "Question", "name": "Which languages work?", "acceptedAnswer": {"@type": "Answer", "text": "Pairs with stock voice and translation coverage, including Urdu, Hindi, Bengali, Punjabi, Tamil, Telugu, Arabic, and English variants."}},
     {"@type": "Question", "name": "How long can a video be?", "acceptedAnswer": {"@type": "Answer", "text": "About 10 minutes and 50 MB in Phase 1."}},
-    {"@type": "Question", "name": "Is lip-sync perfect?", "acceptedAnswer": {"@type": "Answer", "text": "No. This replaces the audio track; it is not a full lip-sync performance model."}}
+    {"@type": "Question", "name": "Is lip-sync perfect?", "acceptedAnswer": {"@type": "Answer", "text": "No. This replaces the audio track; it is not a full lip-sync performance model."}},
+    {"@type": "Question", "name": "Can I edit the transcript before the voice is made?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. After transcription every line appears in an editable card where you can play the original, fix the words, adjust start and end times, merge or skip lines, then generate the dubbed video."}},
+    {"@type": "Question", "name": "Can I keep the background music?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Background music is kept by default: AI separates the original voice from the music and the music is mixed back under the new voice. You can choose a quieter level or remove it. Faint traces of the original voice can remain, and it works on clips up to about 6 minutes."}},
+    {"@type": "Question", "name": "Can I try another voice without uploading again?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The review session, including the uploaded video, is kept for 45 minutes so you can change the voice, speed or music and generate again."}}
   ]
 }
 </script>
