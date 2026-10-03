@@ -1699,6 +1699,18 @@
         }
     }
 
+    // Tell a real network failure apart from a bug on the page, and say how long
+    // it took (instant = file/connection problem, long = connection dropped).
+    function describeError(e, t0) {
+      const secs = Math.round((Date.now() - t0) / 1000);
+      const m = (e && e.message) ? e.message : String(e);
+      console.error('[voxcraft] redub error after ' + secs + 's', e);
+      if (e instanceof TypeError || /failed to fetch|network|load failed/i.test(m)) {
+        return 'Network error after ' + secs + 's (' + m + '). Check your connection and try again.';
+      }
+      return 'Something went wrong on this page after ' + secs + 's: ' + m;
+    }
+
     // ---- Review step: edit transcript / translation before the voice is made ----
     const reviewEl = document.getElementById('redub-review');
     const reviewBox = document.getElementById('redub-review-box');
@@ -1786,6 +1798,7 @@
       form.append('asr_engine', asrEl ? asrEl.value : 'auto');
       const dnEl = document.getElementById('redub-denoise-audio');
       form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
+      const t0 = Date.now();
       try {
         const res = await resumableFetch('/api/tools/redub/analyze', { method: 'POST', body: form });
         const data = await res.json().catch(function () { return {}; });
@@ -1804,7 +1817,7 @@
           status.classList.add('studio-status-ready');
         }
       } catch (e) {
-        if (status) status.textContent = 'Network error — check your connection and try again.';
+        if (status) status.textContent = describeError(e, t0);
       } finally {
         setBusy(false);
       }
@@ -1844,6 +1857,7 @@
         status.classList.remove('studio-status-ready');
         status.textContent = 'Generating the dubbed voice… this can take a minute.';
       }
+      const t0 = Date.now();
       try {
         const res = await resumableFetch('/api/tools/redub/render', {
           method: 'POST',
@@ -1863,7 +1877,7 @@
         showResult(data);
         if (result && result.scrollIntoView) result.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e) {
-        if (status) status.textContent = 'Network error — check your connection and try again.';
+        if (status) status.textContent = describeError(e, t0);
       } finally {
         if (genBtn) { genBtn.disabled = false; genBtn.textContent = 'Generate dubbed video'; }
         setBusy(false);
@@ -1879,6 +1893,7 @@
       const label = retrBtn.textContent;
       retrBtn.disabled = true;
       retrBtn.textContent = 'Translating…';
+      const t0 = Date.now();
       try {
         const res = await resumableFetch('/api/tools/redub/translate-line', {
           method: 'POST',
@@ -1898,7 +1913,7 @@
           status.textContent = data.error || 'Could not translate that line.';
         }
       } catch (e) {
-        if (status) status.textContent = 'Network error — check your connection and try again.';
+        if (status) status.textContent = describeError(e, t0);
       } finally {
         retrBtn.disabled = false;
         retrBtn.textContent = label;
@@ -1965,6 +1980,7 @@
       const dnEl = document.getElementById('redub-denoise-audio');
       form.append('denoise_audio', dnEl && dnEl.checked ? '1' : '0');
 
+      const t0 = Date.now();
       try {
         const res = await resumableFetch('/api/tools/redub', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
@@ -1980,7 +1996,7 @@
 
         showResult(data);
       } catch (e) {
-        if (status) status.textContent = 'Network error — check your connection and try again.';
+        if (status) status.textContent = describeError(e, t0);
       } finally {
         setBusy(false);
       }
