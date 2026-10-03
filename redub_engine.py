@@ -1587,6 +1587,119 @@ def redub_analyze(
     }
 
 
+# ---------------------------------------------------------------------------
+# Keep the background music / ambience under the new voice.
+#
+# The original soundtrack is voice + music. DeepFilterNet (the same model as
+# Studio denoise) keeps only the speech, so "original minus speech" is the
+# music/ambience bed. That bed is mixed back under the dubbed voice and ducked
+# while the voice is speaking. All free and local, but it is a separation
+# trick, not a studio stem: faint traces of the original voice can remain.
+# ---------------------------------------------------------------------------
+# level -> (gain between lines in dB, gain while the dubbed voice speaks in dB)
+MUSIC_LEVELS = {"low": (-8.0, -16.0), "normal": (-3.0, -11.0)}
+
+
+def _estimate_lag_samples(ref, other, sr: int, max_ms: int = 120) -> int:
+    """How many samples `other` is delayed relative to `ref` (negative = early)."""
+    import numpy as np
+    n = min(len(ref), len(other), sr * 12)
+    step = max(1, sr // 8000)
+    a = np.asarray(ref[:n:step], dtype=np.float64)
+    b = np.asarray(other[:n:step], dtype=np.float64)
+    m = len(a)
+    if m < 800:
+        return 0
+    size = 1 << (2 * m - 1).bit_length()
+    cc = np.fft.irfft(np.fft.rfft(b, size) * np.conj(np.fft.rfft(a, size)), size)
+    max_lag = max(1, int(max_ms / 1000.0 * sr / step))
+    window = np.concatenate((cc[-max_lag:], cc[: max_lag + 1]))
+    coarse = int((int(np.argmax(window)) - max_lag) * step)
+    if step == 1:
+        return coarse
+    # refine to the exact sample at full rate (the search above is decimated)
+    full = min(len(ref), len(other), sr * 12)
+    r0 = np.asarray(ref[:full], dtype=np.float64)
+    o0 = np.asarray(other[:full], dtype=np.float64)
+    best, best_val = coarse, -1e30
+    for cand in range(coarse - step, coarse + step + 1):
+        if cand >= 0:
+            a_, b_ = r0[: full - cand], o0[cand:full]
+        else:
+            a_, b_ = r0[-cand:full], o0[: full + cand]
+        if len(a_) < 800:
+            continue
+        val = float(np.dot(a_, b_))
+        if val > best_val:
+            best, best_val = cand, val
+    return best
+
+
+def build_music_bed(audio_bytes: bytes) -> Optional[bytes]:
+    """Return a WAV with the background music/ambience (original minus the AI-
+    isolated speech), or None when there is essentially nothing but speech."""
+    import numpy as np
+    import audio_tools
+    from pydub import AudioSegment
+
+    enhanced_wav = audio_tools.denoise_studio(audio_bytes, "extracted.mp3", "wav")
+    orig = audio_tools._load_segment(audio_bytes, "extracted.mp3").set_channels(1)
+    sr = orig.frame_rate
+    enh = AudioSegment.from_file(io.BytesIO(enhanced_wav)).set_channels(1).set_frame_rate(sr)
+
+    o = np.array(orig.get_array_of_samples(), dtype=np.float32) / 32768.0
+    e = np.array(enh.get_array_of_samples(), dtype=np.float32) / 32768.0
+    n = min(len(o), len(e))
+    o, e = o[:n], e[:n]
+    lag = _estimate_lag_samples(o, e, sr)
+    if lag > 0:        # enhanced is late -> pull it earlier
+        e = np.concatenate((e[lag:], np.zeros(lag, dtype=np.float32)))
+    elif lag < 0:      # enhanced is early -> push it later
+        e = np.concatenate((np.zeros(-lag, dtype=np.float32), e[:lag]))
+    g = float(np.clip(np.dot(o, e) / (float(np.dot(e, e)) + 1e-9), 0.7, 1.2))
+    bed = np.clip(o - g * e, -1.0, 1.0)
+
+    rms = float(np.sqrt(np.mean(bed ** 2))) if len(bed) else 0.0
+    if rms < 10 ** (-48 / 20.0):      # quieter than -48 dBFS: just hiss
+        return None
+    seg = AudioSegment((bed * 32767.0).astype(np.int16).tobytes(), frame_rate=sr, sample_width=2, channels=1)
+    buf = io.BytesIO()
+    seg.export(buf, format="wav")
+    return buf.getvalue()
+
+
+def mix_dub_with_bed(dub_audio: bytes, bed_wav: bytes, level: str = "normal") -> bytes:
+    """Mix the music bed under the dubbed voice (ducked while the voice speaks)."""
+    import numpy as np
+    from pydub import AudioSegment
+    from pydub.silence import detect_nonsilent
+
+    gap_db, speech_db = MUSIC_LEVELS.get(level, MUSIC_LEVELS["normal"])
+    dub = AudioSegment.from_file(io.BytesIO(dub_audio)).set_channels(1)
+    bed = AudioSegment.from_file(io.BytesIO(bed_wav)).set_channels(1).set_frame_rate(dub.frame_rate)
+    total_ms = max(len(dub), len(bed))
+    if len(bed) < total_ms:
+        bed += AudioSegment.silent(total_ms - len(bed), frame_rate=dub.frame_rate)
+    if len(dub) < total_ms:
+        dub += AudioSegment.silent(total_ms - len(dub), frame_rate=dub.frame_rate)
+
+    sr = bed.frame_rate
+    x = np.array(bed.get_array_of_samples(), dtype=np.float32)
+    env = np.full(len(x), 10 ** (gap_db / 20.0), dtype=np.float32)
+    duck = 10 ** (speech_db / 20.0)
+    thresh = -45 if dub.dBFS == float("-inf") else min(-38, dub.dBFS - 26)
+    for st, en in detect_nonsilent(dub, min_silence_len=300, silence_thresh=thresh, seek_step=20):
+        env[int(st / 1000.0 * sr): int(en / 1000.0 * sr)] = duck
+    k = max(1, int(0.18 * sr))                       # smooth the duck: no pumping clicks
+    env = np.convolve(env, np.ones(k, dtype=np.float32) / k, mode="same")
+    x = np.clip(x * env, -32768, 32767).astype(np.int16)
+    bed2 = AudioSegment(x.tobytes(), frame_rate=sr, sample_width=2, channels=1)
+
+    out = io.BytesIO()
+    dub.overlay(bed2).export(out, format="mp3", bitrate="192k")
+    return out.getvalue()
+
+
 def redub_render(
     video_bytes: bytes,
     filename: str,
@@ -1597,6 +1710,8 @@ def redub_render(
     speed_pct: int = 100,
     match_length: bool = True,
     edited: bool = False,
+    music: str = "normal",
+    bed_cache_path: Optional[str] = None,
 ) -> dict:
     """Phase 2: voice every (possibly edited) line, place it on the timeline,
     mux onto the original picture. `analysis` comes from redub_analyze, with
@@ -1687,6 +1802,37 @@ def redub_render(
     if tts_failures:
         length_note += f" {tts_failures} segment(s) failed TTS and were left silent."
 
+    # ---- 4b. Keep the background music under the new voice ----
+    music = (music or "normal").strip().lower()
+    music_note = None
+    if music in MUSIC_LEVELS:
+        try:
+            bed = None
+            if bed_cache_path and os.path.isfile(bed_cache_path):
+                with open(bed_cache_path, "rb") as f:
+                    bed = f.read() or None            # empty file = "nothing to keep"
+            else:
+                bed = build_music_bed(video_to_audio(video_bytes, filename))
+                if bed_cache_path:
+                    try:
+                        with open(bed_cache_path, "wb") as f:
+                            f.write(bed or b"")
+                    except OSError:
+                        pass
+            if bed:
+                tts_audio = mix_dub_with_bed(tts_audio, bed, music)
+                music_note = (
+                    "Background music kept under the new voice (separated from the original voice "
+                    "with AI, so faint traces of the original voice can remain)."
+                )
+            else:
+                music_note = "No background music was found to keep."
+        except Exception as e:
+            print(f"[redub] background music not kept: {e}", flush=True)
+            music_note = f"Background music could not be kept ({str(e)[:100]}); the dub has the new voice only."
+    if music_note:
+        length_note += f" {music_note}"
+
     # ---- 5. Mux ----
     dubbed_video = mux_audio_onto_video(
         video_bytes, filename, tts_audio, audio_ext="mp3", match_video_length=bool(match_length),
@@ -1746,6 +1892,7 @@ def redub_video(
     match_length: bool = True,
     asr_engine: str = "auto",
     denoise_audio: bool = False,
+    music: str = "normal",
 ) -> dict:
     """One-step redub (no review): redub_analyze() then redub_render()."""
     analysis = redub_analyze(
@@ -1756,5 +1903,5 @@ def redub_video(
     return redub_render(
         video_bytes, filename, analysis,
         voice_id=voice_id, voice_id_b=voice_id_b,
-        speed_pct=speed_pct, match_length=match_length,
+        speed_pct=speed_pct, match_length=match_length, music=music,
     )

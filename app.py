@@ -4883,6 +4883,9 @@ def api_redub():
         speed_pct = 100
     match_length = (request.form.get("match_length") or "1").strip().lower() not in ("0", "false", "off", "no")
     denoise_audio = (request.form.get("denoise_audio") or "0").strip().lower() in ("1", "true", "on", "yes")
+    music = (request.form.get("music") or "normal").strip().lower()
+    if music not in ("off", "low", "normal"):
+        music = "normal"
 
     if not voice_id:
         return jsonify({"error": "Pick a target voice."}), 400
@@ -4918,6 +4921,7 @@ def api_redub():
             match_length=match_length,
             asr_engine=asr_engine,
             denoise_audio=denoise_audio,
+            music=music,
         )
     except Exception as e:
         return api_error(e, "redub this video")
@@ -5025,6 +5029,9 @@ def api_redub_analyze():
     if asr_engine not in ("auto", "whisper", "google"):
         asr_engine = "auto"
     denoise_audio = (request.form.get("denoise_audio") or "0").strip().lower() in ("1", "true", "on", "yes")
+    music = (request.form.get("music") or "normal").strip().lower()
+    if music not in ("off", "low", "normal"):
+        music = "normal"
     if target_lang not in VOICES:
         return jsonify({"error": "Unknown target language."}), 400
     video_bytes = file.read()
@@ -5106,6 +5113,9 @@ def api_redub_render():
     except (TypeError, ValueError):
         speed_pct = 100
     match_length = bool(data.get("match_length", True))
+    music = str(data.get("music") or "normal").strip().lower()
+    if music not in ("off", "low", "normal"):
+        music = "normal"
 
     try:
         video_bytes, filename, state = redub_engine.load_redub_job(
@@ -5171,6 +5181,8 @@ def api_redub_render():
             video_bytes, filename, state,
             voice_id=voice_id, voice_id_b=voice_id_b or None,
             speed_pct=speed_pct, match_length=match_length, edited=True,
+            music=music,
+            bed_cache_path=os.path.join(redub_engine.REDUB_JOB_DIR, str(data.get("job_id") or ""), "bed.wav"),
         )
     except Exception as e:
         return api_error(e, "redub this video")
@@ -6208,6 +6220,28 @@ _RESUME_PREFIXES = ("/api/tools/",)
 
 def _resume_owner() -> str:
     return resume_cache.owner_id(session.get("csrf_token"))
+
+
+_last_housekeeping = [0.0]
+
+
+@app.before_request
+def _housekeeping():
+    """Delete expired temporary files (redub review sessions, generated redub
+    files, connection-recovery results) at most once a minute per worker, on
+    ANY request, so the retention times in the Privacy Policy hold even when
+    nobody is using redub."""
+    now = time.time()
+    if now - _last_housekeeping[0] < 60:
+        return None
+    _last_housekeeping[0] = now
+    try:
+        redub_engine.sweep_redub_jobs()
+        redub_engine.sweep_redub_outputs()
+        resume_cache.sweep()
+    except Exception:
+        pass
+    return None
 
 
 @app.before_request
