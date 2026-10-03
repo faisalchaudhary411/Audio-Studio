@@ -1730,6 +1730,8 @@
     const TA_STYLE = 'width:100%;box-sizing:border-box;background:transparent;color:var(--text-hi);' +
       'border:1px solid rgba(255,255,255,0.14);border-radius:8px;padding:8px;font:inherit;' +
       'font-size:0.92rem;line-height:1.5;resize:vertical;';
+    const NUM_STYLE = 'width:74px;background:transparent;color:var(--text-hi);border:1px solid rgba(255,255,255,0.14);' +
+      'border-radius:6px;padding:4px 6px;font:inherit;font-size:0.85rem;';
     const CAP_STYLE = 'font-size:0.7rem;letter-spacing:0.04em;color:var(--text-dim);margin:8px 0 3px;';
 
     function showReview(data) {
@@ -1742,11 +1744,18 @@
       const rows = (data.segments || []).map(function (seg) {
         return '<div class="redub-seg" data-seg-i="' + seg.i + '" style="border:1px solid rgba(255,255,255,0.10);' +
           'border-radius:10px;padding:10px;margin-bottom:10px;background:var(--ink);">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-            '<span style="font-family:var(--mono);font-size:0.78rem;color:var(--brass);">' +
-              fmtTime(seg.start) + ' – ' + fmtTime(seg.end) + '</span>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">' +
+            '<span style="font-family:var(--mono);font-size:0.78rem;color:var(--brass);">Line ' + (seg.i + 1) + '</span>' +
             '<label style="font-size:0.8rem;color:var(--text-mid);display:flex;align-items:center;gap:6px;cursor:pointer;">' +
               '<input type="checkbox" data-skip style="accent-color:var(--brass);"> Skip line</label>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
+            '<button type="button" class="btn btn--ghost btn--sm" data-play>▶ Play</button>' +
+            '<label style="font-size:0.78rem;color:var(--text-dim);">Start (s) ' +
+              '<input type="number" data-start step="0.1" min="0" value="' + Number(seg.start).toFixed(1) + '" style="' + NUM_STYLE + '"></label>' +
+            '<label style="font-size:0.78rem;color:var(--text-dim);">End (s) ' +
+              '<input type="number" data-end step="0.1" min="0" value="' + Number(seg.end).toFixed(1) + '" style="' + NUM_STYLE + '"></label>' +
+            '<button type="button" class="btn btn--ghost btn--sm" data-merge>Merge with next</button>' +
           '</div>' +
           '<div style="' + CAP_STYLE + '">WHAT WAS HEARD · edit if wrong</div>' +
           '<textarea data-orig dir="auto" rows="2" style="' + TA_STYLE + '">' + escapeHtml(seg.text || '') + '</textarea>' +
@@ -1766,7 +1775,7 @@
           notes +
           '<p style="color:var(--text-mid);font-size:0.85rem;margin:0 0 12px;">' +
             (data.segments || []).length + ' lines · heard with ' + escapeHtml(data.engine_label || 'speech recognition') +
-            '. Fix anything that is wrong, skip lines you do not want voiced, then generate. ' +
+            '. Press Play to hear each line, fix the words, adjust Start/End if a line is out of sync, then generate. ' +
             'Pick the voice and options above first.' +
           '</p>' +
           rows +
@@ -1779,6 +1788,11 @@
           '</p>' +
         '</div>';
       reviewBox.hidden = false;
+      const aud = document.createElement('audio');
+      aud.preload = 'metadata';
+      aud.src = '/api/tools/redub/source/' + data.job_id;
+      aud.setAttribute('data-review-audio', '1');
+      reviewBox.appendChild(aud);
       if (reviewBox.scrollIntoView) reviewBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
@@ -1839,6 +1853,8 @@
           text: row.querySelector('[data-orig]').value,
           translated: row.querySelector('[data-tr]').value,
           skip: row.querySelector('[data-skip]').checked,
+          start: parseFloat(row.querySelector('[data-start]').value),
+          end: parseFloat(row.querySelector('[data-end]').value),
         };
       });
       const matchEl = document.getElementById('redub-match-length');
@@ -1884,6 +1900,57 @@
       }
     }
 
+    // ---- Play one line of the original video so the words can be checked ----
+    let playStop = null;
+    function playRow(btn) {
+      const aud = reviewBox && reviewBox.querySelector('[data-review-audio]');
+      const row = btn.closest('[data-seg-i]');
+      if (!aud || !row) return;
+      const st = Math.max(0, parseFloat(row.querySelector('[data-start]').value) || 0);
+      const en = parseFloat(row.querySelector('[data-end]').value) || (st + 3);
+      if (playStop) { aud.removeEventListener('timeupdate', playStop); playStop = null; }
+      const wasPlaying = !aud.paused && btn.getAttribute('data-playing') === '1';
+      reviewBox.querySelectorAll('[data-play]').forEach(function (b) { b.textContent = '▶ Play'; b.removeAttribute('data-playing'); });
+      if (wasPlaying) { aud.pause(); return; }
+      playStop = function () {
+        if (aud.currentTime >= en) {
+          aud.pause();
+          aud.removeEventListener('timeupdate', playStop);
+          playStop = null;
+          btn.textContent = '▶ Play';
+          btn.removeAttribute('data-playing');
+        }
+      };
+      aud.addEventListener('timeupdate', playStop);
+      const go = function () {
+        aud.currentTime = st;
+        const p = aud.play();
+        if (p && p.catch) p.catch(function () {
+          if (status) status.textContent = 'Could not play this video here. You can still edit the text.';
+        });
+        btn.textContent = '■ Stop';
+        btn.setAttribute('data-playing', '1');
+      };
+      if (aud.readyState >= 1) go(); else { aud.addEventListener('loadedmetadata', go, { once: true }); aud.load(); }
+    }
+
+    // ---- Merge a line with the one below it (run-on speech split in two) ----
+    function mergeWithNext(btn) {
+      const row = btn.closest('[data-seg-i]');
+      let next = row && row.nextElementSibling;
+      while (next && !next.hasAttribute('data-seg-i')) next = next.nextElementSibling;
+      if (!row || !next) { if (status) status.textContent = 'This is the last line, so there is nothing to merge with.'; return; }
+      const join = function (a, b) { return (a.trim() + ' ' + b.trim()).trim(); };
+      const o1 = row.querySelector('[data-orig]'), o2 = next.querySelector('[data-orig]');
+      const t1 = row.querySelector('[data-tr]'), t2 = next.querySelector('[data-tr]');
+      o1.value = join(o1.value, o2.value);
+      t1.value = join(t1.value, t2.value);
+      row.querySelector('[data-end]').value = next.querySelector('[data-end]').value;
+      const sk = next.querySelector('[data-skip]');
+      sk.checked = true;
+      next.style.display = 'none';
+    }
+
     async function retranslateRow(retrBtn) {
       const row = retrBtn.closest('[data-seg-i]');
       if (!row || !reviewState) return;
@@ -1925,6 +1992,8 @@
         const t = ev.target.closest('button');
         if (!t) return;
         if (t.hasAttribute('data-gen')) generateFromReview(t);
+        else if (t.hasAttribute('data-play')) playRow(t);
+        else if (t.hasAttribute('data-merge')) mergeWithNext(t);
         else if (t.hasAttribute('data-retr')) retranslateRow(t);
         else if (t.hasAttribute('data-cancel')) {
           hideReview();
