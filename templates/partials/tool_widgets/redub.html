@@ -112,6 +112,16 @@
     </span>
   </label>
 
+  <div class="redub-field">
+    <label class="redub-label" for="redub-music">Background music</label>
+    <span class="redub-label-hint">keeps the music / ambience under the new voice</span>
+    <select id="redub-music" class="studio-select" {% if not is_pro_ctx %}disabled{% endif %}>
+      <option value="normal" selected>Keep (normal volume)</option>
+      <option value="low">Keep (quiet)</option>
+      <option value="off">Remove (new voice only)</option>
+    </select>
+  </div>
+
   <label class="redub-denoise" style="display:flex;align-items:center;gap:8px;margin:0 0 14px;cursor:pointer;">
     <input type="checkbox" id="redub-denoise-audio" {% if not is_pro_ctx %}disabled{% endif %}
            style="width:16px;height:16px;accent-color:var(--brass);">
