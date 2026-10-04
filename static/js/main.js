@@ -624,8 +624,9 @@ const VOX_TRANSFER_KEY = 'voxcraft_transfer_v1';
 const VOX_TRANSFER_DB = 'voxcraft_transfer_db';
 const VOX_TRANSFER_STORE = 'transfers';
 const VOX_TRANSFER_MAX_AGE_MS = 10 * 60 * 1000;  // 10 minutes
-// Audio tools reject uploads over 15MB — never stage larger files for handoff.
-const VOX_TRANSFER_MAX_BYTES = 15 * 1024 * 1024;
+// Audio tools reject uploads over the plan limit (15MB Free / 20MB Pro) — never stage larger files for handoff.
+function voxUploadLimitMb() { return Number((window.VOXCRAFT_UPLOAD || {}).limitMb) || 15; }
+function voxTransferMaxBytes() { return voxUploadLimitMb() * 1024 * 1024; }
 // Only tools that accept audio uploads. Music / clone / TTS / redub /
 // video extract do not take audio from other tools, so they are omitted.
 const VOX_NEXT_TOOLS = [
@@ -697,7 +698,7 @@ function voxSaveTransfer(b64, filename, mime) {
   if (!b64) return false;
   // Approximate decoded byte size from base64 length
   const approxBytes = Math.floor((String(b64).replace(/^data:[^;]+;base64,/, '').length * 3) / 4);
-  if (approxBytes >= VOX_TRANSFER_MAX_BYTES) {
+  if (approxBytes >= voxTransferMaxBytes()) {
     // Clear any previous staged file so a huge result doesn't leave a stale handoff
     try { sessionStorage.removeItem(VOX_TRANSFER_KEY); } catch (e) {}
     voxIdbClear();
@@ -935,7 +936,7 @@ function voxAudioPlayerHtml(b64, filename, mime) {
   mime = mime || 'audio/wav';
   filename = filename || 'audio.wav';
   const approxBytes = Math.floor((String(b64 || '').replace(/^data:[^;]+;base64,/, '').length * 3) / 4);
-  const tooLarge = approxBytes >= VOX_TRANSFER_MAX_BYTES;
+  const tooLarge = approxBytes >= voxTransferMaxBytes();
   const ok = !tooLarge && voxSaveTransfer(b64, filename, mime);
   const links = ok
     ? VOX_NEXT_TOOLS.map((t) =>
@@ -944,7 +945,7 @@ function voxAudioPlayerHtml(b64, filename, mime) {
     : '';
   let handoffNote = '';
   if (tooLarge) {
-    handoffNote = `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">File is over 15MB — too large for other audio tools. Download it, or use Decompress with Voice/Speech quality for a smaller WAV.</p>`;
+    handoffNote = `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">File is over ${voxUploadLimitMb()}MB — too large for other audio tools. Download it, or use Decompress with Voice/Speech quality for a smaller WAV.</p>`;
   } else if (!ok) {
     handoffNote = `<p style="margin:8px 0 0;font-size:0.78rem;color:var(--brass-hi);">Could not stage this file for other tools (storage full). Download it, then upload on the next tool.</p>`;
   }

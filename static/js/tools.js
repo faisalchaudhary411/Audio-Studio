@@ -234,6 +234,85 @@
   });
 
 
+  // ---- Upload size limits: warn BEFORE a big file is uploaded ----
+  function uploadCfg() {
+    const c = window.VOXCRAFT_UPLOAD || {};
+    return {
+      isPro: !!c.isPro,
+      freeMb: Number(c.freeMb) || 15,
+      proMb: Number(c.proMb) || 20,
+      limitMb: Number(c.limitMb) || 15,
+    };
+  }
+
+  function fmtMb(bytes) { return (bytes / (1024 * 1024)).toFixed(1) + ' MB'; }
+
+  function escHtml(v) {
+    return String(v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function sizeWarnHost(input) {
+    return input.closest('.dropzone') || input.parentNode;
+  }
+
+  function clearSizeWarning(input) {
+    const host = sizeWarnHost(input);
+    const next = host && host.nextElementSibling;
+    if (next && next.classList && next.classList.contains('vx-size-warning')) next.remove();
+  }
+
+  function showSizeWarning(input, tooBig, maxMb) {
+    clearSizeWarning(input);
+    const cfg = uploadCfg();
+    const host = sizeWarnHost(input);
+    const label = tooBig.length === 1
+      ? '\u201c' + tooBig[0].name + '\u201d is ' + fmtMb(tooBig[0].size)
+      : tooBig.length + ' files are over the limit (largest ' + fmtMb(Math.max.apply(null, tooBig.map(function (f) { return f.size; }))) + ')';
+    const box = document.createElement('div');
+    box.className = 'vx-size-warning';
+    box.setAttribute('role', 'alert');
+    box.style.cssText = 'margin:10px 0 12px;padding:10px 12px;border-radius:10px;font-size:0.88rem;line-height:1.55;' +
+      'border:1px solid rgba(232,176,75,0.55);background:rgba(232,176,75,0.10);color:var(--text-hi);';
+    let html = '<strong>Too large to upload.</strong> ' + escHtml(label) + ', over the ' + maxMb + ' MB limit.';
+    const canUpsell = !cfg.isPro && maxMb === cfg.freeMb && cfg.proMb > cfg.freeMb;
+    if (canUpsell) {
+      html += ' Free accounts can upload up to ' + cfg.freeMb + ' MB; Pro allows ' + cfg.proMb +
+        ' MB. <a href="/pricing" style="color:var(--brass-hi);">See Pro</a>.';
+    }
+    html += ' You can also shorten or compress the file first, then choose it again.';
+    box.innerHTML = html;
+    if (host && host.parentNode) host.parentNode.insertBefore(box, host.nextSibling);
+    // reset the "file chosen" label that the dropzone shows
+    const zone = input.closest('.dropzone');
+    const nm = zone && zone.querySelector('.dropzone__name, [data-redub-filename]');
+    if (nm) nm.textContent = '';
+  }
+
+  // Runs first (capture) on every file input of the tool pages, so oversized
+  // files are refused on the phone instead of after a slow upload.
+  document.addEventListener('change', function (ev) {
+    const input = ev.target;
+    if (!input || input.type !== 'file' || !input.files || !input.files.length) return;
+    const cfg = uploadCfg();
+    const maxMb = Number(input.dataset.maxMb) || cfg.limitMb;   // video tools set data-max-mb="50"
+    const limit = maxMb * 1024 * 1024;
+    const files = Array.prototype.slice.call(input.files);
+    const tooBig = files.filter(function (f) { return f.size > limit; });
+    if (!tooBig.length) { clearSizeWarning(input); return; }
+    const keep = files.filter(function (f) { return f.size <= limit; });
+    try {
+      const dt = new DataTransfer();
+      keep.forEach(function (f) { dt.items.add(f); });
+      input.files = dt.files;
+    } catch (e) {
+      input.value = '';
+    }
+    showSizeWarning(input, tooBig, maxMb);
+    if (!input.files || !input.files.length) ev.stopImmediatePropagation();   // nothing valid left: tool never sees it
+  }, true);
+
   // Upgrade plain file inputs into drop zones (empty-state UX)
   function enhanceFileInputs() {
     document.querySelectorAll('input.file-input[type="file"]').forEach((input) => {
@@ -250,8 +329,8 @@
       const hint = document.createElement('div');
       hint.className = 'dropzone__hint';
       hint.textContent = input.multiple
-        ? 'or tap to choose files · 15MB max each'
-        : 'or tap to choose · 15MB max';
+        ? 'or tap to choose files · ' + uploadCfg().limitMb + 'MB max each'
+        : 'or tap to choose · ' + uploadCfg().limitMb + 'MB max';
       const name = document.createElement('div');
       name.className = 'dropzone__name';
       input.parentNode.insertBefore(zone, input);
