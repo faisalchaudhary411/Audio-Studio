@@ -18,7 +18,7 @@
     <div class="dropzone__title">Drop a video here</div>
     <div class="dropzone__hint">or tap to choose · MP4, MOV, MKV, WebM · up to 50&nbsp;MB</div>
     <div class="dropzone__name" data-redub-filename></div>
-    <input type="file" class="file-input" id="redub-file"
+    <input type="file" class="file-input" id="redub-file" data-max-mb="50"
            accept="video/*,.mp4,.mov,.mkv,.webm,.m4v,.avi"
            {% if not is_pro_ctx %}disabled{% endif %}>
   </div>
