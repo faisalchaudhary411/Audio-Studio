@@ -59,7 +59,7 @@ import accounts
 import pro_requests
 import notifications
 import promo
-from errors import UserFacingError
+from errors import UserFacingError, UserInputError
 import rbac
 import features
 from werkzeug.utils import secure_filename
@@ -188,6 +188,11 @@ def api_error(e, action="process that request", status=500, category: str = None
     """Log the full exception + traceback server-side. UserFacingError
     messages pass through; other exceptions are genericized for the client.
     Also records a row in the admin Site Errors panel."""
+    if isinstance(e, UserInputError):
+        # Expected rejection of what the visitor submitted (e.g. file too big):
+        # tell them, but don't raise an error alert or fill the Site Errors panel.
+        app.logger.info(f"[api] input rejected while trying to {action}: {e}")
+        return jsonify({"error": str(e)}), (400 if int(status or 500) == 500 else status)
     tb = traceback.format_exc()
     app.logger.error(f"[api] failed to {action}: {e}\n{tb}")
     path = ""
@@ -363,8 +368,19 @@ _sentry_dsn = os.environ.get("SENTRY_DSN", "").strip()
 if _sentry_dsn:
     import sentry_sdk
     from sentry_sdk.integrations.flask import FlaskIntegration
+    def _sentry_before_send(event, hint):
+        # Visitor-input rejections (file too big, bad option) are expected, not bugs.
+        exc_info = (hint or {}).get("exc_info")
+        if exc_info and isinstance(exc_info[1], UserInputError):
+            return None
+        msg = ((event.get("logentry") or {}).get("message") or event.get("message") or "")
+        if "input rejected while trying to" in msg:
+            return None
+        return event
+
     sentry_sdk.init(dsn=_sentry_dsn, integrations=[FlaskIntegration()],
-                     traces_sample_rate=0.1, send_default_pii=False)
+                     traces_sample_rate=0.1, send_default_pii=False,
+                     before_send=_sentry_before_send)
 
 # HARDENING: on the VPS, Flask sits behind Nginx as a reverse proxy. Without
 # ProxyFix, Flask doesn't know the original request was HTTPS or came from
@@ -990,6 +1006,9 @@ def inject_globals():
     canonical_url = CANONICAL_HOST + request.path
     return {
         "is_pro_ctx": is_pro(),
+        "upload_limit_mb": audio_tools.MAX_UPLOAD_MB_PRO if is_pro() else audio_tools.MAX_UPLOAD_MB,
+        "upload_free_mb": audio_tools.MAX_UPLOAD_MB,
+        "upload_pro_mb": audio_tools.MAX_UPLOAD_MB_PRO,
         "plan_ctx": get_plan() or "free",
         "license_name_ctx": get_license_name(),
         "has_clone_music_ctx": has_clone_and_music(),
@@ -1413,6 +1432,7 @@ def pricing():
         f"{limits['FREE_DAILY_ACTIONS']} generations/day",
         f"{limits['FREE_CHAR_LIMIT']:,} chars/generation",
         f"All {_voice_count}+ voices · {_lang_count} languages",
+        f"Audio tool uploads up to {audio_tools.MAX_UPLOAD_MB}MB",
         "Ads supported",
     ]
     _tts_pro = int(limits.get("TTS_CHAR_MONTHLY_LIMIT_PRO") or TTS_CHAR_MONTHLY_LIMIT_PRO)
@@ -1425,6 +1445,7 @@ def pricing():
         "No ads",
         f"Batch up to {limits['PRO_BATCH_MAX']} lines",
         "Unlimited audio tools",
+        f"Audio tool uploads up to {audio_tools.MAX_UPLOAD_MB_PRO}MB",
         "Video audio redub (translate + re-voice)",
     ]
     pro_plus_features = [f.strip() for f in (limits.get("PRO_PLUS_FEATURES") or "").split("|") if f.strip()] or [
@@ -1435,6 +1456,7 @@ def pricing():
         "No ads",
         f"Batch up to {limits['PRO_BATCH_MAX']} lines",
         "Unlimited audio tools",
+        f"Audio tool uploads up to {audio_tools.MAX_UPLOAD_MB_PRO}MB",
         "Video audio redub (translate + re-voice)",
     ]
 
@@ -1480,6 +1502,8 @@ def pricing():
         "pro_tts": f"{_tts_pro:,} chars/mo",
         "pro_plus_tts": f"{_tts_pp:,} chars/mo",
         "free_tools": f"{limits.get('FREE_DAILY_ACTIONS', 10)} actions/day",
+        "free_upload": f"{audio_tools.MAX_UPLOAD_MB}MB per file",
+        "pro_upload": f"{audio_tools.MAX_UPLOAD_MB_PRO}MB per file",
         "clone_mo": f"{_clone_mo} gens/mo",
         "music_mo": f"{_music_mo} tracks/mo",
         "redub": "Video audio redub",
@@ -6220,6 +6244,24 @@ _RESUME_PREFIXES = ("/api/tools/",)
 
 def _resume_owner() -> str:
     return resume_cache.owner_id(session.get("csrf_token"))
+
+
+@app.before_request
+def _upload_limit_before():
+    """Pro visitors may upload larger audio files (see audio_tools.MAX_UPLOAD_MB_PRO)."""
+    if request.method == "POST" and (request.mimetype or "").startswith("multipart/"):
+        try:
+            g._upload_limit_token = audio_tools.set_upload_limit(is_pro())
+        except Exception:
+            pass
+    return None
+
+
+@app.teardown_request
+def _upload_limit_teardown(_exc):
+    tok = getattr(g, "_upload_limit_token", None)
+    if tok is not None:
+        audio_tools.reset_upload_limit(tok)
 
 
 _last_housekeeping = [0.0]

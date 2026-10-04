@@ -34,9 +34,27 @@ from pydub.silence import detect_nonsilent, split_on_silence as _pydub_split_on_
 
 import modal_whisper
 import local_whisper
-from errors import UserFacingError
+from errors import UserFacingError, UserInputError
 
-MAX_UPLOAD_MB = 15
+MAX_UPLOAD_MB = 15                                   # Free plan, per file
+MAX_UPLOAD_MB_PRO = int(os.environ.get("MAX_UPLOAD_MB_PRO", "20") or 20)   # Pro / Pro+
+
+# The limit that applies to the request being handled (set by app.py before
+# each upload request, so Pro visitors get the higher cap). Falls back to the
+# Free limit outside a request.
+import contextvars
+_upload_ctx = contextvars.ContextVar("vox_upload_limit", default=None)
+
+
+def set_upload_limit(is_pro: bool):
+    return _upload_ctx.set((MAX_UPLOAD_MB_PRO if is_pro else MAX_UPLOAD_MB, bool(is_pro)))
+
+
+def reset_upload_limit(token) -> None:
+    try:
+        _upload_ctx.reset(token)
+    except Exception:
+        pass
 
 # --- Transcribe timing guards -----------------------------------------------
 # /api/tools/transcribe and /api/clone/reference/transcribe both call
@@ -80,10 +98,19 @@ CONVERT_PRESETS = {
 }
 
 
-def check_file_size(file_bytes: bytes, max_mb: int = MAX_UPLOAD_MB):
+def check_file_size(file_bytes: bytes, max_mb=None):
+    ctx = _upload_ctx.get()
+    explicit = max_mb is not None          # e.g. video tools pass their own cap
+    if max_mb is None:
+        max_mb = ctx[0] if ctx else MAX_UPLOAD_MB
     size_mb = len(file_bytes) / (1024 * 1024)
     if size_mb > max_mb:
-        raise UserFacingError(f"File is {size_mb:.1f}MB — max allowed is {max_mb}MB.")
+        if not explicit and ctx and not ctx[1] and MAX_UPLOAD_MB_PRO > max_mb:
+            raise UserInputError(
+                f"File is {size_mb:.1f}MB. The free limit is {max_mb}MB (Pro allows up to "
+                f"{MAX_UPLOAD_MB_PRO}MB). Try the Compress tool, trim the clip, or upgrade to Pro."
+            )
+        raise UserInputError(f"File is {size_mb:.1f}MB — max allowed is {max_mb}MB.")
 
 
 def _load_segment(file_bytes: bytes, filename: str) -> AudioSegment:
@@ -1216,7 +1243,7 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
     check_file_size(file_bytes, max_mb=50)
     output_format = (output_format or "mp3").lower().strip()
     if output_format not in ("mp3", "wav", "ogg", "m4a"):
-        raise UserFacingError("Output format must be mp3, wav, ogg, or m4a.")
+        raise UserInputError("Output format must be mp3, wav, ogg, or m4a.")
     try:
         quality_kbps = int(quality_kbps)
     except (TypeError, ValueError):

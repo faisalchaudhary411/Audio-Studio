@@ -21,3 +21,13 @@ clone_engine.py, music_engine.py, ...) without creating import cycles.
 class UserFacingError(Exception):
     """An exception whose str() is safe and intended to reach the end user."""
     pass
+
+
+class UserInputError(UserFacingError):
+    """The visitor's own input was rejected (file too big, unsupported option).
+
+    This is expected, not a fault on our side, so api_error() shows the message
+    to the visitor (HTTP 400) without logging a traceback or adding a row to the
+    admin Site Errors panel.
+    """
+    pass
