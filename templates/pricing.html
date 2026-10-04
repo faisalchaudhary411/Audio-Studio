@@ -80,6 +80,12 @@
             {% if pro_plus_enabled %}<td class="is-yes">Unlimited</td>{% endif %}
           </tr>
           <tr>
+            <th scope="row">Audio upload size</th>
+            <td class="is-yes">{{ compare.free_upload }}</td>
+            <td class="is-yes">{{ compare.pro_upload }}</td>
+            {% if pro_plus_enabled %}<td class="is-yes">{{ compare.pro_upload }}</td>{% endif %}
+          </tr>
+          <tr>
             <th scope="row">Video redub</th>
             <td class="is-no">—</td>
             <td class="is-yes">{{ compare.redub }}</td>
@@ -157,6 +163,10 @@
     <details style="margin-top:10px;">
       <summary>What's included in the free tier?</summary>
       <p style="color:var(--text-mid);line-height:1.7;">Text-to-speech with a daily generation limit and monthly character quota, plus access to all the free <a href="{{ url_for('tools_hub') }}" style="color:var(--brass-hi);">audio tools</a> (transcribe, convert, merge, trim, denoise, voice effects, video-to-audio) with their own daily limits. No signup required.</p>
+    </details>
+    <details style="margin-top:10px;">
+      <summary>Is there a file size limit?</summary>
+      <p style="color:var(--text-mid);line-height:1.7;">Audio tools accept files up to {{ compare.free_upload.replace(' per file','') }} on the Free plan and up to {{ compare.pro_upload.replace(' per file','') }} on Pro. Video tools (video redub and extract audio from video) accept video files up to 50MB. The page warns you before a file that is too large is uploaded, so you do not waste mobile data.</p>
     </details>
   </div>
 

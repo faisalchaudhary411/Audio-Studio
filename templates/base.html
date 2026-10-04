@@ -586,7 +586,8 @@
 {% endif %}
 
 <script src="{{ static_url('js/ads.js') }}"></script>
-<script>window.VOXCRAFT_IS_PRO = {{ 'true' if is_pro_ctx else 'false' }};</script>
+<script>window.VOXCRAFT_IS_PRO = {{ 'true' if is_pro_ctx else 'false' }};
+window.VOXCRAFT_UPLOAD = { isPro: {{ 'true' if is_pro_ctx else 'false' }}, freeMb: {{ upload_free_mb }}, proMb: {{ upload_pro_mb }}, limitMb: {{ upload_limit_mb }} };</script>
 <script>window.VOXCRAFT_ENABLE_POPUNDER = {{ 'true' if enable_popunder_ctx else 'false' }};</script>
 <script>window.VOXCRAFT_ENABLE_INTERSTITIAL = {{ 'true' if enable_interstitial_ctx else 'false' }};</script>
 
