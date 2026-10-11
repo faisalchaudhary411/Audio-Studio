@@ -1,0 +1,66 @@
+{# Cookie consent — only rendered when Google Analytics is configured.
+   GA4 is injected here ONLY after the visitor accepts; "Decline" (or no
+   answer) means no Google Analytics request is ever made. The choice is
+   kept in localStorage ("voxcraft_consent_v1") and can be changed from the
+   "Cookie settings" footer link. Plausible is cookieless and not gated. #}
+{% if ga4_measurement_id %}
+<style>
+.consent{position:fixed;left:16px;right:16px;bottom:16px;z-index:250;max-width:560px;margin:0 auto;
+  background:var(--ink-panel,#161f29);border:1px solid rgba(232,169,60,.35);border-radius:14px;
+  padding:16px 18px;box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--text-hi,#F7F4EC);
+  font:400 .88rem/1.5 var(--body,system-ui,sans-serif);}
+.consent[hidden]{display:none}
+.consent p{margin:0 0 12px;color:var(--text-mid,#A8B4BD)}
+.consent a{color:var(--brass-hi,#F5C670)}
+.consent__row{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.consent__btn{font:600 .85rem var(--body,system-ui,sans-serif);padding:9px 18px;border-radius:999px;cursor:pointer;
+  border:1px solid rgba(237,230,214,.3);background:transparent;color:var(--text-hi,#F7F4EC)}
+.consent__btn--accept{background:var(--brass,#E8A93C);border-color:var(--brass,#E8A93C);color:#0c1117}
+@media (max-width:768px){body.has-sticky-ad .consent{bottom:84px}}
+</style>
+<div class="consent" id="consent-banner" role="dialog" aria-label="Cookie consent" hidden>
+  <p>We use Google Analytics cookies to understand how the site is used. They load only if you accept.
+     See our <a href="{{ url_for('privacy') }}">Privacy Policy</a>.</p>
+  <div class="consent__row">
+    <button type="button" class="consent__btn" id="consent-decline">Decline</button>
+    <button type="button" class="consent__btn consent__btn--accept" id="consent-accept">Accept</button>
+  </div>
+</div>
+<script>
+(function(){
+  var KEY='voxcraft_consent_v1', GA_ID={{ ga4_measurement_id|tojson }}, loaded=false;
+  var banner=document.getElementById('consent-banner');
+  function get(){try{return localStorage.getItem(KEY);}catch(e){return null;}}
+  function set(v){try{localStorage.setItem(KEY,v);}catch(e){}}
+  function loadGA(){
+    if(loaded||!GA_ID) return; loaded=true;
+    window.dataLayer=window.dataLayer||[];
+    window.gtag=function(){dataLayer.push(arguments);};
+    gtag('js',new Date()); gtag('config',GA_ID,{anonymize_ip:true});
+    var s=document.createElement('script'); s.async=true;
+    s.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(GA_ID);
+    document.head.appendChild(s);
+  }
+  function clearGA(){
+    // remove first-party GA cookies if the visitor withdraws consent
+    document.cookie.split(';').forEach(function(c){
+      var n=c.split('=')[0].trim();
+      if(n==='_ga'||n.indexOf('_ga_')===0||n==='_gid'||n==='_gat'){
+        document.cookie=n+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+        document.cookie=n+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=.'+location.hostname.replace(/^www\./,'');
+      }
+    });
+  }
+  function show(){banner.hidden=false;}
+  function hide(){banner.hidden=true;}
+  document.getElementById('consent-accept').addEventListener('click',function(){set('granted');hide();loadGA();});
+  document.getElementById('consent-decline').addEventListener('click',function(){
+    var was=get(); set('denied'); hide(); clearGA(); if(was==='granted'||loaded) location.reload();
+  });
+  var link=document.getElementById('cookie-settings-link');
+  if(link) link.addEventListener('click',function(e){e.preventDefault();show();});
+  var v=get();
+  if(v==='granted') loadGA(); else if(v!=='denied') show();
+})();
+</script>
+{% endif %}
