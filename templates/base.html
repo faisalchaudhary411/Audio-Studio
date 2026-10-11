@@ -121,9 +121,11 @@
 }
 </script>
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+{# Fonts are self-hosted (static/fonts + @font-face at top of style.css):
+   removes two third-party origins, a render-blocking CSS round-trip and the
+   "cross-origin file with no Subresource Integrity" finding. #}
+<link rel="preload" href="{{ url_for('static', filename='fonts/inter-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{ url_for('static', filename='fonts/fraunces-latin-opsz-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{{ static_url('css/style.css') }}">
 {# Per-page preloads (e.g. landing.html's voice-preview audio) — deliberately
    NOT loaded here site-wide. A <link rel="preload"> tells the browser "fetch
@@ -153,17 +155,9 @@
 <script defer data-domain="{{ plausible_domain }}" src="https://plausible.io/js/script.js"></script>
 {% endif %}
 
-{# Google Analytics 4 — set GA4_MEASUREMENT_ID=G-XXXXXXXXXX in env.
-   Complements Plausible; required for Search Console + Ads linking. #}
-{% if ga4_measurement_id %}
-<script async src="https://www.googletagmanager.com/gtag/js?id={{ ga4_measurement_id }}"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', '{{ ga4_measurement_id }}', { anonymize_ip: true });
-</script>
-{% endif %}
+{# Google Analytics 4 is NOT loaded here any more. It is injected by
+   partials/consent.html only after the visitor clicks "Accept", so no
+   Google request fires before consent. #}
 </head>
 <body class="{% block bodyclass %}{% endblock %} {% if not is_pro_ctx %}has-sticky-ad{% endif %}">
 
@@ -418,78 +412,78 @@
       <div class="featured-badges__marquee announce-banner__marquee">
         <div class="featured-badges__group">
             <a class="featured-badges__item" href="https://launchbuff.com/products/voxcraft-text-to-voice-crafted-2iugyx" target="_blank" rel="noopener noreferrer" title="Featured on LaunchBuff">
-              <img src="https://launchbuff.com/badge-featured-dark.svg" alt="Featured on LaunchBuff" width="200" height="54" loading="eager" decoding="async">
+              <img src="https://launchbuff.com/badge-featured-dark.svg" alt="Featured on LaunchBuff" width="200" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://www.producthunt.com/products/voxcraft-text-to-voice-crafted/reviews/new?utm_source=badge-product_review&amp;utm_medium=badge&amp;utm_source=badge-voxcraft-text-to-voice-crafted" target="_blank" rel="noopener noreferrer" title="Leave a review on Product Hunt">
-              <img src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1303147&amp;theme=dark" alt="Leave a review on Product Hunt" width="250" height="54" loading="eager" decoding="async">
+              <img src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1303147&amp;theme=dark" alt="Leave a review on Product Hunt" width="250" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://launchnest.io/p/voxcraft" target="_blank" rel="noopener noreferrer" title="VoxCraft on LaunchNest">
-              <img src="https://launchnest.io/badge/voxcraft.svg?variant=listed" alt="VoxCraft on LaunchNest" width="220" height="54" loading="eager" decoding="async">
+              <img src="https://launchnest.io/badge/voxcraft.svg?variant=listed" alt="VoxCraft on LaunchNest" width="220" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://goodaitools.com/ai/voxcraft" target="_blank" rel="noopener noreferrer" title="Good AI Tools">
-              <img src="https://goodaitools.com/assets/images/badge.png" alt="Good AI Tools" height="54" loading="eager" decoding="async">
+              <img src="https://goodaitools.com/assets/images/badge.png" alt="Good AI Tools" width="200" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://best-ai.org" target="_blank" rel="noopener noreferrer" title="Listed on Best-AI.org">
-              <img src="https://best-ai.org/images/badge-best-ai-org-dark.png" alt="Listed on Best-AI.org" width="200" height="48" loading="eager" decoding="async">
+              <img src="https://best-ai.org/images/badge-best-ai-org-dark.png" alt="Listed on Best-AI.org" width="200" height="48" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://saashunt.best/projects/voxcraft?utm_source=badge" target="_blank" rel="noopener noreferrer" title="Featured on SaasHunt">
-              <img src="https://saashunt.best/images/badges/featured-on-dark.svg" alt="Featured on SaasHunt" height="44" loading="eager" decoding="async">
+              <img src="https://saashunt.best/images/badges/featured-on-dark.svg" alt="Featured on SaasHunt" width="180" height="44" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://www.nxgntools.com/tools/voxcraft?utm_source=voxcraft" target="_blank" rel="noopener noreferrer" title="Featured on NxGn Tools">
-              <img src="https://www.nxgntools.com/api/embed/voxcraft?type=FEATURED_ON" alt="Featured on NxGn Tools" height="48" loading="eager" decoding="async">
+              <img src="https://www.nxgntools.com/api/embed/voxcraft?type=FEATURED_ON" alt="Featured on NxGn Tools" width="200" height="48" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://peerpush.com/p/voxcraft" target="_blank" rel="noopener noreferrer" title="VoxCraft on PeerPush">
-              <img src="https://peerpush.com/p/voxcraft/badge.png" alt="VoxCraft on PeerPush" width="230" height="54" loading="eager" decoding="async">
+              <img src="https://peerpush.com/p/voxcraft/badge.png" alt="VoxCraft on PeerPush" width="230" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://shipthing.com/projects/voxcraft?utm_source=badge" target="_blank" rel="noopener noreferrer" title="Featured on ShipThing">
-              <img src="https://shipthing.com/shipthing/images/badges/featured-on-dark.svg" alt="Featured on ShipThing" height="44" loading="eager" decoding="async">
+              <img src="https://shipthing.com/shipthing/images/badges/featured-on-dark.svg" alt="Featured on ShipThing" width="180" height="44" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer" title="Listed on Sell With Boost">
-              <img src="https://sellwithboost.com/badge/listing-dark.svg" alt="Listed on Sell With Boost" height="40" loading="eager" decoding="async">
+              <img src="https://sellwithboost.com/badge/listing-dark.svg" alt="Listed on Sell With Boost" width="160" height="40" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://findtop.tools/projects/voxcraft?utm_source=badge" target="_blank" rel="noopener noreferrer" title="Featured on Find Top Tools">
-              <img src="https://findtop.tools/findtoptools/images/badges/featured-on-dark.svg" alt="Featured on Find Top Tools" height="44" loading="eager" decoding="async">
+              <img src="https://findtop.tools/findtoptools/images/badges/featured-on-dark.svg" alt="Featured on Find Top Tools" width="180" height="44" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://launchpadly.co/startup/voxcraft?ref=badge" target="_blank" rel="noopener noreferrer" title="Launchpadly Startup Directory">
-              <img src="https://launchpadly.co/embed/badges/startup/voxcraft.svg?variant=listed-on" alt="Launchpadly Startup Directory" width="260" height="48" loading="eager" decoding="async">
+              <img src="https://launchpadly.co/embed/badges/startup/voxcraft.svg?variant=listed-on" alt="Launchpadly Startup Directory" width="260" height="48" loading="lazy" decoding="async">
             </a>
         </div>
         <div class="featured-badges__group" aria-hidden="true">
             <a class="featured-badges__item" href="https://launchbuff.com/products/voxcraft-text-to-voice-crafted-2iugyx" target="_blank" rel="noopener noreferrer" title="Featured on LaunchBuff" tabindex="-1">
-              <img src="https://launchbuff.com/badge-featured-dark.svg" alt="Featured on LaunchBuff" width="200" height="54" loading="eager" decoding="async">
+              <img src="https://launchbuff.com/badge-featured-dark.svg" alt="Featured on LaunchBuff" width="200" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://www.producthunt.com/products/voxcraft-text-to-voice-crafted/reviews/new?utm_source=badge-product_review&amp;utm_medium=badge&amp;utm_source=badge-voxcraft-text-to-voice-crafted" target="_blank" rel="noopener noreferrer" title="Leave a review on Product Hunt" tabindex="-1">
-              <img src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1303147&amp;theme=dark" alt="Leave a review on Product Hunt" width="250" height="54" loading="eager" decoding="async">
+              <img src="https://api.producthunt.com/widgets/embed-image/v1/product_review.svg?product_id=1303147&amp;theme=dark" alt="Leave a review on Product Hunt" width="250" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://launchnest.io/p/voxcraft" target="_blank" rel="noopener noreferrer" title="VoxCraft on LaunchNest" tabindex="-1">
-              <img src="https://launchnest.io/badge/voxcraft.svg?variant=listed" alt="VoxCraft on LaunchNest" width="220" height="54" loading="eager" decoding="async">
+              <img src="https://launchnest.io/badge/voxcraft.svg?variant=listed" alt="VoxCraft on LaunchNest" width="220" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://goodaitools.com/ai/voxcraft" target="_blank" rel="noopener noreferrer" title="Good AI Tools" tabindex="-1">
-              <img src="https://goodaitools.com/assets/images/badge.png" alt="Good AI Tools" height="54" loading="eager" decoding="async">
+              <img src="https://goodaitools.com/assets/images/badge.png" alt="Good AI Tools" width="200" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://best-ai.org" target="_blank" rel="noopener noreferrer" title="Listed on Best-AI.org" tabindex="-1">
-              <img src="https://best-ai.org/images/badge-best-ai-org-dark.png" alt="Listed on Best-AI.org" width="200" height="48" loading="eager" decoding="async">
+              <img src="https://best-ai.org/images/badge-best-ai-org-dark.png" alt="Listed on Best-AI.org" width="200" height="48" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://saashunt.best/projects/voxcraft?utm_source=badge" target="_blank" rel="noopener noreferrer" title="Featured on SaasHunt" tabindex="-1">
-              <img src="https://saashunt.best/images/badges/featured-on-dark.svg" alt="Featured on SaasHunt" height="44" loading="eager" decoding="async">
+              <img src="https://saashunt.best/images/badges/featured-on-dark.svg" alt="Featured on SaasHunt" width="180" height="44" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://www.nxgntools.com/tools/voxcraft?utm_source=voxcraft" target="_blank" rel="noopener noreferrer" title="Featured on NxGn Tools" tabindex="-1">
-              <img src="https://www.nxgntools.com/api/embed/voxcraft?type=FEATURED_ON" alt="Featured on NxGn Tools" height="48" loading="eager" decoding="async">
+              <img src="https://www.nxgntools.com/api/embed/voxcraft?type=FEATURED_ON" alt="Featured on NxGn Tools" width="200" height="48" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://peerpush.com/p/voxcraft" target="_blank" rel="noopener noreferrer" title="VoxCraft on PeerPush" tabindex="-1">
-              <img src="https://peerpush.com/p/voxcraft/badge.png" alt="VoxCraft on PeerPush" width="230" height="54" loading="eager" decoding="async">
+              <img src="https://peerpush.com/p/voxcraft/badge.png" alt="VoxCraft on PeerPush" width="230" height="54" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://shipthing.com/projects/voxcraft?utm_source=badge" target="_blank" rel="noopener noreferrer" title="Featured on ShipThing" tabindex="-1">
-              <img src="https://shipthing.com/shipthing/images/badges/featured-on-dark.svg" alt="Featured on ShipThing" height="44" loading="eager" decoding="async">
+              <img src="https://shipthing.com/shipthing/images/badges/featured-on-dark.svg" alt="Featured on ShipThing" width="180" height="44" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://sellwithboost.com" target="_blank" rel="noopener noreferrer" title="Listed on Sell With Boost" tabindex="-1">
-              <img src="https://sellwithboost.com/badge/listing-dark.svg" alt="Listed on Sell With Boost" height="40" loading="eager" decoding="async">
+              <img src="https://sellwithboost.com/badge/listing-dark.svg" alt="Listed on Sell With Boost" width="160" height="40" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://findtop.tools/projects/voxcraft?utm_source=badge" target="_blank" rel="noopener noreferrer" title="Featured on Find Top Tools" tabindex="-1">
-              <img src="https://findtop.tools/findtoptools/images/badges/featured-on-dark.svg" alt="Featured on Find Top Tools" height="44" loading="eager" decoding="async">
+              <img src="https://findtop.tools/findtoptools/images/badges/featured-on-dark.svg" alt="Featured on Find Top Tools" width="180" height="44" loading="lazy" decoding="async">
             </a>
             <a class="featured-badges__item" href="https://launchpadly.co/startup/voxcraft?ref=badge" target="_blank" rel="noopener noreferrer" title="Launchpadly Startup Directory" tabindex="-1">
-              <img src="https://launchpadly.co/embed/badges/startup/voxcraft.svg?variant=listed-on" alt="Launchpadly Startup Directory" width="260" height="48" loading="eager" decoding="async">
+              <img src="https://launchpadly.co/embed/badges/startup/voxcraft.svg?variant=listed-on" alt="Launchpadly Startup Directory" width="260" height="48" loading="lazy" decoding="async">
             </a>
         </div>
       </div>
@@ -573,6 +567,7 @@
     </span>
     <span class="footer__bottom-links">
       <a href="{{ url_for('privacy') }}">Privacy</a>
+      {% if ga4_measurement_id %}<a href="#" id="cookie-settings-link">Cookie settings</a>{% endif %}
       <a href="{{ url_for('terms') }}">Terms</a>
       <a href="{{ url_for('contact') }}">Support</a>
     </span>
@@ -585,6 +580,7 @@
   {% include "partials/ads_global.html" %}
 {% endif %}
 
+{% include "partials/consent.html" %}
 <script src="{{ static_url('js/ads.js') }}"></script>
 <script>window.VOXCRAFT_IS_PRO = {{ 'true' if is_pro_ctx else 'false' }};
 window.VOXCRAFT_UPLOAD = { isPro: {{ 'true' if is_pro_ctx else 'false' }}, freeMb: {{ upload_free_mb }}, proMb: {{ upload_pro_mb }}, limitMb: {{ upload_limit_mb }} };</script>
