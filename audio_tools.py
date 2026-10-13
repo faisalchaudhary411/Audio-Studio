@@ -1434,13 +1434,100 @@ def _tv_pitch_shift_segments(
     return (y_out / weights).astype(np.float32)
 
 
-def _apply_note_snaps(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
+def _snap_f0_to_scale(f0, scale_midis, strength=1.0, humanize=0.0, kernel_size=3):
     """
-    Hard Autotune: non-overlapping chunks, each fully pitch-shifted toward the
-    scale. Chunks are concatenated with a tiny crossfade between *shifted*
-    chunks only — never blended back with the original (that was killing the
-    effect on short notes).
+    Quantize an f0 contour to scale notes. kernel_size is the median-filter
+    width in frames — 3 = hard/instant snap (Cher / trap style), 5–9 = softer.
     """
+    import numpy as np
+    from scipy import signal as sig
+
+    f0 = np.asarray(f0, dtype=np.float64)
+    out = np.full_like(f0, np.nan)
+    rng = np.random.default_rng(42)
+    for i, f in enumerate(f0):
+        if f is None or not np.isfinite(f) or f <= 0:
+            continue
+        midi = _hz_to_midi(float(f))
+        if midi != midi:
+            continue
+        target = _nearest_scale_midi(midi, scale_midis)
+        if humanize > 0:
+            target += rng.uniform(-0.03, 0.03) * humanize
+        if strength >= 0.85:
+            corrected = target
+        else:
+            corrected = midi + (target - midi) * strength
+        out[i] = _midi_to_hz(corrected)
+
+    # Median filter on finite values only (odd kernel)
+    k = int(kernel_size)
+    if k < 1:
+        k = 1
+    if k % 2 == 0:
+        k += 1
+    finite = np.isfinite(out)
+    if finite.any() and k >= 3:
+        filled = out.copy()
+        # interpolate nan for filter, then restore unvoiced as nan
+        idx = np.arange(len(filled))
+        if finite.sum() >= 2:
+            filled[~finite] = np.interp(idx[~finite], idx[finite], out[finite])
+            filtered = sig.medfilt(filled, kernel_size=k)
+            out = filtered
+            out[~finite] = np.nan
+    return out
+
+
+def _apply_hard_lock(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
+    """
+    Singer / trap hard Autotune via PSOLA (pitch-synchronous overlap-add).
+
+    Pipeline matches the classic Cher / T-Pain style:
+      1. f0 already tracked (pyin)
+      2. Quantize every frame to the scale (tiny median kernel = instant snap)
+      3. psola.vocode reconstructs audio at the target pitch contour
+
+    Falls back to note-based librosa.pitch_shift if psola is not installed.
+    """
+    import numpy as np
+
+    y = np.asarray(y, dtype=np.float64)
+    f0 = np.asarray(f0, dtype=np.float64)
+
+    # kernel_size 3 = zero-lag hard snap (as in the trap/pop recipe)
+    target_f0 = _snap_f0_to_scale(
+        f0, scale_midis, strength=strength, humanize=humanize, kernel_size=3
+    )
+
+    try:
+        import psola
+        fmin = float(_midi_to_hz(24))   # C2
+        fmax = float(_midi_to_hz(96))   # C7
+        tuned = psola.vocode(
+            y,
+            sample_rate=int(sr),
+            target_pitch=target_f0,
+            fmin=fmin,
+            fmax=fmax,
+        )
+        tuned = np.asarray(tuned, dtype=np.float64)
+        if len(tuned) > len(y):
+            tuned = tuned[: len(y)]
+        elif len(tuned) < len(y):
+            tuned = np.pad(tuned, (0, len(y) - len(tuned)))
+    except Exception:
+        # Fallback: per-note librosa pitch_shift (weaker, no extra dependency)
+        tuned = _hard_lock_fallback(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length)
+
+    peak = float(np.max(np.abs(tuned))) or 1.0
+    if peak > 0.98:
+        tuned = tuned * (0.98 / peak)
+    return tuned.astype(np.float32)
+
+
+def _hard_lock_fallback(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
+    """Note-region librosa.pitch_shift if psola is unavailable."""
     import numpy as np
     import librosa
 
@@ -1449,79 +1536,48 @@ def _apply_note_snaps(y, sr, f0, voiced_flag, scale_midis, strength, humanize, h
     y = np.asarray(y, dtype=np.float64)
     n_samples = len(y)
     n_frames = len(f0)
-    if n_frames == 0 or n_samples < 512:
-        return y.astype(np.float32)
-
-    # Per-frame correction in semitones
     rng = np.random.default_rng(42)
-    n_steps = np.zeros(n_frames, dtype=np.float64)
-    for i in range(n_frames):
+
+    notes = []
+    i = 0
+    while i < n_frames:
         if not voiced[i] or not np.isfinite(f0[i]) or f0[i] <= 0:
+            i += 1
             continue
-        midi = _hz_to_midi(float(f0[i]))
-        if midi != midi:
-            continue
-        target = _nearest_scale_midi(midi, scale_midis)
+        j = i + 1
+        m0 = _hz_to_midi(float(f0[i]))
+        midis = [m0]
+        while j < n_frames and voiced[j] and np.isfinite(f0[j]) and f0[j] > 0:
+            mj = _hz_to_midi(float(f0[j]))
+            if abs(mj - m0) > 0.7:
+                break
+            midis.append(mj)
+            j += 1
+        notes.append((i, j, float(np.median(midis))))
+        i = max(j, i + 1)
+
+    y_out = y.copy()
+    for s, e, med_midi in notes:
+        target = _nearest_scale_midi(med_midi, scale_midis)
         if humanize > 0:
-            target += rng.uniform(-0.05, 0.05) * humanize
-        # Clamp: pitch trackers sometimes jump octaves; never shift more than ±2 st
-        corr = (target - midi) * strength
-        n_steps[i] = float(max(-2.0, min(2.0, corr)))
-
-    # Chunk size ~45ms, hop ~40ms (small overlap for crossfade only)
-    chunk_len = max(int(0.045 * sr), 2048)
-    hop_chunk = max(chunk_len - int(0.006 * sr), chunk_len * 3 // 4)
-
-    y_out = np.zeros(n_samples, dtype=np.float64)
-    weights = np.zeros(n_samples, dtype=np.float64)
-    # Near-rectangular window with 6ms fades
-    fade = max(int(0.006 * sr), 32)
-
-    pos = 0
-    while pos < n_samples:
-        end = min(pos + chunk_len, n_samples)
-        actual = end - pos
-        frame = y[pos:end]
-
-        # Map samples → f0 frames
-        f0_i = int(pos // hop_length)
-        f0_j = int(max(end - 1, pos) // hop_length) + 1
-        f0_i = max(0, min(f0_i, n_frames - 1))
-        f0_j = max(f0_i + 1, min(f0_j, n_frames))
-        local = n_steps[f0_i:f0_j]
-        # Prefer median of voiced corrections in this chunk
-        local_v = local[np.abs(local) > 1e-6] if len(local) else local
-        corr = float(np.median(local_v)) if len(local_v) else float(np.median(local)) if len(local) else 0.0
-
-        if abs(corr) < 0.04 or actual < 512:
-            shifted = frame.copy()
-        else:
-            work = frame
-            if actual < 2048:
-                work = np.pad(frame, (0, 2048 - actual))
-            try:
-                shifted = librosa.effects.pitch_shift(
-                    work, sr=sr, n_steps=corr, bins_per_octave=12
-                )
-                shifted = np.asarray(shifted[:actual], dtype=np.float64)
-            except Exception:
-                shifted = frame.copy()
-
-        w = np.ones(actual, dtype=np.float64)
-        f = min(fade, actual // 4)
-        if f > 1:
-            w[:f] = np.linspace(0, 1, f)
-            w[-f:] = np.linspace(1, 0, f)
-
-        y_out[pos:end] += shifted * w
-        weights[pos:end] += w
-        pos += hop_chunk
-
-    weights = np.maximum(weights, 1e-8)
-    y_out = y_out / weights
-    peak = float(np.max(np.abs(y_out))) or 1.0
-    if peak > 0.98:
-        y_out = y_out * (0.98 / peak)
+            target += rng.uniform(-0.03, 0.03) * humanize
+        corr = (target - med_midi) if strength >= 0.85 else (target - med_midi) * strength
+        corr = float(max(-3.0, min(3.0, corr)))
+        if abs(corr) < 0.05:
+            continue
+        s0 = int(s * hop_length)
+        s1 = min(n_samples, int(e * hop_length))
+        if s1 - s0 < 512:
+            continue
+        seg = y[s0:s1]
+        work = seg if len(seg) >= 2048 else np.pad(seg, (0, 2048 - len(seg)))
+        try:
+            shifted = librosa.effects.pitch_shift(
+                work.astype(np.float64), sr=sr, n_steps=corr, bins_per_octave=12
+            )
+            y_out[s0:s1] = np.asarray(shifted[: len(seg)], dtype=np.float64)
+        except Exception:
+            continue
     return y_out.astype(np.float32)
 
 
@@ -1661,7 +1717,7 @@ def autotune(
 
     # Hard path: note-level snaps (audible stair-step, works even on chromatic)
     if hard and strength >= 0.5:
-        y_out = _apply_note_snaps(
+        y_out = _apply_hard_lock(
             y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length
         )
     else:
