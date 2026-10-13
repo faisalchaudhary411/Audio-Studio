@@ -1354,27 +1354,28 @@ def _tv_pitch_shift_segments(
     sr: int,
     n_steps_per_frame,
     hop_length: int = 512,
-    seg_sec: float = 0.06,
+    seg_sec: float = 0.05,
     overlap: float = 0.5,
+    hard: bool = False,
 ):
     """
-    Apply time-varying pitch correction by shifting short overlapping segments
-    with librosa.effects.pitch_shift (phase-vocoder). This is the same engine
-    used by the Speed tool and actually moves pitch — unlike magnitude-only
-    STFT remapping which kept original phase and sounded unchanged.
+    Time-varying pitch correction via overlapping librosa.effects.pitch_shift calls.
+    hard=True → shorter frames, center-frame steps (not median), less crossfade
+    so the classic stair-step Autotune character comes through.
     """
     import numpy as np
     import librosa
 
-    steps = np.asarray(n_steps_per_frame, dtype=np.float64)
-    steps = np.nan_to_num(steps, nan=0.0)
+    steps = np.nan_to_num(np.asarray(n_steps_per_frame, dtype=np.float64), nan=0.0)
+    y = np.asarray(y, dtype=np.float64)
 
-    seg_len = max(int(sr * seg_sec), 1024)
-    # Ensure enough samples for librosa pitch_shift STFT
-    seg_len = max(seg_len, 2048)
+    if hard:
+        seg_sec = 0.04
+        overlap = 0.35
+
+    seg_len = max(int(sr * seg_sec), 2048)
     hop_seg = max(int(seg_len * (1.0 - overlap)), 256)
 
-    y = np.asarray(y, dtype=np.float64)
     y_out = np.zeros(len(y), dtype=np.float64)
     weights = np.zeros(len(y), dtype=np.float64)
 
@@ -1386,37 +1387,136 @@ def _tv_pitch_shift_segments(
 
         f_idx = int(pos // hop_length)
         f_end = int(max(end - 1, pos) // hop_length) + 1
-        f_idx = max(0, min(f_idx, len(steps) - 1)) if len(steps) else 0
-        f_end = max(f_idx + 1, min(f_end, len(steps))) if len(steps) else 0
-        local = steps[f_idx:f_end] if len(steps) else np.array([0.0])
-        med = float(np.median(local)) if len(local) else 0.0
+        if len(steps) == 0:
+            med = 0.0
+        else:
+            f_idx = max(0, min(f_idx, len(steps) - 1))
+            f_end = max(f_idx + 1, min(f_end, len(steps)))
+            local = steps[f_idx:f_end]
+            # Hard mode: use center frame (instant snap). Soft: median (smoother).
+            if hard:
+                mid = local[len(local) // 2] if len(local) else 0.0
+                med = float(mid)
+            else:
+                med = float(np.median(local)) if len(local) else 0.0
 
-        if abs(med) < 0.03 or actual < 512:
+        if abs(med) < 0.02 or actual < 512:
             shifted = frame.copy()
         else:
-            # Pad short tail frames so pitch_shift has enough material
             work = frame
-            pad_right = 0
             if actual < 2048:
-                pad_right = 2048 - actual
-                work = np.pad(frame, (0, pad_right))
+                work = np.pad(frame, (0, 2048 - actual))
             try:
                 shifted_full = librosa.effects.pitch_shift(
                     work, sr=sr, n_steps=med, bins_per_octave=12
                 )
             except Exception:
                 shifted_full = work
-            shifted = shifted_full[:actual]
+            shifted = np.asarray(shifted_full[:actual], dtype=np.float64)
 
-        w = np.hanning(actual).astype(np.float64)
-        if actual >= 2 and float(np.sum(w)) < 1e-9:
+        if hard:
+            # Near-rectangular window keeps edges sharper (more robotic)
             w = np.ones(actual, dtype=np.float64)
+            fade = min(64, actual // 8)
+            if fade > 1:
+                w[:fade] = np.linspace(0, 1, fade)
+                w[-fade:] = np.linspace(1, 0, fade)
+        else:
+            w = np.hanning(actual).astype(np.float64)
+            if float(np.sum(w)) < 1e-9:
+                w = np.ones(actual, dtype=np.float64)
+
         y_out[pos:end] += shifted * w
         weights[pos:end] += w
         pos += hop_seg
 
     weights = np.maximum(weights, 1e-8)
     return (y_out / weights).astype(np.float32)
+
+
+def _apply_note_snaps(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
+    """
+    Hard Autotune path: group stable pitch regions into 'notes', compute one
+    correction per note, pitch-shift that whole region. Produces the classic
+    stair-step lock between notes (much more audible than tiny per-frame moves).
+    """
+    import numpy as np
+    import librosa
+
+    f0 = np.asarray(f0, dtype=np.float64)
+    voiced = np.asarray(voiced_flag, dtype=bool)
+    n = len(f0)
+    if n == 0:
+        return y.astype(np.float32)
+
+    # Build note regions: consecutive voiced frames whose pitch stays within ~1 st
+    notes = []  # (start_f, end_f, median_midi)
+    i = 0
+    while i < n:
+        if not voiced[i] or not np.isfinite(f0[i]) or f0[i] <= 0:
+            i += 1
+            continue
+        j = i + 1
+        midi0 = _hz_to_midi(float(f0[i]))
+        midis = [midi0]
+        while j < n and voiced[j] and np.isfinite(f0[j]) and f0[j] > 0:
+            mj = _hz_to_midi(float(f0[j]))
+            if abs(mj - midi0) > 1.0:  # new note if jump > 1 semitone
+                break
+            midis.append(mj)
+            j += 1
+        notes.append((i, j, float(np.median(midis))))
+        i = j
+
+    if not notes:
+        return y.astype(np.float32)
+
+    y = np.asarray(y, dtype=np.float64)
+    y_out = y.copy()
+    rng = np.random.default_rng(42)
+
+    for start_f, end_f, med_midi in notes:
+        target = _nearest_scale_midi(med_midi, scale_midis)
+        if humanize > 0:
+            target += rng.uniform(-0.12, 0.12) * humanize
+        corr = (target - med_midi) * strength
+        if abs(corr) < 0.03:
+            continue
+
+        # Sample range for this note (+ small pad)
+        s0 = max(0, int(start_f * hop_length) - hop_length)
+        s1 = min(len(y), int(end_f * hop_length) + hop_length)
+        if s1 - s0 < 512:
+            continue
+
+        segment = y[s0:s1]
+        work = segment
+        pad = 0
+        if len(work) < 2048:
+            pad = 2048 - len(work)
+            work = np.pad(work, (0, pad))
+        try:
+            shifted = librosa.effects.pitch_shift(
+                work, sr=sr, n_steps=float(corr), bins_per_octave=12
+            )
+        except Exception:
+            continue
+        shifted = np.asarray(shifted[: len(segment)], dtype=np.float64)
+
+        # Crossfade edges so note boundaries don't click
+        fade = min(256, len(segment) // 4)
+        if fade > 1:
+            env = np.ones(len(segment), dtype=np.float64)
+            env[:fade] = np.linspace(0, 1, fade)
+            env[-fade:] = np.linspace(1, 0, fade)
+            y_out[s0:s1] = y_out[s0:s1] * (1.0 - env) + shifted * env
+        else:
+            y_out[s0:s1] = shifted
+
+    peak = float(np.max(np.abs(y_out))) or 1.0
+    if peak > 0.98:
+        y_out = y_out * (0.98 / peak)
+    return y_out.astype(np.float32)
 
 
 def autotune(
@@ -1470,11 +1570,9 @@ def autotune(
     if duration_sec < 0.25:
         raise UserInputError("Audio is too short to Autotune (need at least 0.25 s).")
 
-    # Mono float analysis / processing path
     if audio.channels > 1:
         audio = audio.set_channels(1)
-    # Normalize sample rate for stable pitch tracking (keep original for export timing
-    # via resampling back only if we change it — prefer native rate when reasonable).
+
     sr_native = int(audio.frame_rate)
     if sr_native > 24000:
         audio_an = audio.set_frame_rate(22050)
@@ -1492,12 +1590,13 @@ def autotune(
         peak = float(np.max(np.abs(samples))) or 1.0
         y = samples / peak
 
-    # Gentle peak normalize so quiet vocals still track
     peak_y = float(np.max(np.abs(y))) or 1.0
     if peak_y < 0.15:
         y = y * (0.5 / peak_y)
+    elif peak_y > 1.0:
+        y = y / peak_y
 
-    # --- Key resolution ---
+    # --- Key ---
     key_str = (key or "auto").strip().lower()
     if key_str in ("auto", "detect", ""):
         root_pc, detected_mode = _detect_key_from_chroma(y, sr)
@@ -1517,10 +1616,10 @@ def autotune(
 
     scale_midis = _build_scale_midi(root_pc, intervals)
 
-    # --- Pitch tracking: pyin first, yin fallback if almost no voiced frames ---
+    # --- Pitch tracking ---
     hop_length = 512
     frame_length = 2048
-    f0, voiced_flag, voiced_probs = librosa.pyin(
+    f0, voiced_flag, _voiced_probs = librosa.pyin(
         y,
         fmin=librosa.note_to_hz("C2"),
         fmax=librosa.note_to_hz("C7"),
@@ -1533,7 +1632,6 @@ def autotune(
     n_voiced = int(np.sum(voiced_flag & np.isfinite(f0) & (f0 > 0)))
 
     if n_voiced < max(5, len(f0) // 20):
-        # pyin was too conservative — use yin (always returns a value)
         f0_yin = librosa.yin(
             y,
             fmin=librosa.note_to_hz("C2"),
@@ -1543,51 +1641,49 @@ def autotune(
             hop_length=hop_length,
         )
         f0 = np.asarray(f0_yin, dtype=np.float64)
-        # Treat very low confidence / extreme values as unvoiced via energy gate
         rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
-        # Align lengths
         n = min(len(f0), len(rms))
         f0 = f0[:n]
         rms = rms[:n]
         rms_thresh = float(np.percentile(rms, 25)) * 0.5
         voiced_flag = (rms > rms_thresh) & np.isfinite(f0) & (f0 > 0)
 
-    n_frames = len(f0)
-    n_steps = np.zeros(n_frames, dtype=np.float64)
+    hard = retune_speed >= 0.75
 
-    rng = np.random.default_rng(42)
-    for i in range(n_frames):
-        f = f0[i]
-        if i >= len(voiced_flag) or not voiced_flag[i] or f is None or f != f or f <= 0:
-            n_steps[i] = 0.0
-            continue
-        midi = _hz_to_midi(float(f))
-        if midi != midi:  # NaN
-            n_steps[i] = 0.0
-            continue
-        target_midi = _nearest_scale_midi(midi, scale_midis)
-        if humanize > 0:
-            target_midi += rng.uniform(-0.15, 0.15) * humanize
-        n_steps[i] = (target_midi - midi) * strength
+    # Hard path: note-level snaps (audible stair-step, works even on chromatic)
+    if hard and strength >= 0.5:
+        y_out = _apply_note_snaps(
+            y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length
+        )
+    else:
+        # Soft path: per-frame curve + overlapping pitch_shift
+        n_frames = len(f0)
+        n_steps = np.zeros(n_frames, dtype=np.float64)
+        rng = np.random.default_rng(42)
+        for i in range(n_frames):
+            f = f0[i]
+            if i >= len(voiced_flag) or not voiced_flag[i] or f is None or f != f or f <= 0:
+                continue
+            midi = _hz_to_midi(float(f))
+            if midi != midi:
+                continue
+            target_midi = _nearest_scale_midi(midi, scale_midis)
+            if humanize > 0:
+                target_midi += rng.uniform(-0.15, 0.15) * humanize
+            n_steps[i] = (target_midi - midi) * strength
 
-    # Retune-speed smoothing
-    n_steps = _smooth_correction(n_steps, retune_speed)
+        n_steps = _smooth_correction(n_steps, retune_speed)
+        for i in range(n_frames):
+            if i < len(voiced_flag) and not voiced_flag[i]:
+                n_steps[i] *= 0.05
 
-    # Kill residual on clearly unvoiced frames after smoothing bleed
-    for i in range(n_frames):
-        if i < len(voiced_flag) and not voiced_flag[i]:
-            n_steps[i] *= 0.05
+        if float(np.max(np.abs(n_steps))) < 0.02:
+            return _export_bytes(audio, output_format)
 
-    max_corr = float(np.max(np.abs(n_steps))) if len(n_steps) else 0.0
-    if max_corr < 0.02:
-        # Truly already in tune (or silence) — return original encoding path
-        return _export_bytes(audio, output_format)
+        y_out = _tv_pitch_shift_segments(
+            y, sr, n_steps, hop_length=hop_length, hard=False
+        )
 
-    y_out = _tv_pitch_shift_segments(
-        y, sr, n_steps, hop_length=hop_length, seg_sec=0.06, overlap=0.5
-    )
-
-    # Soft peak limit
     peak = float(np.max(np.abs(y_out))) or 1.0
     if peak > 0.98:
         y_out = y_out * (0.98 / peak)
@@ -1599,11 +1695,9 @@ def autotune(
         sample_width=2,
         channels=1,
     )
-    # If we analyzed at 22050 but source was higher, resample output back
     if sr != sr_native:
         out_seg = out_seg.set_frame_rate(sr_native)
     return _export_bytes(out_seg, output_format)
-
 
 
 # ---------------------------------------------------------------------------
