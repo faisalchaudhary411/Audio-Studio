@@ -1434,13 +1434,16 @@ def _tv_pitch_shift_segments(
     return (y_out / weights).astype(np.float32)
 
 
-def _snap_f0_to_scale(f0, scale_midis, strength=1.0, humanize=0.0, kernel_size=3):
+def _snap_f0_to_scale(f0, scale_midis, strength=1.0, humanize=0.0,
+                      kernel_size=1, stair_hold_cents=50.0, min_hold_sec=0.15,
+                      hop_length=512, sr=22050):
     """
-    Quantize an f0 contour to scale notes. kernel_size is the median-filter
-    width in frames — 3 = hard/instant snap (Cher / trap style), 5–9 = softer.
+    Extreme quantize:
+      - Full snap to scale when strength high
+      - Minimum hold time (plateau notes) → robotic stepped melody
+      - No median lag (kernel_size=1)
     """
     import numpy as np
-    from scipy import signal as sig
 
     f0 = np.asarray(f0, dtype=np.float64)
     out = np.full_like(f0, np.nan)
@@ -1453,71 +1456,98 @@ def _snap_f0_to_scale(f0, scale_midis, strength=1.0, humanize=0.0, kernel_size=3
             continue
         target = _nearest_scale_midi(midi, scale_midis)
         if humanize > 0:
-            target += rng.uniform(-0.03, 0.03) * humanize
-        if strength >= 0.85:
-            corrected = target
-        else:
-            corrected = midi + (target - midi) * strength
+            target += rng.uniform(-0.02, 0.02) * humanize
+        corrected = target if strength >= 0.85 else midi + (target - midi) * strength
         out[i] = _midi_to_hz(corrected)
 
-    # Median filter on finite values only (odd kernel)
-    k = int(kernel_size)
-    if k < 1:
-        k = 1
-    if k % 2 == 0:
-        k += 1
-    finite = np.isfinite(out)
-    if finite.any() and k >= 3:
-        filled = out.copy()
-        # interpolate nan for filter, then restore unvoiced as nan
-        idx = np.arange(len(filled))
-        if finite.sum() >= 2:
-            filled[~finite] = np.interp(idx[~finite], idx[finite], out[finite])
-            filtered = sig.medfilt(filled, kernel_size=k)
-            out = filtered
-            out[~finite] = np.nan
-    return out
+    # Plateau: force each lock to last at least min_hold_sec
+    min_frames = max(1, int(float(min_hold_sec) * float(sr) / float(hop_length)))
+    jump_cents = float(stair_hold_cents) if stair_hold_cents else 50.0
+    stepped = np.full_like(out, np.nan)
+    i = 0
+    n = len(out)
+    while i < n:
+        if not np.isfinite(out[i]):
+            i += 1
+            continue
+        j = i + 1
+        while j < n:
+            if np.isfinite(out[j]):
+                cents = abs(1200.0 * math.log2(out[j] / out[i]))
+                if cents > jump_cents:
+                    break
+            j += 1
+        end = min(n, max(j, i + min_frames))
+        segment = out[i:j]
+        finite = segment[np.isfinite(segment)]
+        lock = float(np.median(finite)) if len(finite) else float(out[i])
+        stepped[i:end] = lock
+        i = end
+    return stepped
 
 
 def _apply_hard_lock(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
     """
-    Singer / trap hard Autotune via PSOLA (pitch-synchronous overlap-add).
-
-    Pipeline matches the classic Cher / T-Pain style:
-      1. f0 already tracked (pyin)
-      2. Quantize every frame to the scale (tiny median kernel = instant snap)
-      3. psola.vocode reconstructs audio at the target pitch contour
-
-    Falls back to note-based librosa.pitch_shift if psola is not installed.
+    MEGA hard Autotune (trap / Cher / T-Pain):
+      1. Snap to scale
+      2. Force ~150ms pitch plateaus (stair-step melody)
+      3. PSOLA reconstruct
+      4. Second PSOLA pass for extra lock
     """
     import numpy as np
 
     y = np.asarray(y, dtype=np.float64)
     f0 = np.asarray(f0, dtype=np.float64)
 
-    # kernel_size 3 = zero-lag hard snap (as in the trap/pop recipe)
     target_f0 = _snap_f0_to_scale(
-        f0, scale_midis, strength=strength, humanize=humanize, kernel_size=3
+        f0, scale_midis,
+        strength=strength,
+        humanize=humanize,
+        kernel_size=1,
+        stair_hold_cents=50.0,
+        min_hold_sec=0.15,
+        hop_length=hop_length,
+        sr=sr,
     )
 
     try:
         import psola
-        fmin = float(_midi_to_hz(24))   # C2
-        fmax = float(_midi_to_hz(96))   # C7
+        fmin = float(_midi_to_hz(24))
+        fmax = float(_midi_to_hz(96))
         tuned = psola.vocode(
-            y,
-            sample_rate=int(sr),
-            target_pitch=target_f0,
-            fmin=fmin,
-            fmax=fmax,
+            y, sample_rate=int(sr), target_pitch=target_f0, fmin=fmin, fmax=fmax,
         )
         tuned = np.asarray(tuned, dtype=np.float64)
         if len(tuned) > len(y):
             tuned = tuned[: len(y)]
         elif len(tuned) < len(y):
             tuned = np.pad(tuned, (0, len(y) - len(tuned)))
+
+        # Second pass for extra robotic lock
+        try:
+            import librosa
+            f0_2, _, _ = librosa.pyin(
+                tuned, fmin=fmin, fmax=fmax, sr=sr,
+                frame_length=2048, hop_length=hop_length,
+            )
+            target_2 = _snap_f0_to_scale(
+                np.asarray(f0_2, dtype=np.float64), scale_midis,
+                strength=1.0, humanize=0.0, kernel_size=1,
+                stair_hold_cents=50.0, min_hold_sec=0.15,
+                hop_length=hop_length, sr=sr,
+            )
+            tuned2 = psola.vocode(
+                tuned, sample_rate=int(sr), target_pitch=target_2, fmin=fmin, fmax=fmax,
+            )
+            tuned2 = np.asarray(tuned2, dtype=np.float64)
+            if len(tuned2) > len(y):
+                tuned2 = tuned2[: len(y)]
+            elif len(tuned2) < len(y):
+                tuned2 = np.pad(tuned2, (0, len(y) - len(tuned2)))
+            tuned = tuned2
+        except Exception:
+            pass
     except Exception:
-        # Fallback: per-note librosa pitch_shift (weaker, no extra dependency)
         tuned = _hard_lock_fallback(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length)
 
     peak = float(np.max(np.abs(tuned))) or 1.0
@@ -1710,7 +1740,7 @@ def autotune(
         rms_thresh = float(np.percentile(rms, 25)) * 0.5
         voiced_flag = (rms > rms_thresh) & np.isfinite(f0) & (f0 > 0)
 
-    hard = retune_speed >= 0.75
+    hard = retune_speed >= 0.65
     # Hard lock and high humanize fight each other — cap it
     if hard and humanize > 0.15:
         humanize = 0.15

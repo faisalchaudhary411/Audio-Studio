@@ -4928,14 +4928,25 @@ def api_autotune():
     except (TypeError, ValueError):
         strength = 1.0
     try:
-        retune_speed = float(request.form.get("retune_speed", 0.7))
+        retune_speed = float(request.form.get("retune_speed", 1.0))
     except (TypeError, ValueError):
-        retune_speed = 0.7
+        retune_speed = 1.0
     try:
         humanize = float(request.form.get("humanize", 0.0))
     except (TypeError, ValueError):
         humanize = 0.0
+    # Clamp
+    strength = max(0.0, min(1.0, strength))
+    retune_speed = max(0.0, min(1.0, retune_speed))
+    humanize = max(0.0, min(1.0, humanize))
+    # If client sent preset=hard, force full lock (guards against slider/JS glitches)
+    preset = (request.form.get("preset") or "").strip().lower()
+    if preset == "hard":
+        strength = 1.0
+        retune_speed = 1.0
+        humanize = 0.0
     output_format = request.form.get("output_format", "mp3")
+    path_used = "hard" if (retune_speed >= 0.65 and strength >= 0.5) else "soft"
     try:
         out_bytes = audio_tools.autotune(
             file.read(), file.filename,
@@ -4949,6 +4960,10 @@ def api_autotune():
             "filename": f"VoxCraft-Autotune-{int(time.time())}.{output_format}",
             "format": output_format,
             "size_kb": round(len(out_bytes) / 1024, 1),
+            "path": path_used,
+            "strength": strength,
+            "retune_speed": retune_speed,
+            "humanize": humanize,
         })
     except Exception as e:
         return api_error(e, "autotune this file")
