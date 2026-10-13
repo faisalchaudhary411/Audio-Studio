@@ -1607,8 +1607,8 @@
 
     const presets = {
       natural:  { strength: 55, speed: 25, humanize: 20 },
-      balanced: { strength: 80, speed: 55, humanize: 10 },
-      hard:     { strength: 100, speed: 95, humanize: 0 },
+      balanced: { strength: 85, speed: 60, humanize: 5 },
+      hard:     { strength: 100, speed: 100, humanize: 0 },
     };
     document.querySelectorAll('[data-autotune-preset]').forEach((b) => {
       b.addEventListener('click', () => {
