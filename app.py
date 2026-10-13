@@ -1300,6 +1300,7 @@ def usage_summary() -> dict:
         "mono": {"used": usage_tracking.get_daily_counter(request, "usage_mono"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "loop": {"used": usage_tracking.get_daily_counter(request, "usage_loop"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "eq": {"used": usage_tracking.get_daily_counter(request, "usage_eq"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "autotune": {"used": usage_tracking.get_daily_counter(request, "usage_autotune"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
@@ -1969,6 +1970,10 @@ BLOG_TOOL_LINKS = {
     "denoise": ("tool_page", {"slug": "remove-background-noise"}, "Open Denoise"),
     "noise removal": ("tool_page", {"slug": "remove-background-noise"}, "Open Denoise"),
     "voice changer": ("tool_page", {"slug": "voice-changer"}, "Open Voice Changer"),
+    "autotune": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
+    "auto-tune": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
+    "pitch correction": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
+    "pitch correct": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
     "video to audio": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
     "video extract": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
     "music": ("tool_page", {"slug": "ai-music-generator"}, "Open Music Generator"),
@@ -4905,6 +4910,48 @@ def api_eq():
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
         return api_error(e, "apply EQ to this file")
+
+
+@app.route("/api/tools/autotune", methods=["POST"])
+def api_autotune():
+    """Professional pitch-correction Autotune (key/scale, strength, retune speed, humanize)."""
+    lim = get_limits()
+    if not _under_limit("usage_autotune", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    key = request.form.get("key", "auto")
+    scale = request.form.get("scale", "major")
+    try:
+        strength = float(request.form.get("strength", 1.0))
+    except (TypeError, ValueError):
+        strength = 1.0
+    try:
+        retune_speed = float(request.form.get("retune_speed", 0.7))
+    except (TypeError, ValueError):
+        retune_speed = 0.7
+    try:
+        humanize = float(request.form.get("humanize", 0.0))
+    except (TypeError, ValueError):
+        humanize = 0.0
+    output_format = request.form.get("output_format", "mp3")
+    try:
+        out_bytes = audio_tools.autotune(
+            file.read(), file.filename,
+            key=key, scale=scale,
+            strength=strength, retune_speed=retune_speed,
+            humanize=humanize, output_format=output_format,
+        )
+        _bump_counter("usage_autotune")
+        return jsonify({
+            "audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+            "filename": f"VoxCraft-Autotune-{int(time.time())}.{output_format}",
+            "format": output_format,
+            "size_kb": round(len(out_bytes) / 1024, 1),
+        })
+    except Exception as e:
+        return api_error(e, "autotune this file")
 
 
 @app.route("/api/tools/redub", methods=["POST"])

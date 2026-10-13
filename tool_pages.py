@@ -672,6 +672,48 @@ TOOL_PAGES = {
         "related_tools": ["normalize-audio-volume", "remove-background-noise", "convert-audio-format"],
         "blog_keywords": ["eq", "bass", "treble"],
     },
+    "autotune-audio": {
+        "widget": "autotune",
+        "usage_key": "autotune",
+        "title": "Autotune Online Free — Professional Pitch Correction | VoxCraft",
+        "meta_description": "Free online Autotune and pitch correction. Snap vocals to any key and scale with adjustable retune speed, strength, and humanize. No install, no signup.",
+        "eyebrow": "Pitch correction",
+        "h1": "Autotune online — professional pitch correction",
+        "sub": "Correct pitch to a musical scale. Key, scale, retune speed, strength, and humanize — classic hard Autotune or natural correction.",
+        "intro": [
+            "Autotune audio online for free with VoxCraft. Professional pitch correction detects the sung (or spoken) pitch, snaps it to your chosen key and scale, and lets you dial how hard and how fast the correction happens — from subtle natural tuning to the classic hard Autotune sound.",
+            "Unlike a simple pitch shifter (which moves everything by a fixed amount), this tool tracks pitch over time and corrects each note toward the nearest scale degree. Choose a key manually or leave it on Auto; pick major, minor, pentatonic, blues, or chromatic; then set strength, retune speed, and optional humanize.",
+            "Built for vocal takes, vocaloids, and melodic voiceovers. It is CPU-based (no GPU required) and limited to 5 minutes per file so processing stays responsive on shared hosting. For longer sessions, trim first with the Cutter tool.",
+        ],
+        "how_it_works": [
+            "Upload a vocal or melodic clip (WAV, MP3, OGG, M4A — 15MB free / 20MB Pro).",
+            "Pick a key (or Auto) and a scale — major, minor, pentatonic, blues, chromatic, and more.",
+            "Set Strength (how hard notes snap), Retune speed (fast = robotic, slow = natural), and optional Humanize.",
+            "Tap Autotune, preview, and download the corrected track.",
+        ],
+        "use_cases": [
+            ("Vocal takes", "Fix small pitch drifts on a sung verse or chorus without re-recording."),
+            ("Classic Autotune sound", "Max strength + fast retune for the hard T-Pain / chart style effect."),
+            ("Natural correction", "Medium strength + slower retune to keep the performance human while tightening pitch."),
+            ("Content creators", "Polish a melodic voiceover or short-form vocal hook before publishing."),
+        ],
+        "tips": [
+            "Clean, single-voice takes work best — denoise first if there is constant background noise.",
+            "Fast retune + full strength = hard Autotune. Slow retune + 50–70% strength = more natural.",
+            "Humanize adds tiny random variation so long held notes don’t sound locked to a machine.",
+            "Auto key works well on clear tonal material; for ambiguous or chromatic lines, pick the key by ear.",
+            "Chromatic scale only corrects to the nearest 12-TET note — useful when you don’t want a diatonic constraint.",
+        ],
+        "faq": [
+            ("Is this the same as Auto-Tune by Antares?", "It is pitch correction in the same category — track pitch, snap to a scale, control speed and strength. It is not the Antares product and does not use their algorithms or branding."),
+            ("Does it work on speech?", "It can, but speech is less tonal. Results are strongest on sung or hummed melodies with clear pitch."),
+            ("Why is there a 5-minute limit?", "Pitch tracking is CPU-heavy. The limit keeps processing reliable on the free tier. Trim longer files first."),
+            ("Can I choose any key?", "Yes — C through B including sharps/flats, or Auto to detect from the audio."),
+            ("What does Humanize do?", "It adds a small random offset to target pitches so the correction does not sound perfectly quantized."),
+        ],
+        "related_tools": ["voice-changer", "remove-background-noise", "normalize-audio-volume", "simple-audio-eq", "change-audio-speed"],
+        "blog_keywords": ["autotune", "pitch correction", "pitch correct", "tune vocals"],
+    },
     "video-audio-redub": {
         "widget": "redub",
         "usage_key": None,  # Pro-only; no free daily counter
@@ -720,7 +762,7 @@ TOOL_ORDER = [
     "merge-audio-files", "trim-cut-audio",
     "remove-background-noise", "normalize-audio-volume", "adjust-audio-volume", "change-audio-speed",
     "fade-audio", "split-audio-by-silence", "reverse-audio", "stereo-to-mono", "loop-audio",
-    "simple-audio-eq", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
+    "simple-audio-eq", "autotune-audio", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
 ]
 
 

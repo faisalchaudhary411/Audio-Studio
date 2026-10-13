@@ -1234,6 +1234,306 @@ def voice_change(file_bytes: bytes, filename: str, effect: str,
 
 
 
+
+# ---------------------------------------------------------------------------
+# Professional Autotune — pitch correction to a musical scale
+# ---------------------------------------------------------------------------
+# Detects f0 with librosa.pyin, snaps voiced frames to the chosen scale,
+# smooths the correction curve by retune speed, then applies a time-varying
+# spectral pitch shift (STFT magnitude remapping). CPU-only; duration-capped.
+MAX_AUTOTUNE_DURATION_SEC = 5 * 60
+
+# Scale intervals in semitones from the root.
+_AUTOTUNE_SCALES = {
+    "chromatic": list(range(12)),
+    "major": [0, 2, 4, 5, 7, 9, 11],
+    "minor": [0, 2, 3, 5, 7, 8, 10],          # natural minor
+    "harmonic_minor": [0, 2, 3, 5, 7, 8, 11],
+    "pentatonic_major": [0, 2, 4, 7, 9],
+    "pentatonic_minor": [0, 3, 5, 7, 10],
+    "blues": [0, 3, 5, 6, 7, 10],
+    "dorian": [0, 2, 3, 5, 7, 9, 10],
+    "mixolydian": [0, 2, 4, 5, 7, 9, 10],
+}
+
+# Note name → MIDI pitch class (C = 0)
+_NOTE_PC = {
+    "c": 0, "c#": 1, "db": 1, "d": 2, "d#": 3, "eb": 3,
+    "e": 4, "f": 5, "f#": 6, "gb": 6, "g": 7, "g#": 8,
+    "ab": 8, "a": 9, "a#": 10, "bb": 10, "b": 11,
+}
+
+# Krumhansl-Kessler key profiles for automatic key detection
+_MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+_MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+
+
+def _midi_to_hz(midi: float) -> float:
+    return 440.0 * (2.0 ** ((midi - 69.0) / 12.0))
+
+
+def _hz_to_midi(hz: float) -> float:
+    if hz is None or hz <= 0 or (isinstance(hz, float) and (hz != hz)):  # NaN
+        return float("nan")
+    return 69.0 + 12.0 * math.log2(hz / 440.0)
+
+
+def _build_scale_midi(root_pc: int, intervals: list, midi_lo: int = 24, midi_hi: int = 96) -> list:
+    """Absolute MIDI notes for the scale across a singing range."""
+    notes = []
+    for m in range(midi_lo, midi_hi + 1):
+        if (m % 12) in {((root_pc + i) % 12) for i in intervals}:
+            notes.append(float(m))
+    return notes
+
+
+def _nearest_scale_midi(midi: float, scale_midis: list) -> float:
+    if not scale_midis or midi != midi:  # NaN
+        return midi
+    best = scale_midis[0]
+    best_d = abs(midi - best)
+    for s in scale_midis:
+        d = abs(midi - s)
+        if d < best_d:
+            best_d = d
+            best = s
+    return best
+
+
+def _detect_key_from_chroma(y, sr: int) -> tuple:
+    """Return (root_pc 0-11, 'major'|'minor') via chroma × KK profiles."""
+    import numpy as np
+    import librosa
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=512)
+    chroma_mean = np.mean(chroma, axis=1)
+    if float(np.sum(chroma_mean)) < 1e-8:
+        return 0, "major"  # default C major
+    chroma_mean = chroma_mean / (np.linalg.norm(chroma_mean) + 1e-12)
+    best_score = -1e9
+    best = (0, "major")
+    major = np.array(_MAJOR_PROFILE, dtype=np.float64)
+    minor = np.array(_MINOR_PROFILE, dtype=np.float64)
+    major = major / (np.linalg.norm(major) + 1e-12)
+    minor = minor / (np.linalg.norm(minor) + 1e-12)
+    for pc in range(12):
+        rolled_m = np.roll(major, pc)
+        rolled_n = np.roll(minor, pc)
+        sm = float(np.dot(chroma_mean, rolled_m))
+        sn = float(np.dot(chroma_mean, rolled_n))
+        if sm > best_score:
+            best_score = sm
+            best = (pc, "major")
+        if sn > best_score:
+            best_score = sn
+            best = (pc, "minor")
+    return best
+
+
+def _smooth_correction(steps: "np.ndarray", retune_speed: float) -> "np.ndarray":
+    """
+    retune_speed 0..1 — 1 = hard/fast snap (classic Auto-Tune), 0 = slow glide.
+    Implemented as exponential moving average; higher speed → less smoothing.
+    """
+    import numpy as np
+    # Map speed to smoothing coefficient: speed=1 → alpha≈1 (no smooth),
+    # speed=0 → alpha≈0.05 (heavy lag).
+    alpha = 0.05 + 0.95 * max(0.0, min(1.0, float(retune_speed)))
+    out = np.copy(steps)
+    # Forward pass
+    for i in range(1, len(out)):
+        if out[i] != out[i]:  # NaN → keep previous
+            out[i] = out[i - 1]
+        else:
+            prev = out[i - 1] if out[i - 1] == out[i - 1] else out[i]
+            out[i] = alpha * out[i] + (1.0 - alpha) * prev
+    return out
+
+
+def _spectral_pitch_shift_tv(y, sr: int, n_steps_per_frame, hop_length: int = 512, n_fft: int = 2048):
+    """
+    Time-varying pitch shift via STFT magnitude remapping along the frequency axis.
+    n_steps_per_frame: array of semitone shifts, one per STFT frame.
+    """
+    import numpy as np
+    import librosa
+    D = librosa.stft(y, n_fft=n_fft, hop_length=hop_length, window="hann")
+    n_bins, n_frames = D.shape
+    # Align correction curve length
+    steps = np.asarray(n_steps_per_frame, dtype=np.float64)
+    if len(steps) < n_frames:
+        steps = np.pad(steps, (0, n_frames - len(steps)), mode="edge")
+    elif len(steps) > n_frames:
+        steps = steps[:n_frames]
+
+    mag = np.abs(D)
+    phase = np.angle(D)
+    src_bins = np.arange(n_bins, dtype=np.float64)
+    mag_out = np.empty_like(mag)
+
+    for t in range(n_frames):
+        s = float(steps[t]) if steps[t] == steps[t] else 0.0
+        if abs(s) < 0.01:
+            mag_out[:, t] = mag[:, t]
+            continue
+        ratio = 2.0 ** (s / 12.0)
+        # Output bin k reads from source bin k/ratio
+        src = src_bins / ratio
+        mag_out[:, t] = np.interp(src, src_bins, mag[:, t], left=0.0, right=0.0)
+
+    D_out = mag_out * np.exp(1j * phase)
+    y_out = librosa.istft(D_out, hop_length=hop_length, window="hann", length=len(y))
+    return y_out.astype(np.float32)
+
+
+def autotune(
+    file_bytes: bytes,
+    filename: str,
+    key: str = "auto",
+    scale: str = "major",
+    strength: float = 1.0,
+    retune_speed: float = 0.7,
+    humanize: float = 0.0,
+    output_format: str = "mp3",
+) -> bytes:
+    """
+    Professional pitch-correction Autotune.
+
+    Parameters
+    ----------
+    key : root note name ('C', 'D#', 'Bb', …) or 'auto' to detect from chroma.
+    scale : one of chromatic, major, minor, harmonic_minor, pentatonic_major,
+            pentatonic_minor, blues, dorian, mixolydian.
+    strength : 0–1, how far to pull each note toward the scale (1 = full snap).
+    retune_speed : 0–1, 1 = hard/fast classic Autotune, lower = natural glide.
+    humanize : 0–1, small random variation on target pitches (reduces robotic feel).
+    """
+    import numpy as np
+    import librosa
+
+    check_file_size(file_bytes)
+    strength = max(0.0, min(1.0, float(strength)))
+    retune_speed = max(0.0, min(1.0, float(retune_speed)))
+    humanize = max(0.0, min(1.0, float(humanize)))
+    output_format = (output_format or "mp3").lower().strip()
+    if output_format not in ("mp3", "wav", "ogg", "m4a"):
+        raise UserInputError("Output format must be mp3, wav, ogg, or m4a.")
+
+    scale_key = (scale or "major").strip().lower().replace("-", "_").replace(" ", "_")
+    if scale_key not in _AUTOTUNE_SCALES:
+        raise UserInputError(
+            f"Unknown scale '{scale}'. Choose: {', '.join(sorted(_AUTOTUNE_SCALES))}."
+        )
+    intervals = _AUTOTUNE_SCALES[scale_key]
+
+    audio = _load_segment(file_bytes, filename)
+    duration_sec = len(audio) / 1000.0
+    if duration_sec > MAX_AUTOTUNE_DURATION_SEC:
+        raise UserFacingError(
+            f"Audio is {duration_sec / 60:.1f} minutes — Autotune is limited to "
+            f"{MAX_AUTOTUNE_DURATION_SEC // 60:.0f} minutes per file on this server "
+            f"(pitch tracking is CPU-heavy). Trim the clip first."
+        )
+    if duration_sec < 0.25:
+        raise UserInputError("Audio is too short to Autotune (need at least 0.25 s).")
+
+    # Mono float analysis / processing path
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    sr = int(audio.frame_rate)
+    samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+    if audio.sample_width == 1:
+        y = (samples - 128.0) / 128.0
+    elif audio.sample_width == 2:
+        y = samples / 32768.0
+    else:
+        # 24/32-bit — normalize by max
+        peak = float(np.max(np.abs(samples))) or 1.0
+        y = samples / peak
+
+    # --- Key resolution ---
+    key_str = (key or "auto").strip().lower()
+    if key_str in ("auto", "detect", ""):
+        root_pc, detected_mode = _detect_key_from_chroma(y, sr)
+        # If user picked a specific scale family, keep it; only root is auto.
+        # If they also left scale as default major, prefer detected mode.
+        if scale_key == "major" and detected_mode == "minor":
+            scale_key = "minor"
+            intervals = _AUTOTUNE_SCALES[scale_key]
+        elif scale_key == "minor" and detected_mode == "major":
+            scale_key = "major"
+            intervals = _AUTOTUNE_SCALES[scale_key]
+    else:
+        # Normalize enharmonics: "c#" / "db" etc.
+        note = key_str.replace("♯", "#").replace("♭", "b").strip()
+        if note not in _NOTE_PC:
+            raise UserInputError(
+                f"Unknown key '{key}'. Use C, C#, Db, D, … B, or Auto."
+            )
+        root_pc = _NOTE_PC[note]
+
+    scale_midis = _build_scale_midi(root_pc, intervals)
+
+    # --- Pitch tracking (pyin) ---
+    # Slightly coarser hop keeps CPU reasonable on the VPS.
+    hop_length = 512
+    frame_length = 2048
+    f0, voiced_flag, voiced_probs = librosa.pyin(
+        y,
+        fmin=librosa.note_to_hz("C2"),
+        fmax=librosa.note_to_hz("C7"),
+        sr=sr,
+        frame_length=frame_length,
+        hop_length=hop_length,
+    )
+    f0 = np.asarray(f0, dtype=np.float64)
+    voiced_flag = np.asarray(voiced_flag, dtype=bool)
+
+    n_frames = len(f0)
+    n_steps = np.zeros(n_frames, dtype=np.float64)
+
+    rng = np.random.default_rng(42)  # stable humanize across runs for same settings
+    for i in range(n_frames):
+        f = f0[i]
+        if not voiced_flag[i] or f is None or f != f or f <= 0:
+            n_steps[i] = 0.0
+            continue
+        midi = _hz_to_midi(float(f))
+        target_midi = _nearest_scale_midi(midi, scale_midis)
+        if humanize > 0:
+            # ± up to ~15 cents at humanize=1
+            target_midi += rng.uniform(-0.15, 0.15) * humanize
+        # Correction in semitones, scaled by strength
+        n_steps[i] = (target_midi - midi) * strength
+
+    # Retune-speed smoothing of the correction curve
+    n_steps = _smooth_correction(n_steps, retune_speed)
+
+    # Unvoiced frames stay at 0 after smoothing bleed — re-zero weak frames
+    for i in range(n_frames):
+        if not voiced_flag[i]:
+            n_steps[i] *= 0.15  # tiny residual so transitions aren't abrupt
+
+    if float(np.max(np.abs(n_steps))) < 0.01:
+        # Nothing to correct — return original
+        return _export_bytes(audio, output_format)
+
+    y_out = _spectral_pitch_shift_tv(y, sr, n_steps, hop_length=hop_length, n_fft=frame_length)
+
+    # Soft peak limit
+    peak = float(np.max(np.abs(y_out))) or 1.0
+    if peak > 0.98:
+        y_out = y_out * (0.98 / peak)
+
+    pcm = np.clip(y_out * 32767.0, -32768, 32767).astype(np.int16)
+    out_seg = AudioSegment(
+        pcm.tobytes(),
+        frame_rate=sr,
+        sample_width=2,
+        channels=1,
+    )
+    return _export_bytes(out_seg, output_format)
+
+
 # ---------------------------------------------------------------------------
 # Video to Audio — optional time range
 # ---------------------------------------------------------------------------
