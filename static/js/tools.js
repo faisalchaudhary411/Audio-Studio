@@ -1610,36 +1610,79 @@
       balanced: { strength: 85, speed: 60, humanize: 5 },
       hard:     { strength: 100, speed: 100, humanize: 0 },
     };
+    let activePreset = 'hard'; // default = hard lock
+    function setPresetActive(name) {
+      activePreset = name;
+      document.querySelectorAll('[data-autotune-preset]').forEach((el) => {
+        el.classList.toggle('is-active', el.getAttribute('data-autotune-preset') === name);
+      });
+    }
     document.querySelectorAll('[data-autotune-preset]').forEach((b) => {
       b.addEventListener('click', () => {
-        const p = presets[b.getAttribute('data-autotune-preset')];
+        const name = b.getAttribute('data-autotune-preset');
+        const p = presets[name];
         if (!p) return;
-        if (strength) strength.value = p.strength;
-        if (speed) speed.value = p.speed;
-        if (humanize) humanize.value = p.humanize;
+        if (strength) strength.value = String(p.strength);
+        if (speed) speed.value = String(p.speed);
+        if (humanize) humanize.value = String(p.humanize);
+        setPresetActive(name);
         syncLabels();
       });
     });
+    // Keep preset in sync if user drags sliders manually
+    function markCustomIfNeeded() {
+      const s = strength ? parseInt(strength.value, 10) : 100;
+      const r = speed ? parseInt(speed.value, 10) : 100;
+      const h = humanize ? parseInt(humanize.value, 10) : 0;
+      if (s === 100 && r === 100 && h === 0) setPresetActive('hard');
+      else if (s === 85 && r === 60 && h === 5) setPresetActive('balanced');
+      else if (s === 55 && r === 25 && h === 20) setPresetActive('natural');
+      else activePreset = 'custom';
+    }
+    if (strength) strength.addEventListener('change', markCustomIfNeeded);
+    if (speed) speed.addEventListener('change', markCustomIfNeeded);
+    if (humanize) humanize.addEventListener('change', markCustomIfNeeded);
 
     btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
-      const file = document.getElementById('autotune-file').files[0];
+      const fileInput = document.getElementById('autotune-file');
+      const file = fileInput && fileInput.files && fileInput.files[0];
       if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
       setLoading(btn, true); showProgress(progress, true);
       if (status) status.textContent = 'Autotuning… (pitch tracking can take a moment)';
       if (result) result.innerHTML = '';
+
+      // Re-read sliders at click time (never cache)
+      let sVal = strength ? parseFloat(strength.value) : 100;
+      let rVal = speed ? parseFloat(speed.value) : 100;
+      let hVal = humanize ? parseFloat(humanize.value) : 0;
+      // If Hard preset is active, force full hard lock values
+      if (activePreset === 'hard') {
+        sVal = 100; rVal = 100; hVal = 0;
+        if (strength) strength.value = '100';
+        if (speed) speed.value = '100';
+        if (humanize) humanize.value = '0';
+        syncLabels();
+      }
+      // Guard NaN
+      if (!isFinite(sVal)) sVal = 100;
+      if (!isFinite(rVal)) rVal = 100;
+      if (!isFinite(hVal)) hVal = 0;
+
       const form = new FormData();
       form.append('file', file);
       form.append('key', (document.getElementById('autotune-key') || {}).value || 'auto');
       form.append('scale', (document.getElementById('autotune-scale') || {}).value || 'major');
-      form.append('strength', strength ? (parseFloat(strength.value) / 100).toFixed(2) : '1');
-      form.append('retune_speed', speed ? (parseFloat(speed.value) / 100).toFixed(2) : '0.7');
-      form.append('humanize', humanize ? (parseFloat(humanize.value) / 100).toFixed(2) : '0');
+      form.append('strength', (sVal / 100).toFixed(2));
+      form.append('retune_speed', (rVal / 100).toFixed(2));
+      form.append('humanize', (hVal / 100).toFixed(2));
       form.append('output_format', (document.getElementById('autotune-format') || {}).value || 'mp3');
+      form.append('preset', activePreset || 'custom');
       try {
         const res = await resumableFetch('/api/tools/autotune', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Autotune failed.'); return; }
-        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        const pathInfo = data.path ? ` · ${data.path}` : '';
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB${pathInfo}`;
         if (result) setAudioResult(result, data.audio_b64, data.filename);
       } catch (e) {
         if (status) status.textContent = 'Network error.';
