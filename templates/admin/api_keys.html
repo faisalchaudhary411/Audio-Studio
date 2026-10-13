@@ -40,9 +40,26 @@
           <option value="api_starter">API Starter</option>
           <option value="api_pro">API Pro</option>
           <option value="api_custom">Custom</option>
+          <option value="api_wholesale">Wholesale / Reseller</option>
         </select>
         <input type="number" name="monthly_char_quota" placeholder="Monthly character quota" value="200000" min="1" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;" required>
       </div>
+      <details style="margin-bottom:12px;">
+        <summary style="cursor:pointer;color:var(--brass-hi);font-size:0.88rem;">Wholesale / advanced limits (optional)</summary>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0;">
+          <select name="billing_mode" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;">
+            <option value="monthly">Billing: monthly quota (resets monthly)</option>
+            <option value="prepaid">Billing: prepaid balance (no reset)</option>
+          </select>
+          <input type="number" name="initial_balance" placeholder="Initial prepaid balance (chars)" min="0" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <input type="number" name="rpm_limit" placeholder="Requests/minute (0 = unlimited)" min="0" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;">
+          <input type="number" name="max_chars_per_request" placeholder="Max chars/request (0 = default 5000)" min="0" max="20000" class="script-input" style="min-height:auto;padding:12px;flex:1;min-width:160px;">
+        </div>
+        <input type="text" name="allowed_voices" placeholder="Allowed voice_ids, comma-separated (blank = all voices)" class="script-input" style="min-height:auto;padding:12px;width:100%;margin-bottom:10px;">
+        <input type="text" name="notes" placeholder="Internal note (contract / invoice ref)" maxlength="500" class="script-input" style="min-height:auto;padding:12px;width:100%;">
+      </details>
       <button type="submit" class="btn btn--brass">Create &amp; email key</button>
     </form>
   </div>
@@ -60,6 +77,10 @@
       </div>
 
       <div style="margin-top:12px;">
+        {% if k.billing_mode == 'prepaid' %}
+        <div style="font-size:0.9rem;color:var(--text-mid);">Prepaid balance: <strong style="color:{{ 'var(--brass-hi)' if k.usage.balance > 0 else '#e88' }};">{{ '{:,}'.format(k.usage.balance) }}</strong> characters
+          <span style="color:var(--text-dim);font-size:0.8rem;"> · {{ '{:,}'.format(k.usage.chars_used) }} used this month · {{ '{:,}'.format(k.usage.requests) }} requests</span></div>
+        {% else %}
         {% set pct = (k.usage.chars_used / k.monthly_char_quota * 100) if k.monthly_char_quota else 0 %}
         <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">
           <span>{{ '{:,}'.format(k.usage.chars_used) }} / {{ '{:,}'.format(k.monthly_char_quota) }} characters this month</span>
@@ -68,10 +89,44 @@
         <div style="background:var(--ink);border-radius:999px;height:6px;overflow:hidden;">
           <div style="background:{{ 'var(--brass)' if pct < 90 else '#e88' }};height:100%;width:{{ [pct, 100] | min }}%;"></div>
         </div>
+        {% endif %}
         {% if k.usage.last_used %}
         <p style="color:var(--text-dim);font-size:0.75rem;margin-top:6px;">Last used: {{ k.usage.last_used }}</p>
         {% endif %}
+        {% if k.rpm_limit or k.max_chars_per_request or k.allowed_voices or k.notes %}
+        <p style="color:var(--text-dim);font-size:0.75rem;margin-top:6px;">
+          {% if k.rpm_limit %}{{ k.rpm_limit }} req/min · {% endif %}
+          {% if k.max_chars_per_request %}max {{ '{:,}'.format(k.max_chars_per_request) }} chars/request · {% endif %}
+          {% if k.allowed_voices %}{{ k.allowed_voices | length }} allowed voice(s) · {% endif %}
+          {% if k.notes %}Note: {{ k.notes }}{% endif %}
+        </p>
+        {% endif %}
       </div>
+
+      {% if k.billing_mode == 'prepaid' %}
+      <form method="post" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ k.id }}"><input type="hidden" name="action" value="top_up">
+        <input type="number" name="topup_chars" placeholder="Characters to add after payment" min="1" class="script-input" style="min-height:auto;padding:10px;flex:1;min-width:180px;" required>
+        <button type="submit" class="btn btn--brass btn--sm">Top up</button>
+      </form>
+      {% endif %}
+
+      <details style="margin-top:12px;">
+        <summary style="cursor:pointer;color:var(--text-dim);font-size:0.82rem;">Edit limits</summary>
+        <form method="post" style="margin-top:10px;"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ k.id }}"><input type="hidden" name="action" value="update_limits">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+            <select name="billing_mode" class="script-input" style="min-height:auto;padding:10px;flex:1;min-width:160px;">
+              <option value="monthly" {{ 'selected' if k.billing_mode != 'prepaid' }}>Monthly quota</option>
+              <option value="prepaid" {{ 'selected' if k.billing_mode == 'prepaid' }}>Prepaid balance</option>
+            </select>
+            <input type="number" name="monthly_char_quota" value="{{ k.monthly_char_quota }}" min="1" class="script-input" style="min-height:auto;padding:10px;flex:1;min-width:140px;" title="Monthly character quota">
+            <input type="number" name="rpm_limit" value="{{ k.rpm_limit or 0 }}" min="0" class="script-input" style="min-height:auto;padding:10px;flex:1;min-width:120px;" title="Requests per minute (0 = unlimited)">
+            <input type="number" name="max_chars_per_request" value="{{ k.max_chars_per_request or 0 }}" min="0" max="20000" class="script-input" style="min-height:auto;padding:10px;flex:1;min-width:120px;" title="Max chars per request (0 = default)">
+          </div>
+          <input type="text" name="allowed_voices" value="{{ (k.allowed_voices or []) | join(', ') }}" placeholder="Allowed voice_ids, comma-separated (blank = all)" class="script-input" style="min-height:auto;padding:10px;width:100%;margin-bottom:10px;">
+          <input type="text" name="notes" value="{{ k.notes or '' }}" placeholder="Internal note" maxlength="500" class="script-input" style="min-height:auto;padding:10px;width:100%;margin-bottom:10px;">
+          <button type="submit" class="btn btn--ghost btn--sm">Save limits</button>
+        </form>
+      </details>
 
       <div style="display:flex;gap:8px;margin-top:12px;">
         <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key_id" value="{{ k.id }}">
