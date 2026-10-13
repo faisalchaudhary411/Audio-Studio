@@ -3118,28 +3118,70 @@ def admin_api_keys():
 
     if request.method == "POST":
         action = request.form.get("action")
-        allowed_api_plans = ("api_free", "api_starter", "api_pro")
+        allowed_api_plans = ("api_free", "api_starter", "api_pro", "api_custom", "api_wholesale")
         if action == "create":
             name = request.form.get("customer_name", "").strip()
             email = request.form.get("customer_email", "").strip().lower()
             plan = request.form.get("plan", "").strip() or "api_starter"
             if plan not in allowed_api_plans:
                 plan = "api_starter"
-            quota = _safe_int(request.form.get("monthly_char_quota"), 200000, minimum=1, maximum=100_000_000)
+            quota = _safe_int(request.form.get("monthly_char_quota"), 200000, minimum=1, maximum=1_000_000_000)
+            billing_mode = request.form.get("billing_mode", "monthly")
+            initial_balance = _safe_int(request.form.get("initial_balance"), 0, minimum=0, maximum=10_000_000_000)
             if not name or not email or "@" not in email:
                 flash("Name and a valid email are required to create an API key.", "error")
             else:
-                result = api_keys.create_api_key(name, email, plan, quota)
+                result = api_keys.create_api_key(
+                    name, email, plan, quota, billing_mode=billing_mode,
+                    rpm_limit=_safe_int(request.form.get("rpm_limit"), 0, minimum=0, maximum=100000),
+                    max_chars_per_request=_safe_int(request.form.get("max_chars_per_request"), 0, minimum=0,
+                                                    maximum=api_keys.MAX_CHARS_PER_REQUEST_CEILING),
+                    allowed_voices=request.form.get("allowed_voices", ""),
+                    notes=request.form.get("notes", ""))
+                if result["record"]["billing_mode"] == "prepaid" and initial_balance > 0:
+                    api_keys.top_up_balance(result["record"]["key_hash"], initial_balance)
                 just_created = result  # {"raw_key": ..., "record": ...} — shown ONCE on this response only
-                sent = notifications.send_api_key_email(email, name, result["raw_key"], plan, quota)
+                sent = notifications.send_api_key_email(
+                    email, name, result["raw_key"], plan, quota,
+                    billing_mode=result["record"]["billing_mode"], balance=initial_balance)
                 if not sent:
                     app.logger.warning(f"API key created for {email} but email delivery failed — raw key must be copied from this page now, it cannot be retrieved again.")
                     flash("Key created but email failed — copy the raw key from this page now.", "error")
                 else:
                     flash(f"API key created for {email}.", "ok")
-                persistence.append_audit("admin_api_key_create", f"email={email} plan={plan} quota={quota}",
-                                         actor="admin")
+                persistence.append_audit(
+                    "admin_api_key_create",
+                    f"email={email} plan={plan} quota={quota} mode={result['record']['billing_mode']} "
+                    f"rpm={result['record']['rpm_limit']} balance={initial_balance}", actor="admin")
                 keys = persistence.load_api_keys()
+        elif action == "update_limits":
+            key_id = (request.form.get("key_id") or "").strip()
+            ok = api_keys.update_key_settings(
+                key_id,
+                monthly_char_quota=_safe_int(request.form.get("monthly_char_quota"), 200000, minimum=1, maximum=1_000_000_000),
+                billing_mode=request.form.get("billing_mode", "monthly"),
+                rpm_limit=_safe_int(request.form.get("rpm_limit"), 0, minimum=0, maximum=100000),
+                max_chars_per_request=_safe_int(request.form.get("max_chars_per_request"), 0, minimum=0,
+                                                maximum=api_keys.MAX_CHARS_PER_REQUEST_CEILING),
+                allowed_voices=request.form.get("allowed_voices", ""),
+                notes=request.form.get("notes", ""))
+            flash("Key settings saved." if ok else "Key not found or save failed.", "ok" if ok else "error")
+            if ok:
+                persistence.append_audit("admin_api_key_update", f"id={key_id}", actor="admin")
+            keys = persistence.load_api_keys()
+        elif action == "top_up":
+            key_id = (request.form.get("key_id") or "").strip()
+            chars = _safe_int(request.form.get("topup_chars"), 0, minimum=0, maximum=10_000_000_000)
+            target = next((k for k in keys if str(k["id"]) == key_id), None)
+            if not target or chars <= 0:
+                flash("Pick a key and enter a positive number of characters.", "error")
+            elif not api_keys.is_prepaid(target):
+                flash("Top-ups only apply to prepaid keys — switch this key's billing mode to prepaid first.", "error")
+            else:
+                new_balance = api_keys.top_up_balance(target["key_hash"], chars)
+                flash(f"Added {chars:,} characters. New balance: {new_balance:,}.", "ok")
+                persistence.append_audit("admin_api_key_topup", f"id={key_id} chars={chars} balance={new_balance}",
+                                         actor="admin")
         elif action in ("revoke", "unrevoke", "delete"):
             key_id = (request.form.get("key_id") or "").strip()
             if not key_id:
@@ -4067,9 +4109,12 @@ def account_rotate_api_key():
         return redirect(url_for("account_dashboard"))
     result = api_keys.rotate_key(key_id)
     if result:
+        _rot_usage = api_keys.get_usage(result["record"]["key_hash"])
         notifications.send_api_key_email(email, owned[0].get("customer_name", "Customer"),
                                           result["raw_key"], result["record"]["plan"],
-                                          result["record"]["monthly_char_quota"])
+                                          result["record"]["monthly_char_quota"],
+                                          billing_mode=result["record"].get("billing_mode"),
+                                          balance=_rot_usage.get("balance", 0))
     return redirect(url_for("account_dashboard"))
 
 
@@ -5521,8 +5566,21 @@ def api_v1_voices():
             {"language": lang, "name": name, "voice_id": vid}
             for lang, voice_map in VOICES.items()
             for name, vid in voice_map.items()
+            if api_keys.voice_allowed(record, vid)
         ]
     })
+
+
+@app.route("/api/v1/usage", methods=["GET"])
+def api_v1_usage():
+    """Self-service usage report for the key holder: remaining quota or
+    prepaid balance, limits, and a per-day history (last 31 days) — what a
+    wholesale/reseller partner needs to reconcile against their own billing
+    without emailing us."""
+    record, err = _api_v1_authenticate()
+    if err:
+        return err
+    return jsonify(api_keys.usage_report(record))
 
 
 @app.route("/api/v1/tts", methods=["POST"])
@@ -5546,17 +5604,37 @@ def api_v1_tts():
 
     if not text:
         return jsonify({"error": "'text' is required."}), 400
-    if len(text) > API_MAX_CHARS_PER_REQUEST:
-        return jsonify({"error": f"'text' exceeds the {API_MAX_CHARS_PER_REQUEST}-character limit per request. Split into multiple calls."}), 400
+    max_chars = api_keys.effective_max_chars(record, API_MAX_CHARS_PER_REQUEST)
+    if len(text) > max_chars:
+        return jsonify({"error": f"'text' exceeds the {max_chars}-character limit per request. Split into multiple calls."}), 400
     if not voice_id:
         return jsonify({"error": "'voice_id' is required. See GET /api/v1/voices for valid values."}), 400
 
     valid_voice_ids = {vid for voice_map in VOICES.values() for vid in voice_map.values()}
     if voice_id not in valid_voice_ids:
         return jsonify({"error": f"Unknown voice_id '{voice_id}'. See GET /api/v1/voices for valid values."}), 400
+    if not api_keys.voice_allowed(record, voice_id):
+        return jsonify({"error": f"voice_id '{voice_id}' is not enabled for this API key. See GET /api/v1/voices for the voices you can use."}), 403
 
+    # Per-key requests-per-minute limit (0 = unlimited). Checked after cheap
+    # validation so a malformed request doesn't burn the customer's window.
+    rate_ok, retry_after, rate_left = api_keys.check_rate_limit(record)
+    if not rate_ok:
+        resp = jsonify({"error": "Rate limit exceeded for this API key.",
+                        "rpm_limit": record.get("rpm_limit"), "retry_after_seconds": retry_after})
+        resp.status_code = 429
+        resp.headers["Retry-After"] = str(retry_after)
+        return resp
+
+    prepaid = api_keys.is_prepaid(record)
     if api_keys.would_exceed_quota(record, len(text)):
         usage = api_keys.get_usage(record["key_hash"])
+        if prepaid:
+            return jsonify({
+                "error": "Insufficient prepaid balance for this API key. Please top up.",
+                "prepaid_balance": usage.get("balance", 0),
+                "requested_characters": len(text),
+            }), 402
         return jsonify({
             "error": "Monthly character quota exceeded for this API key.",
             "quota": record["monthly_char_quota"],
@@ -5569,16 +5647,20 @@ def api_v1_tts():
     except Exception as e:
         return api_error(e, "generate this audio")
 
-    api_keys.bump_usage(record["key_hash"], len(text))
+    api_keys.bump_usage(record["key_hash"], len(text), prepaid=prepaid)
     usage_after = api_keys.get_usage(record["key_hash"])
 
     resp = send_file(io.BytesIO(audio), mimetype="audio/mpeg", download_name="VoxCraft-Speech.mp3")
-    # Standard-shaped rate-limit headers — not enforced here (quota is
-    # already enforced above), just informational so a developer's own
-    # client code can proactively back off before hitting 429.
-    resp.headers["X-Quota-Limit"] = str(record["monthly_char_quota"])
+    # Informational headers so a developer's own client code can proactively
+    # back off before hitting 429/402 (enforcement already happened above).
+    # X-Quota-Remaining is the prepaid balance for prepaid keys.
+    if not prepaid:
+        resp.headers["X-Quota-Limit"] = str(record["monthly_char_quota"])
     resp.headers["X-Quota-Used"] = str(usage_after["chars_used"])
-    resp.headers["X-Quota-Remaining"] = str(max(0, record["monthly_char_quota"] - usage_after["chars_used"]))
+    resp.headers["X-Quota-Remaining"] = str(api_keys.remaining_chars(record, usage_after))
+    if int(record.get("rpm_limit") or 0) > 0:
+        resp.headers["X-RateLimit-Limit"] = str(record["rpm_limit"])
+        resp.headers["X-RateLimit-Remaining"] = str(max(0, rate_left))
     return resp
 
 
