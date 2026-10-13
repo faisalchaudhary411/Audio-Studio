@@ -200,6 +200,11 @@ X-Quota-Remaining: 198550</pre>
     <code>GET /api/v1/voices</code> (same Bearer auth) returns every valid <code>voice_id</code> across all 27 supported languages, so you can build a voice picker without hardcoding a list or reading separate docs.
   </p>
 
+  <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Check your usage</h2>
+  <p style="color:var(--text-mid);line-height:1.8;margin-bottom:14px;">
+    <code>GET /api/v1/usage</code> (same Bearer auth) returns your remaining characters or prepaid balance, your limits, and a per-day history of characters and requests for the last 31 days — handy for reconciling against your own billing. Custom and wholesale keys can also have a requests-per-minute limit (exceeding it returns <code>429</code> with a <code>Retry-After</code> header) and a prepaid balance (an empty balance returns <code>402</code>).
+  </p>
+
   <h2 style="font-family:var(--display);color:var(--text-hi);margin:28px 0 14px;font-size:1.2rem;">Limits, plainly stated</h2>
   <ul style="padding-left:20px;color:var(--text-mid);line-height:1.9;">
     <li>Each plan includes a fixed number of characters per month — not real-time pay-per-character billing. You know your monthly cost upfront; no surprise overage charges.</li>
