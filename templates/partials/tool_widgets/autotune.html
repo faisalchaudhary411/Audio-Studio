@@ -1,17 +1,17 @@
   <div class="panel">
     <span class="panel__label">Autotune</span>
     <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
-      Professional pitch correction — tracks pitch, snaps to a key &amp; scale.
-      Fast retune = hard Autotune; slower = natural. Max 5 minutes per file.
-      <strong>{{ upload_limit_mb }}MB max</strong>{% if not is_pro_ctx %} (Pro: {{ upload_pro_mb }}MB){% endif %}.
+      Pitch correction — snaps vocals to a key &amp; scale.
+      Use <strong>Hard Autotune</strong> for the classic locked sound; Natural for subtle polish.
+      Max 5 min. <strong>{{ upload_limit_mb }}MB max</strong>{% if not is_pro_ctx %} (Pro: {{ upload_pro_mb }}MB){% endif %}.
     </p>
     <input type="file" class="file-input" id="autotune-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,audio/wav,audio/mpeg,audio/ogg,audio/mp4" style="margin-bottom:12px;">
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-      <div>
+    <div class="autotune-row" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+      <div style="flex:1 1 140px;min-width:0;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Key</label>
-        <select id="autotune-key" class="studio-select" style="width:100%;">
-          <option value="auto" selected>Auto (detect)</option>
+        <select id="autotune-key" class="studio-select" style="width:100%;max-width:100%;">
+          <option value="auto" selected>Auto</option>
           <option value="C">C</option>
           <option value="C#">C# / Db</option>
           <option value="D">D</option>
@@ -26,18 +26,18 @@
           <option value="B">B</option>
         </select>
       </div>
-      <div>
+      <div style="flex:1 1 140px;min-width:0;">
         <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Scale</label>
-        <select id="autotune-scale" class="studio-select" style="width:100%;">
+        <select id="autotune-scale" class="studio-select" style="width:100%;max-width:100%;">
           <option value="major" selected>Major</option>
-          <option value="minor">Natural minor</option>
+          <option value="minor">Minor</option>
           <option value="harmonic_minor">Harmonic minor</option>
-          <option value="pentatonic_major">Pentatonic major</option>
-          <option value="pentatonic_minor">Pentatonic minor</option>
+          <option value="pentatonic_major">Pentatonic maj</option>
+          <option value="pentatonic_minor">Pentatonic min</option>
           <option value="blues">Blues</option>
           <option value="dorian">Dorian</option>
           <option value="mixolydian">Mixolydian</option>
-          <option value="chromatic">Chromatic (12-TET)</option>
+          <option value="chromatic">Chromatic</option>
         </select>
       </div>
     </div>
@@ -54,9 +54,10 @@
     </div>
 
     <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Humanize: <span id="autotune-humanize-label">0</span>%</label>
-    <input type="range" class="studio-range" id="autotune-humanize" min="0" max="100" step="5" value="0" style="width:100%;margin-bottom:12px;">
+    <input type="range" class="studio-range" id="autotune-humanize" min="0" max="100" step="5" value="0" style="width:100%;margin-bottom:4px;">
+    <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 12px;">Keep at 0% for hard lock. Raise only if it sounds too robotic.</p>
 
-    <select id="autotune-format" class="studio-select" style="margin-bottom:12px;">
+    <select id="autotune-format" class="studio-select" style="width:100%;max-width:100%;margin-bottom:12px;">
       <option value="mp3">MP3</option>
       <option value="wav">WAV</option>
     </select>
