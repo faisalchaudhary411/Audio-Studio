@@ -1581,6 +1581,72 @@
     },
   });
 
+  // ---- Autotune (professional pitch correction) ----
+  (function () {
+    const btn = document.getElementById('autotune-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-autotune-status]');
+    const result = document.getElementById('autotune-result');
+    const progress = ensureProgress(result);
+
+    const strength = document.getElementById('autotune-strength');
+    const strengthLabel = document.getElementById('autotune-strength-label');
+    const speed = document.getElementById('autotune-speed');
+    const speedLabel = document.getElementById('autotune-speed-label');
+    const humanize = document.getElementById('autotune-humanize');
+    const humanizeLabel = document.getElementById('autotune-humanize-label');
+
+    function syncLabels() {
+      if (strength && strengthLabel) strengthLabel.textContent = strength.value;
+      if (speed && speedLabel) speedLabel.textContent = speed.value;
+      if (humanize && humanizeLabel) humanizeLabel.textContent = humanize.value;
+    }
+    if (strength) strength.addEventListener('input', syncLabels);
+    if (speed) speed.addEventListener('input', syncLabels);
+    if (humanize) humanize.addEventListener('input', syncLabels);
+
+    const presets = {
+      natural:  { strength: 55, speed: 25, humanize: 20 },
+      balanced: { strength: 80, speed: 55, humanize: 10 },
+      hard:     { strength: 100, speed: 95, humanize: 0 },
+    };
+    document.querySelectorAll('[data-autotune-preset]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const p = presets[b.getAttribute('data-autotune-preset')];
+        if (!p) return;
+        if (strength) strength.value = p.strength;
+        if (speed) speed.value = p.speed;
+        if (humanize) humanize.value = p.humanize;
+        syncLabels();
+      });
+    });
+
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const file = document.getElementById('autotune-file').files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Autotuning… (pitch tracking can take a moment)';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('file', file);
+      form.append('key', (document.getElementById('autotune-key') || {}).value || 'auto');
+      form.append('scale', (document.getElementById('autotune-scale') || {}).value || 'major');
+      form.append('strength', strength ? (parseFloat(strength.value) / 100).toFixed(2) : '1');
+      form.append('retune_speed', speed ? (parseFloat(speed.value) / 100).toFixed(2) : '0.7');
+      form.append('humanize', humanize ? (parseFloat(humanize.value) / 100).toFixed(2) : '0');
+      form.append('output_format', (document.getElementById('autotune-format') || {}).value || 'mp3');
+      try {
+        const res = await resumableFetch('/api/tools/autotune', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Autotune failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
   // Soft-fail if ads helper is missing so tools still work on pages without ads.js
   if (!window.VoxCraftAds) {
     window.VoxCraftAds = { showInterstitial: function (cb) { if (typeof cb === 'function') cb(); } };
