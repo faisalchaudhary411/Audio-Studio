@@ -45,12 +45,12 @@
     <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Strength: <span id="autotune-strength-label">100</span>%</label>
     <input type="range" class="studio-range" id="autotune-strength" min="0" max="100" step="5" value="100" style="width:100%;margin-bottom:10px;">
 
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Retune speed: <span id="autotune-speed-label">70</span>% <span style="color:var(--text-dim);">(slow → hard)</span></label>
-    <input type="range" class="studio-range" id="autotune-speed" min="0" max="100" step="5" value="70" style="width:100%;margin-bottom:8px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Retune speed: <span id="autotune-speed-label">100</span>% <span style="color:var(--text-dim);">(slow → hard)</span></label>
+    <input type="range" class="studio-range" id="autotune-speed" min="0" max="100" step="5" value="100" style="width:100%;margin-bottom:8px;">
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
       <button type="button" class="btn btn--ghost btn--sm" data-autotune-preset="natural">Natural</button>
       <button type="button" class="btn btn--ghost btn--sm" data-autotune-preset="balanced">Balanced</button>
-      <button type="button" class="btn btn--ghost btn--sm" data-autotune-preset="hard">Hard Autotune</button>
+      <button type="button" class="btn btn--ghost btn--sm is-active" data-autotune-preset="hard" id="autotune-preset-hard">Hard Autotune</button>
     </div>
 
     <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Humanize: <span id="autotune-humanize-label">0</span>%</label>
