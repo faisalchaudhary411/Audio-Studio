@@ -5003,6 +5003,11 @@ def api_mixer():
     except (TypeError, ValueError):
         duck_amount_db = 6.0
     output_format = request.form.get("output_format", "mp3")
+    lofi = (request.form.get("lofi") or "").strip().lower()
+    try:
+        lofi_amount = max(0.0, min(1.0, float(request.form.get("lofi_amount", 0.7))))
+    except (TypeError, ValueError):
+        lofi_amount = 0.7
     try:
         out_bytes = audio_tools.mix_tracks(
             vocal.read(), vocal.filename or "vocal.wav",
@@ -5014,6 +5019,8 @@ def api_mixer():
             duck_music=duck_music,
             duck_amount_db=duck_amount_db,
             output_format=output_format,
+            lofi=lofi,
+            lofi_amount=lofi_amount,
         )
         _bump_counter("usage_mixer")
         return jsonify({

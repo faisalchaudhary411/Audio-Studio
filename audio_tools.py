@@ -1320,6 +1320,122 @@ def _duck_gain(vocal, sr: int, duck_db: float):
     return g, blk
 
 
+# ---------------------------------------------------------------------------
+# Lo-fi presets — applied to the finished mix in the Audio Mixer
+# ---------------------------------------------------------------------------
+# lp/hp: filter cutoffs (Hz) · wobble: tape wow/flutter · sat: tape saturation
+# crackle: vinyl pops · hiss: tape/vinyl noise · crush: sample-rate/bit reduction
+# reverb: wet level · speed: playback speed (<1 = slowed, pitch drops) · width: stereo width
+LOFI_PRESETS = {
+    "chill":   dict(label="Lo-fi Chill",     lp=4800, hp=70,  wobble=0.5, sat=0.5, crackle=0.35, hiss=0.25, crush=0.15, reverb=0.18, speed=1.0,  width=0.8),
+    "tape":    dict(label="Cassette Tape",   lp=6200, hp=90,  wobble=1.0, sat=0.8, crackle=0.0,  hiss=0.6,  crush=0.0,  reverb=0.10, speed=1.0,  width=0.7),
+    "vinyl":   dict(label="Dusty Vinyl",     lp=5200, hp=80,  wobble=0.4, sat=0.4, crackle=1.0,  hiss=0.4,  crush=0.0,  reverb=0.12, speed=1.0,  width=0.9),
+    "slowed":  dict(label="Slowed + Reverb", lp=7500, hp=50,  wobble=0.3, sat=0.3, crackle=0.15, hiss=0.1,  crush=0.0,  reverb=0.45, speed=0.85, width=1.0),
+    "radio":   dict(label="Old Radio",       lp=3400, hp=380, wobble=0.2, sat=0.9, crackle=0.3,  hiss=0.7,  crush=0.6,  reverb=0.0,  speed=1.0,  width=0.0),
+}
+
+
+def apply_lofi(mix, sr: int, preset: str, amount: float = 0.7):
+    """
+    Lo-fi treatment for a float stereo array (n, 2). `amount` 0–1 scales every
+    effect (0 = clean, 1 = full). Returns a float32 array, peak-limited.
+    """
+    import numpy as np
+    from scipy.signal import butter, sosfilt, fftconvolve, resample_poly
+
+    cfg = LOFI_PRESETS.get((preset or "").strip().lower())
+    amount = max(0.0, min(1.0, float(amount)))
+    if cfg is None or amount <= 0.0 or len(mix) < 64:
+        return mix
+    a = amount
+    x = np.asarray(mix, dtype=np.float64)
+    n = len(x)
+    rng = np.random.default_rng(7)
+
+    # 1. Slowed playback (pitch + tempo drop together, like slowing a record)
+    speed = 1.0 + (cfg["speed"] - 1.0) * a
+    if abs(speed - 1.0) > 0.005:
+        up, down = int(round(100)), int(round(speed * 100))
+        x = resample_poly(x, up, down, axis=0)
+        n = len(x)
+
+    # 2. Tape wow & flutter — slowly varying pitch via a modulated read position
+    if cfg["wobble"] > 0:
+        t = np.arange(n) / sr
+        wow = 28.0 * np.sin(2 * np.pi * 0.55 * t + rng.uniform(0, 6.28))
+        drift = np.cumsum(rng.standard_normal(n)) * 0.02
+        drift -= np.linspace(drift[0], drift[-1], n)         # keep it from wandering off
+        flut = 1.3 * np.sin(2 * np.pi * 6.2 * t)
+        pos = np.arange(n) + (wow + np.clip(drift, -20, 20) + flut) * cfg["wobble"] * a
+        pos = np.clip(pos, 0, n - 1)
+        x = np.stack([np.interp(pos, np.arange(n), x[:, c]) for c in range(2)], axis=1)
+
+    # 3. Sample-rate / bit reduction (gentle at low amounts)
+    if cfg["crush"] > 0:
+        hold = max(1, int(round(1 + 5 * cfg["crush"] * a)))
+        if hold > 1:
+            m = (n // hold) * hold
+            xs = x[:m].reshape(-1, hold, 2)[:, 0:1, :]
+            x[:m] = np.repeat(xs, hold, axis=1).reshape(-1, 2)
+        bits = 16 - int(round(7 * cfg["crush"] * a))
+        if bits < 16:
+            q = 2.0 ** (bits - 1)
+            x = np.round(x * q) / q
+
+    # 4. Tone: high-pass + low-pass (cutoff slides from "open" to the preset value)
+    lp = cfg["lp"] + (sr / 2.0 * 0.9 - cfg["lp"]) * (1.0 - a)
+    lp = min(lp, sr / 2.0 * 0.9)
+    x = sosfilt(butter(3, lp / (sr / 2.0), btype="low", output="sos"), x, axis=0)
+    hp = cfg["hp"] * a
+    if hp >= 20:
+        x = sosfilt(butter(2, hp / (sr / 2.0), btype="high", output="sos"), x, axis=0)
+
+    # 5. Warm saturation
+    drive = 1.0 + 3.0 * cfg["sat"] * a
+    x = np.tanh(x * drive) / np.tanh(drive)
+
+    # 6. Reverb (synthetic decaying-noise room)
+    if cfg["reverb"] > 0:
+        rt = 0.9 + 1.6 * cfg["reverb"]
+        L = int(sr * min(rt * 1.2, 3.0))
+        env = np.exp(-6.9 * np.arange(L) / (sr * rt))
+        wet = np.empty_like(x)
+        for c in range(2):
+            ir = rng.standard_normal(L) * env
+            ir = sosfilt(butter(2, 3500 / (sr / 2.0), btype="low", output="sos"), ir)
+            ir /= np.sqrt(np.sum(ir ** 2)) + 1e-9
+            wet[:, c] = fftconvolve(x[:, c], ir)[:n]
+        mixw = min(0.6, cfg["reverb"] * a)
+        x = x * (1.0 - 0.5 * mixw) + wet * mixw
+
+    # 7. Vinyl crackle + hiss
+    peak_sig = float(np.max(np.abs(x))) or 1.0
+    if cfg["crackle"] > 0:
+        rate = 10.0 * cfg["crackle"] * a                       # pops per second
+        count = rng.poisson(rate * n / sr)
+        pops = np.zeros(n)
+        idx = rng.integers(0, n, size=count)
+        pops[idx] = rng.choice([-1, 1], size=count) * rng.exponential(0.5, size=count)
+        pops = sosfilt(butter(1, 1500 / (sr / 2.0), btype="high", output="sos"), pops)
+        k = np.exp(-np.arange(int(0.002 * sr)) / (0.0006 * sr))
+        pops = fftconvolve(pops, k)[:n] * 0.12 * peak_sig
+        x += np.stack([pops, np.roll(pops, 37)], axis=1)
+    if cfg["hiss"] > 0:
+        noise = rng.standard_normal((n, 2))
+        noise = sosfilt(butter(2, [300 / (sr / 2.0), 7000 / (sr / 2.0)], btype="band", output="sos"), noise, axis=0)
+        x += noise * (0.012 * cfg["hiss"] * a) * peak_sig
+
+    # 8. Stereo width (0 = mono)
+    w = 1.0 - (1.0 - cfg["width"]) * a
+    mid, side = (x[:, 0] + x[:, 1]) / 2.0, (x[:, 0] - x[:, 1]) / 2.0
+    x = np.stack([mid + side * w, mid - side * w], axis=1)
+
+    peak = float(np.max(np.abs(x))) or 1.0
+    if peak > 0.94:
+        x *= 0.94 / peak
+    return x.astype(np.float32)
+
+
 def mix_tracks(
     vocal_bytes: bytes,
     vocal_name: str,
@@ -1332,6 +1448,8 @@ def mix_tracks(
     duck_music: bool = False,
     duck_amount_db: float = 6.0,
     output_format: str = "mp3",
+    lofi: str = "",
+    lofi_amount: float = 0.7,
 ) -> bytes:
     """
     Mix a vocal/lead track over a music/bed track.
@@ -1340,6 +1458,7 @@ def mix_tracks(
     music_loop: if music is shorter than the vocal, loop it (with de-click fades).
     offset_ms: positive = music starts later, negative = music lead-in before the vocal.
     duck_music: smoothly lower the music while the vocal is active.
+    lofi / lofi_amount: optional Lo-fi preset (see LOFI_PRESETS) applied to the final mix.
 
     The mix is done in floating point on a common timeline (one sample rate,
     stereo), so any input bit depth / sample rate / channel layout is handled safely.
@@ -1398,6 +1517,12 @@ def mix_tracks(
 
     mix[m_pos:m_pos + len(music)] += music * m_gain[:, None]
     mix[v_pos:v_pos + len(vocal)] += vocal
+
+    if lofi:
+        key = str(lofi).strip().lower()
+        if key not in LOFI_PRESETS:
+            raise UserInputError(f"Unknown Lo-fi preset '{lofi}'. Choose: {', '.join(LOFI_PRESETS)}.")
+        mix = apply_lofi(mix, sr, key, lofi_amount)
 
     peak = float(np.max(np.abs(mix))) if mix.size else 0.0
     if peak > 0.94:                                  # about -0.5 dBFS ceiling
@@ -1864,7 +1989,11 @@ def autotune(
     # --- Pitch tracking (analysis at 16 kHz is plenty and fast) ---
     g = gcd(16000, sr)
     y_an = resample_poly(y, 16000 // g, sr // g) if sr != 16000 else y
-    times, f0 = _track_pitch(y_an, 16000)
+    # Tracking-only clean-up: cut rumble / mic-stand thumps below the voice so they
+    # can't confuse the pitch detector (the audio that gets re-pitched is untouched).
+    from scipy.signal import butter, sosfiltfilt
+    y_track = sosfiltfilt(butter(4, 85.0 / 8000.0, btype="high", output="sos"), y_an)
+    times, f0 = _track_pitch(y_track, 16000)
     midi, dt, runs_fn = _clean_pitch_track(times, f0)
     n_voiced = int(np.sum(np.isfinite(midi)))
     if n_voiced < max(8, int(0.1 / dt)):
@@ -1901,6 +2030,12 @@ def autotune(
         return _export_bytes(audio, output_format)
     y_out = _psola_retune(y, sr, times, midi, corr)
 
+    # Soft-clip stray PSOLA transient peaks above ~-1 dBFS (keeps MP3 encoding clean),
+    # then make sure nothing exceeds full scale.
+    knee = 0.89
+    over = np.abs(y_out) > knee
+    if np.any(over):
+        y_out = np.where(over, np.sign(y_out) * (knee + (1.0 - knee) * np.tanh((np.abs(y_out) - knee) / (1.0 - knee))), y_out)
     peak = float(np.max(np.abs(y_out))) or 1.0
     if peak > 0.99:
         y_out = y_out * (0.99 / peak)
