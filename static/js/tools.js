@@ -1606,8 +1606,8 @@
     if (humanize) humanize.addEventListener('input', syncLabels);
 
     const presets = {
-      natural:  { strength: 55, speed: 25, humanize: 20 },
-      balanced: { strength: 85, speed: 60, humanize: 5 },
+      natural:  { strength: 80, speed: 40, humanize: 25 },
+      balanced: { strength: 100, speed: 75, humanize: 10 },
       hard:     { strength: 100, speed: 100, humanize: 0 },
     };
     let activePreset = 'hard'; // default = hard lock
@@ -1683,7 +1683,7 @@
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Autotune failed.'); return; }
         const pathInfo = data.path ? ` · ${data.path}` : '';
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB${pathInfo}`;
-        if (result) setAudioResult(result, data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename, data.format === 'wav' ? 'audio/wav' : (data.format === 'ogg' ? 'audio/ogg' : (data.format === 'm4a' ? 'audio/mp4' : 'audio/mpeg')));
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
@@ -1750,7 +1750,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Mix failed.'); return; }
         if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
-        if (result) setAudioResult(result, data.audio_b64, data.filename);
+        if (result) setAudioResult(result, data.audio_b64, data.filename, data.format === 'wav' ? 'audio/wav' : (data.format === 'ogg' ? 'audio/ogg' : (data.format === 'm4a' ? 'audio/mp4' : 'audio/mpeg')));
       } catch (e) {
         if (status) status.textContent = 'Network error.';
       } finally { setLoading(btn, false); showProgress(progress, false); }
