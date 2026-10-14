@@ -1690,6 +1690,73 @@
     }));
   })();
 
+
+  // ---- Audio Mixer (vocals + music) ----
+  (function () {
+    const btn = document.getElementById('mixer-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-mixer-status]');
+    const result = document.getElementById('mixer-result');
+    const progress = ensureProgress(result);
+
+    const vocalGain = document.getElementById('mixer-vocal-gain');
+    const vocalGainLabel = document.getElementById('mixer-vocal-gain-label');
+    const musicGain = document.getElementById('mixer-music-gain');
+    const musicGainLabel = document.getElementById('mixer-music-gain-label');
+    const offset = document.getElementById('mixer-offset');
+    const offsetLabel = document.getElementById('mixer-offset-label');
+    const duckCb = document.getElementById('mixer-duck');
+    const duckRow = document.getElementById('mixer-duck-row');
+    const duckAmount = document.getElementById('mixer-duck-amount');
+    const duckLabel = document.getElementById('mixer-duck-label');
+
+    function sync() {
+      if (vocalGain && vocalGainLabel) vocalGainLabel.textContent = vocalGain.value;
+      if (musicGain && musicGainLabel) musicGainLabel.textContent = musicGain.value;
+      if (offset && offsetLabel) offsetLabel.textContent = offset.value;
+      if (duckAmount && duckLabel) duckLabel.textContent = duckAmount.value;
+      if (duckRow && duckCb) duckRow.style.display = duckCb.checked ? 'block' : 'none';
+    }
+    [vocalGain, musicGain, offset, duckAmount].forEach((el) => {
+      if (el) el.addEventListener('input', sync);
+    });
+    if (duckCb) duckCb.addEventListener('change', sync);
+    sync();
+
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const vocalInput = document.getElementById('mixer-vocal');
+      const musicInput = document.getElementById('mixer-music');
+      const vocal = vocalInput && vocalInput.files && vocalInput.files[0];
+      const music = musicInput && musicInput.files && musicInput.files[0];
+      if (!vocal || !music) {
+        if (status) status.textContent = 'Choose both a vocal track and a music track.';
+        return;
+      }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Mixing…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      form.append('vocal', vocal);
+      form.append('music', music);
+      form.append('vocal_gain_db', vocalGain ? vocalGain.value : '0');
+      form.append('music_gain_db', musicGain ? musicGain.value : '-6');
+      form.append('offset_ms', offset ? offset.value : '0');
+      form.append('music_loop', document.getElementById('mixer-loop') && document.getElementById('mixer-loop').checked ? '1' : '0');
+      form.append('duck_music', duckCb && duckCb.checked ? '1' : '0');
+      form.append('duck_amount_db', duckAmount ? duckAmount.value : '6');
+      form.append('output_format', (document.getElementById('mixer-format') || {}).value || 'mp3');
+      try {
+        const res = await resumableFetch('/api/tools/mixer', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Mix failed.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) setAudioResult(result, data.audio_b64, data.filename);
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
   // Soft-fail if ads helper is missing so tools still work on pages without ads.js
   if (!window.VoxCraftAds) {
     window.VoxCraftAds = { showInterstitial: function (cb) { if (typeof cb === 'function') cb(); } };
