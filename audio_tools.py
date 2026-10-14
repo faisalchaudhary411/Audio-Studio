@@ -113,18 +113,51 @@ def check_file_size(file_bytes: bytes, max_mb=None):
         raise UserInputError(f"File is {size_mb:.1f}MB — max allowed is {max_mb}MB.")
 
 
+def _sniff_audio_format(b: bytes):
+    """Identify the real container from magic bytes (None if unknown).
+
+    Browsers and users often upload files whose extension doesn't match the
+    content (e.g. a WAV named .mp3). Decoding with the wrong demuxer doesn't
+    fail — ffmpeg happily returns a few milliseconds of noise — so we trust the
+    bytes over the filename.
+    """
+    h = bytes(b[:16])
+    if h[:4] == b"RIFF" and h[8:12] == b"WAVE":
+        return "wav"
+    if h[:4] == b"OggS":
+        return "ogg"
+    if h[:4] == b"fLaC":
+        return "flac"
+    if h[:4] == b"\x1a\x45\xdf\xa3":
+        return "webm"
+    if h[4:8] == b"ftyp":
+        return "mp4"
+    if h[:4] == b"FORM" and h[8:12] in (b"AIFF", b"AIFC"):
+        return "aiff"
+    if h[:3] == b"ID3":
+        return "mp3"
+    if len(h) >= 2 and h[0] == 0xFF and (h[1] & 0xE0) == 0xE0:
+        return "aac" if (h[1] & 0x06) == 0 else "mp3"
+    return None
+
+
 def _load_segment(file_bytes: bytes, filename: str) -> AudioSegment:
     """Decode audio bytes into an AudioSegment.
 
-    Prefer in-memory BytesIO for common formats (avoids a temp-file write/read
-    on every tool request — material on a small VPS under concurrent load).
-    Fall back to a NamedTemporaryFile when the format needs a real path.
+    The container is detected from the file's magic bytes first (falling back to
+    the extension), so a mislabeled file still decodes correctly. Prefer in-memory
+    BytesIO for common formats (avoids a temp-file write/read on every tool request —
+    material on a small VPS under concurrent load). Fall back to a NamedTemporaryFile
+    when the format needs a real path.
     """
-    suffix = "." + (filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else "wav")
-    memory_ok = suffix in (".mp3", ".wav", ".ogg", ".flac", ".m4a", ".aac", ".webm", ".mp4")
+    ext = (filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else "wav")
+    sniffed = _sniff_audio_format(file_bytes)
+    fmt = sniffed or ext
+    suffix = "." + (sniffed if sniffed else ext)
+    memory_ok = fmt in ("mp3", "wav", "ogg", "flac", "m4a", "aac", "webm", "mp4")
     if memory_ok:
         try:
-            return AudioSegment.from_file(io.BytesIO(file_bytes), format=suffix.lstrip("."))
+            return AudioSegment.from_file(io.BytesIO(file_bytes), format=fmt)
         except Exception:
             pass  # fall through to temp-file path
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -1240,6 +1273,53 @@ def voice_change(file_bytes: bytes, filename: str, effect: str,
 # ---------------------------------------------------------------------------
 # Audio Mixer — blend vocals (e.g. Autotune) with music / beat
 # ---------------------------------------------------------------------------
+def _to_float_stereo(seg: AudioSegment, target_sr: int):
+    """AudioSegment → float32 array (n, 2) in [-1, 1] at `target_sr` (high-quality resample)."""
+    import numpy as np
+    from math import gcd
+    from scipy.signal import resample_poly
+
+    seg = seg.set_sample_width(2)               # one known format: no 24/32-bit surprises
+    a = np.array(seg.get_array_of_samples(), dtype=np.float32) / 32768.0
+    ch = seg.channels
+    if ch == 1:
+        a = np.stack([a, a], axis=1)
+    else:
+        a = a.reshape(-1, ch)
+        a = a[:, :2] if ch >= 2 else a
+    sr = int(seg.frame_rate)
+    if sr != target_sr and len(a):
+        g = gcd(sr, target_sr)
+        a = resample_poly(a, target_sr // g, sr // g, axis=0).astype(np.float32)
+    return a
+
+
+def _duck_gain(vocal, sr: int, duck_db: float):
+    """
+    Smooth sidechain-style gain curve (1.0 → -duck_db) that dips while the vocal
+    is active. 20 ms RMS follower, 40 ms attack, 400 ms release — no pumping/zipper noise.
+    Returns one gain value per 10 ms block plus the block size in samples.
+    """
+    import numpy as np
+    mono = vocal.mean(axis=1) if vocal.ndim == 2 else vocal
+    blk = max(1, int(sr * 0.010))
+    nb = int(np.ceil(len(mono) / blk))
+    pad = np.pad(mono.astype(np.float64), (0, nb * blk - len(mono)))
+    rms = np.sqrt(np.mean(pad.reshape(nb, blk) ** 2, axis=1))
+    ref = float(np.percentile(rms, 95)) if nb else 0.0
+    active = rms > max(ref * 0.12, 1e-4)         # within ~18 dB of the vocal's loud level
+    low = 10.0 ** (-float(duck_db) / 20.0)
+    att = 1.0 - np.exp(-0.010 / 0.040)
+    rel = 1.0 - np.exp(-0.010 / 0.400)
+    g = np.empty(nb)
+    cur = 1.0
+    for i in range(nb):
+        tgt = low if active[i] else 1.0
+        cur += (att if tgt < cur else rel) * (tgt - cur)
+        g[i] = cur
+    return g, blk
+
+
 def mix_tracks(
     vocal_bytes: bytes,
     vocal_name: str,
@@ -1257,127 +1337,74 @@ def mix_tracks(
     Mix a vocal/lead track over a music/bed track.
 
     vocal_gain_db / music_gain_db: level trims in dB (typical music bed -6 to -12).
-    music_loop: if music is shorter than vocals, loop it to cover the full vocal length.
-    offset_ms: delay music start (positive) or vocals (negative) in milliseconds.
-    duck_music: lower music level wherever vocals are loud (simple envelope ducking).
+    music_loop: if music is shorter than the vocal, loop it (with de-click fades).
+    offset_ms: positive = music starts later, negative = music lead-in before the vocal.
+    duck_music: smoothly lower the music while the vocal is active.
+
+    The mix is done in floating point on a common timeline (one sample rate,
+    stereo), so any input bit depth / sample rate / channel layout is handled safely.
     """
     import numpy as np
 
     check_file_size(vocal_bytes)
     check_file_size(music_bytes)
+    output_format = (output_format or "mp3").lower().strip()
+    if output_format not in ("mp3", "wav", "ogg", "m4a"):
+        raise UserInputError("Output format must be mp3, wav, ogg, or m4a.")
 
-    vocal = _load_segment(vocal_bytes, vocal_name)
-    music = _load_segment(music_bytes, music_name)
+    vocal_seg = _load_segment(vocal_bytes, vocal_name)
+    music_seg = _load_segment(music_bytes, music_name)
+    if len(vocal_seg) < 50 or len(music_seg) < 50:
+        raise UserInputError("One of the tracks is empty or could not be decoded. Check both files play normally.")
 
-    # Match sample rate / channels (pydub overlay handles some of this, but normalize)
-    target_sr = max(vocal.frame_rate, music.frame_rate)
-    if vocal.frame_rate != target_sr:
-        vocal = vocal.set_frame_rate(target_sr)
-    if music.frame_rate != target_sr:
-        music = music.set_frame_rate(target_sr)
-    # Stereo mix bus
-    if vocal.channels == 1:
-        vocal = vocal.set_channels(2)
-    if music.channels == 1:
-        music = music.set_channels(2)
+    sr = int(min(max(vocal_seg.frame_rate, music_seg.frame_rate), 48000))
+    vocal = _to_float_stereo(vocal_seg, sr)
+    music = _to_float_stereo(music_seg, sr)
 
     vocal_gain_db = max(-24.0, min(24.0, float(vocal_gain_db)))
     music_gain_db = max(-24.0, min(12.0, float(music_gain_db)))
-    if abs(vocal_gain_db) >= 0.05:
-        vocal = vocal.apply_gain(vocal_gain_db)
-    if abs(music_gain_db) >= 0.05:
-        music = music.apply_gain(music_gain_db)
+    vocal *= 10.0 ** (vocal_gain_db / 20.0)
+    music *= 10.0 ** (music_gain_db / 20.0)
 
-    offset_ms = int(offset_ms or 0)
-    # Build timeline: vocal is the reference length unless music is longer and we don't loop
-    v_len = len(vocal)
-    m_len = len(music)
+    offset = int(round(int(offset_ms or 0) * sr / 1000.0))
+    v_pos = max(0, -offset)          # negative offset → vocal enters later
+    m_pos = max(0, offset)           # positive offset → music enters later
 
-    if music_loop and m_len > 0 and m_len < v_len:
-        loops = int(np.ceil(v_len / m_len))
-        music = music * loops
-        music = music[:v_len]
-    elif len(music) > v_len and not music_loop:
-        # keep full music, pad vocal with silence
-        pass
+    # Loop the music bed to cover the vocal when it is shorter.
+    need = v_pos + len(vocal) - m_pos
+    if music_loop and 0 < len(music) < need:
+        fade = min(int(0.005 * sr), len(music) // 4)
+        unit = music.copy()
+        if fade > 1:
+            ramp = np.linspace(0.0, 1.0, fade, dtype=np.float32)[:, None]
+            unit[:fade] *= ramp
+            unit[-fade:] *= ramp[::-1]
+        reps = int(np.ceil(need / len(unit)))
+        music = np.tile(unit, (reps, 1))[:need]
 
-    # Optional ducking: reduce music where vocal RMS is high
-    if duck_music and len(music) > 0 and len(vocal) > 0:
+    total = max(v_pos + len(vocal), m_pos + len(music))
+    mix = np.zeros((total, 2), dtype=np.float32)
+
+    m_gain = np.ones(len(music), dtype=np.float32)
+    if duck_music and len(music) and len(vocal):
         try:
-            duck_amount_db = max(0.0, min(18.0, float(duck_amount_db)))
-            # Work in mono RMS envelopes, 50ms windows
-            hop = max(1, int(target_sr * 0.05))
-            v_samples = np.array(vocal.get_array_of_samples(), dtype=np.float64)
-            if vocal.channels == 2:
-                v_samples = v_samples.reshape(-1, 2).mean(axis=1)
-            # Normalize
-            peak = np.max(np.abs(v_samples)) or 1.0
-            v_samples = v_samples / peak
-            n = len(v_samples)
-            env = np.zeros(n)
-            for i in range(0, n, hop):
-                chunk = v_samples[i : i + hop]
-                rms = float(np.sqrt(np.mean(chunk ** 2))) if len(chunk) else 0.0
-                env[i : i + hop] = rms
-            # Smooth
-            win = max(3, hop)
-            kernel = np.ones(win) / win
-            env = np.convolve(env, kernel, mode="same")
-            thresh = float(np.percentile(env, 60)) + 1e-6
-            # Gain reduction 0..1 when above thresh
-            gr = np.clip((env - thresh) / (1.0 - thresh + 1e-9), 0.0, 1.0)
-            # Convert to per-hop gain on music
-            m_samples = np.array(music.get_array_of_samples(), dtype=np.float64)
-            ch = music.channels
-            if ch == 2:
-                m_stereo = m_samples.reshape(-1, 2)
-            else:
-                m_stereo = m_samples.reshape(-1, 1)
-            m_n = len(m_stereo)
-            # Map env length to music length
-            for i in range(0, min(n, m_n), hop):
-                g = 1.0 - gr[i] * (1.0 - 10 ** (-duck_amount_db / 20.0))
-                end = min(i + hop, m_n)
-                m_stereo[i:end] *= g
-            # Rebuild music segment
-            flat = m_stereo.flatten()
-            sw = music.sample_width
-            if sw == 2:
-                flat = np.clip(flat, -32768, 32767).astype(np.int16)
-            else:
-                peak_m = np.max(np.abs(flat)) or 1.0
-                flat = (flat / peak_m * (2 ** (8 * sw - 1) - 1)).astype(np.int16)
-                sw = 2
-            music = AudioSegment(
-                flat.tobytes(),
-                frame_rate=target_sr,
-                sample_width=sw,
-                channels=ch,
-            )
+            g, blk = _duck_gain(vocal, sr, max(0.0, min(18.0, float(duck_amount_db))))
+            # Per-sample gain along the final timeline, then cut to the music's span.
+            curve = np.interp(np.arange(total), (np.arange(len(g)) * blk) + v_pos + blk / 2.0, g,
+                              left=1.0, right=1.0).astype(np.float32)
+            m_gain = curve[m_pos:m_pos + len(music)]
         except Exception:
-            pass  # ducking is best-effort; mix without it on failure
+            m_gain = np.ones(len(music), dtype=np.float32)   # ducking is best-effort
 
-    # Overlay with offset
-    # pydub: overlay(seg, position=ms)
-    if offset_ms >= 0:
-        # music starts later
-        base = vocal
-        if len(music) + offset_ms > len(base):
-            base = base + AudioSegment.silent(duration=len(music) + offset_ms - len(base))
-        mixed = base.overlay(music, position=offset_ms)
-    else:
-        # vocals start later (music lead-in)
-        lead = abs(offset_ms)
-        base = music
-        if len(vocal) + lead > len(base):
-            base = base + AudioSegment.silent(duration=len(vocal) + lead - len(base))
-        mixed = base.overlay(vocal, position=lead)
+    mix[m_pos:m_pos + len(music)] += music * m_gain[:, None]
+    mix[v_pos:v_pos + len(vocal)] += vocal
 
-    # Peak safety
-    if mixed.max_dBFS > -0.5:
-        mixed = mixed.apply_gain(-0.5 - mixed.max_dBFS)
-
-    return _export_bytes(mixed, output_format)
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    if peak > 0.94:                                  # about -0.5 dBFS ceiling
+        mix *= 0.94 / peak
+    pcm = np.clip(mix * 32767.0, -32768, 32767).astype(np.int16)
+    out = AudioSegment(pcm.tobytes(), frame_rate=sr, sample_width=2, channels=2)
+    return _export_bytes(out, output_format)
 
 
 # Professional Autotune — pitch correction to a musical scale
@@ -1473,286 +1500,281 @@ def _detect_key_from_chroma(y, sr: int) -> tuple:
     return best
 
 
-def _smooth_correction(steps: "np.ndarray", retune_speed: float) -> "np.ndarray":
+def _detect_key_from_pitch(midi) -> tuple:
     """
-    retune_speed 0..1 — 1 = hard/fast snap (classic Auto-Tune), 0 = slow glide.
-    Implemented as exponential moving average; higher speed → less smoothing.
-    """
-    import numpy as np
-    # Map speed to smoothing coefficient: speed=1 → alpha≈1 (no smooth),
-    # speed=0 → alpha≈0.05 (heavy lag).
-    alpha = 0.05 + 0.95 * max(0.0, min(1.0, float(retune_speed)))
-    out = np.copy(steps)
-    # Forward pass
-    for i in range(1, len(out)):
-        if out[i] != out[i]:  # NaN → keep previous
-            out[i] = out[i - 1]
-        else:
-            prev = out[i - 1] if out[i - 1] == out[i - 1] else out[i]
-            out[i] = alpha * out[i] + (1.0 - alpha) * prev
-    return out
+    Return (root_pc 0-11, 'major'|'minor') from the *sung pitch track*.
 
-
-def _tv_pitch_shift_segments(
-    y,
-    sr: int,
-    n_steps_per_frame,
-    hop_length: int = 512,
-    seg_sec: float = 0.05,
-    overlap: float = 0.5,
-    hard: bool = False,
-):
-    """
-    Time-varying pitch correction via overlapping librosa.effects.pitch_shift calls.
-    hard=True → shorter frames, center-frame steps (not median), less crossfade
-    so the classic stair-step Autotune character comes through.
+    A pitch-class histogram of the tracked melody is far more reliable for a
+    solo vocal than chroma of the raw audio. Uses Pearson correlation with the
+    Krumhansl-Kessler profiles. Returns None when there is not enough pitch.
     """
     import numpy as np
-    import librosa
-
-    steps = np.nan_to_num(np.asarray(n_steps_per_frame, dtype=np.float64), nan=0.0)
-    y = np.asarray(y, dtype=np.float64)
-
-    if hard:
-        seg_sec = 0.04
-        overlap = 0.35
-
-    seg_len = max(int(sr * seg_sec), 2048)
-    hop_seg = max(int(seg_len * (1.0 - overlap)), 256)
-
-    y_out = np.zeros(len(y), dtype=np.float64)
-    weights = np.zeros(len(y), dtype=np.float64)
-
-    pos = 0
-    while pos < len(y):
-        end = min(pos + seg_len, len(y))
-        frame = y[pos:end]
-        actual = len(frame)
-
-        f_idx = int(pos // hop_length)
-        f_end = int(max(end - 1, pos) // hop_length) + 1
-        if len(steps) == 0:
-            med = 0.0
-        else:
-            f_idx = max(0, min(f_idx, len(steps) - 1))
-            f_end = max(f_idx + 1, min(f_end, len(steps)))
-            local = steps[f_idx:f_end]
-            # Hard mode: use center frame (instant snap). Soft: median (smoother).
-            if hard:
-                mid = local[len(local) // 2] if len(local) else 0.0
-                med = float(mid)
-            else:
-                med = float(np.median(local)) if len(local) else 0.0
-
-        if abs(med) < 0.02 or actual < 512:
-            shifted = frame.copy()
-        else:
-            work = frame
-            if actual < 2048:
-                work = np.pad(frame, (0, 2048 - actual))
-            try:
-                shifted_full = librosa.effects.pitch_shift(
-                    work, sr=sr, n_steps=med, bins_per_octave=12
-                )
-            except Exception:
-                shifted_full = work
-            shifted = np.asarray(shifted_full[:actual], dtype=np.float64)
-
-        if hard:
-            # Near-rectangular window keeps edges sharper (more robotic)
-            w = np.ones(actual, dtype=np.float64)
-            fade = min(64, actual // 8)
-            if fade > 1:
-                w[:fade] = np.linspace(0, 1, fade)
-                w[-fade:] = np.linspace(1, 0, fade)
-        else:
-            w = np.hanning(actual).astype(np.float64)
-            if float(np.sum(w)) < 1e-9:
-                w = np.ones(actual, dtype=np.float64)
-
-        y_out[pos:end] += shifted * w
-        weights[pos:end] += w
-        pos += hop_seg
-
-    weights = np.maximum(weights, 1e-8)
-    return (y_out / weights).astype(np.float32)
+    v = np.asarray(midi, dtype=np.float64)
+    v = v[np.isfinite(v)]
+    if len(v) < 20:
+        return None
+    hist = np.bincount((np.round(v).astype(int)) % 12, minlength=12).astype(np.float64)
+    if hist.sum() <= 0 or np.std(hist) < 1e-9:
+        return None
+    best, best_score = (0, "major"), -2.0
+    for mode, prof in (("major", _MAJOR_PROFILE), ("minor", _MINOR_PROFILE)):
+        prof = np.asarray(prof, dtype=np.float64)
+        for pc in range(12):
+            score = float(np.corrcoef(hist, np.roll(prof, pc))[0, 1])
+            if score > best_score:
+                best_score, best = score, (pc, mode)
+    return best
 
 
-def _snap_f0_to_scale(f0, scale_midis, strength=1.0, humanize=0.0,
-                      kernel_size=1, stair_hold_cents=50.0, min_hold_sec=0.15,
-                      hop_length=512, sr=22050):
+def _track_pitch(y, sr: int):
     """
-    Extreme quantize:
-      - Full snap to scale when strength high
-      - Minimum hold time (plateau notes) → robotic stepped melody
-      - No median lag (kernel_size=1)
+    Pitch track → (times_s, f0_hz) with NaN for unvoiced frames.
+    Praat's autocorrelation tracker (parselmouth, already installed as a PSOLA
+    dependency) is fast and accurate; librosa.pyin is the fallback.
     """
     import numpy as np
-
-    f0 = np.asarray(f0, dtype=np.float64)
-    out = np.full_like(f0, np.nan)
-    rng = np.random.default_rng(42)
-    for i, f in enumerate(f0):
-        if f is None or not np.isfinite(f) or f <= 0:
-            continue
-        midi = _hz_to_midi(float(f))
-        if midi != midi:
-            continue
-        target = _nearest_scale_midi(midi, scale_midis)
-        if humanize > 0:
-            target += rng.uniform(-0.02, 0.02) * humanize
-        corrected = target if strength >= 0.85 else midi + (target - midi) * strength
-        out[i] = _midi_to_hz(corrected)
-
-    # Plateau: force each lock to last at least min_hold_sec
-    min_frames = max(1, int(float(min_hold_sec) * float(sr) / float(hop_length)))
-    jump_cents = float(stair_hold_cents) if stair_hold_cents else 50.0
-    stepped = np.full_like(out, np.nan)
-    i = 0
-    n = len(out)
-    while i < n:
-        if not np.isfinite(out[i]):
-            i += 1
-            continue
-        j = i + 1
-        while j < n:
-            if np.isfinite(out[j]):
-                cents = abs(1200.0 * math.log2(out[j] / out[i]))
-                if cents > jump_cents:
-                    break
-            j += 1
-        end = min(n, max(j, i + min_frames))
-        segment = out[i:j]
-        finite = segment[np.isfinite(segment)]
-        lock = float(np.median(finite)) if len(finite) else float(out[i])
-        stepped[i:end] = lock
-        i = end
-    return stepped
-
-
-def _apply_hard_lock(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
-    """
-    MEGA hard Autotune (trap / Cher / T-Pain):
-      1. Snap to scale
-      2. Force ~150ms pitch plateaus (stair-step melody)
-      3. PSOLA reconstruct
-      4. Second PSOLA pass for extra lock
-    """
-    import numpy as np
-
-    y = np.asarray(y, dtype=np.float64)
-    f0 = np.asarray(f0, dtype=np.float64)
-
-    target_f0 = _snap_f0_to_scale(
-        f0, scale_midis,
-        strength=strength,
-        humanize=humanize,
-        kernel_size=1,
-        stair_hold_cents=50.0,
-        min_hold_sec=0.15,
-        hop_length=hop_length,
-        sr=sr,
-    )
-
     try:
-        import psola
-        fmin = float(_midi_to_hz(24))
-        fmax = float(_midi_to_hz(96))
-        tuned = psola.vocode(
-            y, sample_rate=int(sr), target_pitch=target_f0, fmin=fmin, fmax=fmax,
+        import parselmouth
+        snd = parselmouth.Sound(np.asarray(y, dtype=np.float64), sampling_frequency=float(sr))
+        pitch = snd.to_pitch_ac(
+            time_step=0.005, pitch_floor=70.0, max_number_of_candidates=15,
+            very_accurate=False, silence_threshold=0.03, voicing_threshold=0.45,
+            octave_cost=0.01, octave_jump_cost=0.5, voiced_unvoiced_cost=0.14,
+            pitch_ceiling=900.0,
         )
-        tuned = np.asarray(tuned, dtype=np.float64)
-        if len(tuned) > len(y):
-            tuned = tuned[: len(y)]
-        elif len(tuned) < len(y):
-            tuned = np.pad(tuned, (0, len(y) - len(tuned)))
-
-        # Second pass for extra robotic lock
-        try:
-            import librosa
-            f0_2, _, _ = librosa.pyin(
-                tuned, fmin=fmin, fmax=fmax, sr=sr,
-                frame_length=2048, hop_length=hop_length,
-            )
-            target_2 = _snap_f0_to_scale(
-                np.asarray(f0_2, dtype=np.float64), scale_midis,
-                strength=1.0, humanize=0.0, kernel_size=1,
-                stair_hold_cents=50.0, min_hold_sec=0.15,
-                hop_length=hop_length, sr=sr,
-            )
-            tuned2 = psola.vocode(
-                tuned, sample_rate=int(sr), target_pitch=target_2, fmin=fmin, fmax=fmax,
-            )
-            tuned2 = np.asarray(tuned2, dtype=np.float64)
-            if len(tuned2) > len(y):
-                tuned2 = tuned2[: len(y)]
-            elif len(tuned2) < len(y):
-                tuned2 = np.pad(tuned2, (0, len(y) - len(tuned2)))
-            tuned = tuned2
-        except Exception:
-            pass
+        times = np.asarray(pitch.xs(), dtype=np.float64)
+        f0 = np.asarray(pitch.selected_array["frequency"], dtype=np.float64)
+        f0[f0 <= 0] = np.nan
+        if len(times) > 8 and int(np.sum(np.isfinite(f0))) >= 5:
+            return times, f0
     except Exception:
-        tuned = _hard_lock_fallback(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length)
-
-    peak = float(np.max(np.abs(tuned))) or 1.0
-    if peak > 0.98:
-        tuned = tuned * (0.98 / peak)
-    return tuned.astype(np.float32)
-
-
-def _hard_lock_fallback(y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length):
-    """Note-region librosa.pitch_shift if psola is unavailable."""
-    import numpy as np
+        pass
     import librosa
+    hop = 128
+    f0, _vf, _vp = librosa.pyin(
+        np.asarray(y, dtype=np.float32), fmin=70.0, fmax=900.0, sr=sr,
+        frame_length=1024, hop_length=hop,
+    )
+    f0 = np.asarray(f0, dtype=np.float64)
+    times = np.arange(len(f0)) * hop / float(sr)
+    return times, f0
+
+
+def _clean_pitch_track(times, f0):
+    """
+    f0 (Hz, NaN = unvoiced) → MIDI curve with octave errors / blips removed,
+    tiny voiced islands dropped and short dropouts inside a note bridged.
+    """
+    import numpy as np
+    from numpy.lib.stride_tricks import sliding_window_view
+    import warnings
 
     f0 = np.asarray(f0, dtype=np.float64)
-    voiced = np.asarray(voiced_flag, dtype=bool)
+    n = len(f0)
+    dt = float(np.median(np.diff(times))) if n > 1 else 0.005
+    midi = np.full(n, np.nan)
+    ok = np.isfinite(f0) & (f0 > 0)
+    midi[ok] = 69.0 + 12.0 * np.log2(f0[ok] / 440.0)
+
+    # Reject outliers (octave jumps, single-frame spikes) vs. a running median.
+    k = 7
+    padded = np.pad(midi, (k // 2, k // 2), constant_values=np.nan)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        med = np.nanmedian(sliding_window_view(padded, k), axis=1)
+    bad = np.isfinite(midi) & np.isfinite(med) & (np.abs(midi - med) > 1.2)
+    midi[bad] = np.nan
+
+    def runs(mask):
+        idx = np.flatnonzero(mask)
+        if len(idx) == 0:
+            return []
+        splits = np.flatnonzero(np.diff(idx) > 1) + 1
+        return [(g[0], g[-1] + 1) for g in np.split(idx, splits)]
+
+    # Drop voiced islands shorter than ~35 ms.
+    min_len = max(2, int(math.ceil(0.035 / dt)))
+    for a, b in runs(np.isfinite(midi)):
+        if b - a < min_len:
+            midi[a:b] = np.nan
+
+    # Bridge dropouts shorter than ~50 ms between voiced frames.
+    max_gap = max(1, int(round(0.05 / dt)))
+    vr = runs(np.isfinite(midi))
+    for (a0, b0), (a1, b1) in zip(vr[:-1], vr[1:]):
+        if 0 < a1 - b0 <= max_gap:
+            midi[b0:a1] = np.interp(np.arange(b0, a1), [b0 - 1, a1], [midi[b0 - 1], midi[a1]])
+    return midi, dt, runs
+
+
+def _build_correction(times, midi, dt, runs_fn, scale_midis, strength, retune_speed, humanize):
+    """
+    Semitone correction per pitch frame.
+
+    * The target note uses hysteresis, so vibrato never flips between two notes.
+    * `retune_speed` is a time constant (like Antares "Retune Speed"):
+      1.0 → 0 ms (instant, hard T-Pain/Cher lock); 0.0 → ~0.5 s (very natural).
+      Smoothing the *correction* (not the pitch) lets natural vibrato pass
+      through at slow speeds, exactly like a real pitch corrector.
+    * `humanize` keeps part of the singer's own pitch movement around the note.
+    """
+    import numpy as np
+    from scipy.ndimage import uniform_filter1d
+
+    scale_arr = np.asarray(scale_midis, dtype=np.float64)
+    n = len(midi)
+    corr = np.zeros(n, dtype=np.float64)
+
+    tau = 0.5 * (1.0 - retune_speed) ** 2          # seconds
+    alpha = 1.0 if tau < 1e-4 else 1.0 - math.exp(-dt / tau)
+    slow_w = max(1, int(round(0.30 / dt)))
+    sm_w = max(1, int(round(0.04 / dt)))
+
+    for a, b in runs_fn(np.isfinite(midi)):
+        m = midi[a:b]
+        slow = uniform_filter1d(m, size=min(slow_w, len(m)), mode="nearest")
+        ms = uniform_filter1d(m, size=min(sm_w, len(m)), mode="nearest")
+        cur = scale_arr[int(np.argmin(np.abs(scale_arr - ms[0])))]
+        desired = np.empty(len(m))
+        for i, x in enumerate(ms):
+            cand = scale_arr[int(np.argmin(np.abs(scale_arr - x)))]
+            if cand != cur and abs(x - cur) > abs(x - cand) + 0.15:
+                cur = cand
+            desired[i] = (cur + humanize * 0.8 * (m[i] - slow[i])) - m[i]
+        desired *= strength
+        c = desired[0]
+        out = np.empty(len(m))
+        for i, d in enumerate(desired):
+            c += alpha * (d - c)
+            out[i] = c
+        corr[a:b] = out
+    return np.clip(corr, -4.0, 4.0)
+
+
+def _psola_retune(y, sr: int, times, midi, corr):
+    """
+    Time-domain PSOLA pitch shifter driven by a time-varying correction.
+
+    Voiced stretches are re-pitched by re-spacing pitch-synchronous grains
+    (formants / timbre are preserved, so the voice stays natural and intelligible).
+    Unvoiced stretches (s, f, t, breaths) are copied through *exactly* because
+    analysis and synthesis marks coincide there.
+    """
+    import numpy as np
+    from scipy.signal import butter, sosfiltfilt
+
     y = np.asarray(y, dtype=np.float64)
-    n_samples = len(y)
-    n_frames = len(f0)
-    rng = np.random.default_rng(42)
+    N = len(y)
+    n_fr = len(times)
+    t0 = float(times[0])
+    dt = float(np.median(np.diff(times))) if n_fr > 1 else 0.005
 
-    notes = []
-    i = 0
-    while i < n_frames:
-        if not voiced[i] or not np.isfinite(f0[i]) or f0[i] <= 0:
-            i += 1
-            continue
-        j = i + 1
-        m0 = _hz_to_midi(float(f0[i]))
-        midis = [m0]
-        while j < n_frames and voiced[j] and np.isfinite(f0[j]) and f0[j] > 0:
-            mj = _hz_to_midi(float(f0[j]))
-            if abs(mj - m0) > 0.7:
-                break
-            midis.append(mj)
-            j += 1
-        notes.append((i, j, float(np.median(midis))))
-        i = max(j, i + 1)
+    voiced_fr = np.isfinite(midi)
+    vidx = np.flatnonzero(voiced_fr)
+    midi_fill = np.interp(times, times[vidx], midi[vidx])
+    corr_fill = np.interp(times, times[vidx], np.where(voiced_fr, corr, 0.0)[vidx])
 
-    y_out = y.copy()
-    for s, e, med_midi in notes:
-        target = _nearest_scale_midi(med_midi, scale_midis)
-        if humanize > 0:
-            target += rng.uniform(-0.03, 0.03) * humanize
-        corr = (target - med_midi) if strength >= 0.85 else (target - med_midi) * strength
-        corr = float(max(-3.0, min(3.0, corr)))
-        if abs(corr) < 0.05:
-            continue
-        s0 = int(s * hop_length)
-        s1 = min(n_samples, int(e * hop_length))
-        if s1 - s0 < 512:
-            continue
-        seg = y[s0:s1]
-        work = seg if len(seg) >= 2048 else np.pad(seg, (0, 2048 - len(seg)))
-        try:
-            shifted = librosa.effects.pitch_shift(
-                work.astype(np.float64), sr=sr, n_steps=corr, bins_per_octave=12
-            )
-            y_out[s0:s1] = np.asarray(shifted[: len(seg)], dtype=np.float64)
-        except Exception:
-            continue
-    return y_out.astype(np.float32)
+    def voiced_at(t):
+        i = int((t - t0) / dt + 0.5)
+        return voiced_fr[0 if i < 0 else (n_fr - 1 if i >= n_fr else i)]
+
+    def midi_at(t):
+        return float(np.interp(t, times, midi_fill))
+
+    def corr_at(t):
+        return float(np.interp(t, times, corr_fill))
+
+    # Low-passed copy for stable epoch (pitch-mark) picking.
+    med_f0 = _midi_to_hz(float(np.median(midi[voiced_fr])))
+    cutoff = float(min(max(1.6 * med_f0, 200.0), 900.0, sr / 2.0 * 0.9))
+    sos = butter(4, cutoff / (sr / 2.0), btype="low", output="sos")
+    yl = sosfiltfilt(sos, y)
+
+    # ---- analysis pitch marks ----------------------------------------------
+    Pu = max(16, int(0.006 * sr))               # fixed grain spacing for unvoiced
+    p_lo, p_hi = sr / 900.0, sr / 60.0
+    marks = []
+    pos = 0
+    while pos < N:
+        marks.append(pos)
+        t = pos / sr
+        nxt = pos + Pu
+        if voiced_at(t):
+            P = sr / _midi_to_hz(midi_at(t))
+            if p_lo <= P <= p_hi:
+                lo, hi = int(pos + 0.75 * P), int(pos + 1.25 * P) + 1
+                if hi < N:
+                    seg = yl[lo:hi]
+                    dist = np.abs(np.arange(lo, hi) - (pos + P)) / (0.25 * P)
+                    nxt = lo + int(np.argmax(seg * (1.0 - 0.35 * dist)))
+                else:
+                    nxt = pos + int(P)
+                nxt = max(nxt, pos + int(0.5 * P), pos + 1)
+        pos = nxt
+    marks = np.asarray(marks, dtype=np.int64)
+    M = len(marks)
+    if M < 4:
+        return y.astype(np.float32)
+
+    # ---- overlap-add synthesis ---------------------------------------------
+    out = np.zeros(N, dtype=np.float64)
+    wsum = np.zeros(N, dtype=np.float64)
+    rise_cache, fall_cache = {}, {}
+
+    def rise(L):
+        w = rise_cache.get(L)
+        if w is None:
+            w = 0.5 * (1.0 - np.cos(np.pi * np.arange(L) / L))
+            rise_cache[L] = w
+        return w
+
+    def fall(L):
+        w = fall_cache.get(L)
+        if w is None:
+            w = 0.5 * (1.0 + np.cos(np.pi * np.arange(L) / L))
+            fall_cache[L] = w
+        return w
+
+    s = float(marks[0])
+    last_s = -1.0
+    while s < N:
+        k = int(np.searchsorted(marks, s))
+        if k >= M:
+            k = M - 1
+        elif k > 0 and (s - marks[k - 1]) < (marks[k] - s):
+            k -= 1
+        t = s / sr
+        if voiced_at(t):
+            f_t = _midi_to_hz(midi_at(t) + corr_at(t))
+            nxt = s + sr / max(f_t, 20.0)
+        else:
+            if marks[k] <= last_s:
+                k = min(k + 1, M - 1)
+            s = float(marks[k])
+            nxt = float(marks[k + 1]) if k + 1 < M else float(N)
+        if s <= last_s:
+            s = last_s + 1.0
+        a = int(marks[k])
+        Lp = int(a - marks[k - 1]) if k > 0 else Pu
+        Rp = int(marks[k + 1] - a) if k + 1 < M else Pu
+        Lp, Rp = max(Lp, 4), max(Rp, 4)
+        w = np.concatenate((rise(Lp), fall(Rp)))
+        x0 = a - Lp
+        d0 = int(round(s)) - Lp
+        # clip to buffer
+        cut_l = max(0, -x0, -d0)
+        cut_r = max(0, (a + Rp) - N, (d0 + Lp + Rp) - N)
+        if cut_l + cut_r < Lp + Rp:
+            seg = y[x0 + cut_l: a + Rp - cut_r]
+            ww = w[cut_l: Lp + Rp - cut_r]
+            out[d0 + cut_l: d0 + Lp + Rp - cut_r] += seg * ww
+            wsum[d0 + cut_l: d0 + Lp + Rp - cut_r] += ww
+        last_s = s
+        s = nxt
+
+    covered = wsum > 0.15
+    res = np.where(covered, out / np.maximum(wsum, 1e-6), y)
+    return res.astype(np.float32)
 
 
 def autotune(
@@ -1766,19 +1788,22 @@ def autotune(
     output_format: str = "mp3",
 ) -> bytes:
     """
-    Professional pitch-correction Autotune.
+    Pitch-correction Autotune (Antares / Melodyne style).
 
-    Parameters
-    ----------
-    key : root note name ('C', 'D#', 'Bb', …) or 'auto' to detect from chroma.
-    scale : one of chromatic, major, minor, harmonic_minor, pentatonic_major,
-            pentatonic_minor, blues, dorian, mixolydian.
-    strength : 0–1, how far to pull each note toward the scale (1 = full snap).
-    retune_speed : 0–1, 1 = hard/fast classic Autotune, lower = natural glide.
-    humanize : 0–1, small random variation on target pitches (reduces robotic feel).
+    key          : root note ('C', 'D#', 'Bb', …) or 'auto' (detected from the sung melody).
+    scale        : chromatic, major, minor, harmonic_minor, pentatonic_major,
+                   pentatonic_minor, blues, dorian, mixolydian.
+    strength     : 0–1, how far each note is pulled to the scale (1 = full).
+    retune_speed : 0–1, 1 = instant (hard T-Pain / Cher effect), ~0.7 = modern pop,
+                   0.3 and below = natural, vibrato preserved.
+    humanize     : 0–1, keeps part of the singer's own pitch movement.
+
+    Works best on a dry (a-cappella) vocal. Pitch is tracked, snapped to the scale
+    and re-synthesised with formant-preserving PSOLA at the file's full sample rate.
     """
     import numpy as np
-    import librosa
+    from math import gcd
+    from scipy.signal import resample_poly
 
     check_file_size(file_bytes)
     strength = max(0.0, min(1.0, float(strength)))
@@ -1808,134 +1833,58 @@ def autotune(
 
     if audio.channels > 1:
         audio = audio.set_channels(1)
+    sr = int(audio.frame_rate)
+    if sr > 48000:
+        audio = audio.set_frame_rate(44100)
+        sr = 44100
+    audio = audio.set_sample_width(2)
+    y = np.array(audio.get_array_of_samples(), dtype=np.float64) / 32768.0
 
-    sr_native = int(audio.frame_rate)
-    if sr_native > 24000:
-        audio_an = audio.set_frame_rate(22050)
-        sr = 22050
-    else:
-        audio_an = audio
-        sr = sr_native
-
-    samples = np.array(audio_an.get_array_of_samples(), dtype=np.float32)
-    if audio_an.sample_width == 1:
-        y = (samples - 128.0) / 128.0
-    elif audio_an.sample_width == 2:
-        y = samples / 32768.0
-    else:
-        peak = float(np.max(np.abs(samples))) or 1.0
-        y = samples / peak
-
-    peak_y = float(np.max(np.abs(y))) or 1.0
-    if peak_y < 0.15:
-        y = y * (0.5 / peak_y)
-    elif peak_y > 1.0:
-        y = y / peak_y
+    # --- Pitch tracking (analysis at 16 kHz is plenty and fast) ---
+    g = gcd(16000, sr)
+    y_an = resample_poly(y, 16000 // g, sr // g) if sr != 16000 else y
+    times, f0 = _track_pitch(y_an, 16000)
+    midi, dt, runs_fn = _clean_pitch_track(times, f0)
+    n_voiced = int(np.sum(np.isfinite(midi)))
+    if n_voiced < max(8, int(0.1 / dt)):
+        raise UserInputError(
+            "Couldn't find a clear singing/speaking pitch in this file. "
+            "Autotune needs a clean, dry vocal — remove the music/beat first."
+        )
 
     # --- Key ---
     key_str = (key or "auto").strip().lower()
     if key_str in ("auto", "detect", ""):
-        root_pc, detected_mode = _detect_key_from_chroma(y, sr)
-        if scale_key == "major" and detected_mode == "minor":
-            scale_key = "minor"
-            intervals = _AUTOTUNE_SCALES[scale_key]
-        elif scale_key == "minor" and detected_mode == "major":
-            scale_key = "major"
-            intervals = _AUTOTUNE_SCALES[scale_key]
+        det = _detect_key_from_pitch(midi)
+        if det is None:
+            det = _detect_key_from_chroma(y_an, 16000)
+        root_pc, detected_mode = det
+        minor_like = scale_key in ("minor", "harmonic_minor", "pentatonic_minor", "blues", "dorian")
+        major_like = scale_key in ("major", "pentatonic_major", "mixolydian")
+        # Use the relative root so the chosen scale matches the detected key's notes.
+        if minor_like and detected_mode == "major":
+            root_pc = (root_pc + 9) % 12
+        elif major_like and detected_mode == "minor":
+            root_pc = (root_pc + 3) % 12
     else:
         note = key_str.replace("♯", "#").replace("♭", "b").strip()
         if note not in _NOTE_PC:
-            raise UserInputError(
-                f"Unknown key '{key}'. Use C, C#, Db, D, … B, or Auto."
-            )
+            raise UserInputError(f"Unknown key '{key}'. Use C, C#, Db, D, … B, or Auto.")
         root_pc = _NOTE_PC[note]
+    scale_midis = _build_scale_midi(root_pc, intervals, 24, 108)
 
-    scale_midis = _build_scale_midi(root_pc, intervals)
-
-    # --- Pitch tracking ---
-    hop_length = 512
-    frame_length = 2048
-    f0, voiced_flag, _voiced_probs = librosa.pyin(
-        y,
-        fmin=librosa.note_to_hz("C2"),
-        fmax=librosa.note_to_hz("C7"),
-        sr=sr,
-        frame_length=frame_length,
-        hop_length=hop_length,
-    )
-    f0 = np.asarray(f0, dtype=np.float64)
-    voiced_flag = np.asarray(voiced_flag, dtype=bool)
-    n_voiced = int(np.sum(voiced_flag & np.isfinite(f0) & (f0 > 0)))
-
-    if n_voiced < max(5, len(f0) // 20):
-        f0_yin = librosa.yin(
-            y,
-            fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
-            sr=sr,
-            frame_length=frame_length,
-            hop_length=hop_length,
-        )
-        f0 = np.asarray(f0_yin, dtype=np.float64)
-        rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
-        n = min(len(f0), len(rms))
-        f0 = f0[:n]
-        rms = rms[:n]
-        rms_thresh = float(np.percentile(rms, 25)) * 0.5
-        voiced_flag = (rms > rms_thresh) & np.isfinite(f0) & (f0 > 0)
-
-    hard = retune_speed >= 0.65
-    # Hard lock and high humanize fight each other — cap it
-    if hard and humanize > 0.15:
-        humanize = 0.15
-
-    # Hard path: note-level snaps (audible stair-step, works even on chromatic)
-    if hard and strength >= 0.5:
-        y_out = _apply_hard_lock(
-            y, sr, f0, voiced_flag, scale_midis, strength, humanize, hop_length
-        )
-    else:
-        # Soft path: per-frame curve + overlapping pitch_shift
-        n_frames = len(f0)
-        n_steps = np.zeros(n_frames, dtype=np.float64)
-        rng = np.random.default_rng(42)
-        for i in range(n_frames):
-            f = f0[i]
-            if i >= len(voiced_flag) or not voiced_flag[i] or f is None or f != f or f <= 0:
-                continue
-            midi = _hz_to_midi(float(f))
-            if midi != midi:
-                continue
-            target_midi = _nearest_scale_midi(midi, scale_midis)
-            if humanize > 0:
-                target_midi += rng.uniform(-0.15, 0.15) * humanize
-            n_steps[i] = (target_midi - midi) * strength
-
-        n_steps = _smooth_correction(n_steps, retune_speed)
-        for i in range(n_frames):
-            if i < len(voiced_flag) and not voiced_flag[i]:
-                n_steps[i] *= 0.05
-
-        if float(np.max(np.abs(n_steps))) < 0.02:
-            return _export_bytes(audio, output_format)
-
-        y_out = _tv_pitch_shift_segments(
-            y, sr, n_steps, hop_length=hop_length, hard=False
-        )
+    # --- Correction curve + PSOLA resynthesis ---
+    corr = _build_correction(times, midi, dt, runs_fn, scale_midis,
+                             strength, retune_speed, humanize)
+    if float(np.max(np.abs(corr))) < 0.01:
+        return _export_bytes(audio, output_format)
+    y_out = _psola_retune(y, sr, times, midi, corr)
 
     peak = float(np.max(np.abs(y_out))) or 1.0
-    if peak > 0.98:
-        y_out = y_out * (0.98 / peak)
-
+    if peak > 0.99:
+        y_out = y_out * (0.99 / peak)
     pcm = np.clip(y_out * 32767.0, -32768, 32767).astype(np.int16)
-    out_seg = AudioSegment(
-        pcm.tobytes(),
-        frame_rate=sr,
-        sample_width=2,
-        channels=1,
-    )
-    if sr != sr_native:
-        out_seg = out_seg.set_frame_rate(sr_native)
+    out_seg = AudioSegment(pcm.tobytes(), frame_rate=sr, sample_width=2, channels=1)
     return _export_bytes(out_seg, output_format)
 
 
