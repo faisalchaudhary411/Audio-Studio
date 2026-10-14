@@ -1722,6 +1722,20 @@
     });
     if (duckCb) duckCb.addEventListener('change', sync);
     sync();
+    (function lofiUi() {
+      const sel = document.getElementById('mixer-lofi');
+      const row = document.getElementById('mixer-lofi-row');
+      const amt = document.getElementById('mixer-lofi-amount');
+      const lab = document.getElementById('mixer-lofi-label');
+      if (!sel) return;
+      const upd = () => {
+        if (row) row.style.display = sel.value ? 'block' : 'none';
+        if (lab && amt) lab.textContent = amt.value;
+      };
+      sel.addEventListener('change', upd);
+      if (amt) amt.addEventListener('input', upd);
+      upd();
+    })();
 
     btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
       const vocalInput = document.getElementById('mixer-vocal');
@@ -1744,6 +1758,8 @@
       form.append('music_loop', document.getElementById('mixer-loop') && document.getElementById('mixer-loop').checked ? '1' : '0');
       form.append('duck_music', duckCb && duckCb.checked ? '1' : '0');
       form.append('duck_amount_db', duckAmount ? duckAmount.value : '6');
+      form.append('lofi', (document.getElementById('mixer-lofi') || {}).value || '');
+      form.append('lofi_amount', String((parseFloat((document.getElementById('mixer-lofi-amount') || {}).value) || 70) / 100));
       form.append('output_format', (document.getElementById('mixer-format') || {}).value || 'mp3');
       try {
         const res = await resumableFetch('/api/tools/mixer', { method: 'POST', body: form });
