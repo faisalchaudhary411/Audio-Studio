@@ -1545,6 +1545,11 @@ def _track_pitch(y, sr: int):
         times = np.asarray(pitch.xs(), dtype=np.float64)
         f0 = np.asarray(pitch.selected_array["frequency"], dtype=np.float64)
         f0[f0 <= 0] = np.nan
+        try:
+            conf = np.asarray(pitch.selected_array["strength"], dtype=np.float64)
+            f0[conf < 0.55] = np.nan          # unsure frame → leave it untouched
+        except Exception:
+            pass
         if len(times) > 8 and int(np.sum(np.isfinite(f0))) >= 5:
             return times, f0
     except Exception:
@@ -1619,28 +1624,44 @@ def _build_correction(times, midi, dt, runs_fn, scale_midis, strength, retune_sp
     * `humanize` keeps part of the singer's own pitch movement around the note.
     """
     import numpy as np
-    from scipy.ndimage import uniform_filter1d
+    from scipy.ndimage import uniform_filter1d, median_filter
 
     scale_arr = np.asarray(scale_midis, dtype=np.float64)
     n = len(midi)
     corr = np.zeros(n, dtype=np.float64)
 
-    tau = 0.5 * (1.0 - retune_speed) ** 2          # seconds
-    alpha = 1.0 if tau < 1e-4 else 1.0 - math.exp(-dt / tau)
+    tau = 0.008 + 0.5 * (1.0 - retune_speed) ** 2   # seconds (8 ms floor = hard, but no chirps)
+    alpha = 1.0 - math.exp(-dt / tau)
     slow_w = max(1, int(round(0.30 / dt)))
-    sm_w = max(1, int(round(0.04 / dt)))
+    # Hard lock "holds" each note for a minimum time (the classic stepped Auto-Tune
+    # sound); slower settings follow the voice more closely.
+    hold_sec = 0.0 if retune_speed < 0.8 else 0.14 * min(1.0, (retune_speed - 0.8) / 0.2)
+    hyst = 0.25 + 2.5 * hold_sec
+    sm_w = max(1, int(round(max(0.04, hold_sec) / dt)))
+    min_len = int(round(hold_sec / dt))
 
     for a, b in runs_fn(np.isfinite(midi)):
         m = midi[a:b]
         slow = uniform_filter1d(m, size=min(slow_w, len(m)), mode="nearest")
-        ms = uniform_filter1d(m, size=min(sm_w, len(m)), mode="nearest")
+        ms = (median_filter(m, size=min(sm_w, len(m)) | 1, mode="nearest")
+              if hold_sec > 0 else uniform_filter1d(m, size=min(sm_w, len(m)), mode="nearest"))
         cur = scale_arr[int(np.argmin(np.abs(scale_arr - ms[0])))]
-        desired = np.empty(len(m))
+        notes = np.empty(len(m))
         for i, x in enumerate(ms):
             cand = scale_arr[int(np.argmin(np.abs(scale_arr - x)))]
-            if cand != cur and abs(x - cur) > abs(x - cand) + 0.15:
+            if cand != cur and abs(x - cur) > abs(x - cand) + hyst:
                 cur = cand
-            desired[i] = (cur + humanize * 0.8 * (m[i] - slow[i])) - m[i]
+            notes[i] = cur
+        if min_len > 1:                       # absorb notes shorter than the hold time
+            i = 0
+            while i < len(notes):
+                j = i
+                while j < len(notes) and notes[j] == notes[i]:
+                    j += 1
+                if i > 0 and (j - i) < min_len:
+                    notes[i:j] = notes[i - 1]
+                i = j
+        desired = (notes + humanize * 0.8 * (m - slow)) - m
         desired *= strength
         c = desired[0]
         out = np.empty(len(m))
