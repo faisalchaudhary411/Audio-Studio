@@ -711,7 +711,7 @@ TOOL_PAGES = {
             ("Can I choose any key?", "Yes — C through B including sharps/flats, or Auto to detect from the audio."),
             ("What does Humanize do?", "It adds a small random offset to target pitches so the correction does not sound perfectly quantized."),
         ],
-        "related_tools": ["voice-changer", "remove-background-noise", "normalize-audio-volume", "simple-audio-eq", "change-audio-speed"],
+        "related_tools": ["audio-mixer", "ai-music-generator", "voice-changer", "normalize-audio-volume", "simple-audio-eq"],
         "blog_keywords": ["autotune", "pitch correction", "pitch correct", "tune vocals"],
     },
     "video-audio-redub": {
@@ -755,6 +755,45 @@ TOOL_PAGES = {
         "related_tools": ["transcribe-audio-to-text", "extract-audio-from-video", "convert-audio-format"],
         "blog_keywords": ["redub", "dubbing", "translate video", "video voiceover"],
     },
+
+    "audio-mixer": {
+        "widget": "mixer",
+        "usage_key": "mixer",
+        "title": "Audio Mixer Online Free — Mix Vocals with Music | VoxCraft",
+        "meta_description": "Free online audio mixer. Blend Autotuned vocals with AI music or any beat. Level controls, loop bed, offset, and ducking. No install.",
+        "eyebrow": "Mix & master",
+        "h1": "Audio mixer — vocals over music",
+        "sub": "Combine an Autotuned vocal with a music bed. Balance levels, loop the instrumental, offset timing, and optional ducking so the voice sits on top.",
+        "intro": [
+            "After Autotune and the AI music generator, the last step is a proper mix. Upload your vocal (or any lead) and a music track, set levels, and download a single stereo file ready to share.",
+            "The mixer can loop a short beat to match a longer vocal, delay either side for alignment, and gently duck the music when the voice is loud so lyrics stay clear.",
+        ],
+        "how_it_works": [
+            "Upload Track A (vocals / Autotune output) and Track B (music / beat).",
+            "Set vocal and music levels in dB. Start with music around −6 to −12 dB under the vocal.",
+            "Enable Loop music if the beat is shorter than the vocal.",
+            "Optional: offset (ms) to align downbeats, and duck music under vocals.",
+            "Export MP3 or WAV.",
+        ],
+        "use_cases": [
+            ("Autotune + AI beat", "Tune a vocal, generate a bed in Music Generator, then mix both here."),
+            ("Cover / freestyle", "Drop acapella over an instrumental download."),
+            ("Podcast bed", "Keep voice high, music low, with ducking so speech stays clear."),
+        ],
+        "tips": [
+            "Normalize or Autotune the vocal first so levels are consistent.",
+            "If the mix clips, lower music gain before boosting the vocal.",
+            "For trap/pop, try music at −8 dB and ducking on.",
+        ],
+        "faq": [
+            ("Does this replace a DAW?", "No — it is a quick two-track mix for vocals over a bed. For multi-track projects use a full DAW."),
+            ("Can I mix more than two files?", "This tool is two tracks. Use Merge to concatenate, or mix in pairs."),
+            ("Will it Autotune for me?", "No. Run <a href=\"/tools/autotune-audio\" style=\"color:var(--brass-hi)\">Autotune</a> first, then mix the result with music."),
+        ],
+        "related_tools": ["autotune-audio", "ai-music-generator", "normalize-audio-volume", "adjust-audio-volume", "merge-audio-files"],
+        "blog_keywords": ["mixer", "mix vocals", "mix music", "vocal instrumental mix"],
+    },
+
 }
 
 TOOL_ORDER = [
@@ -762,7 +801,7 @@ TOOL_ORDER = [
     "merge-audio-files", "trim-cut-audio",
     "remove-background-noise", "normalize-audio-volume", "adjust-audio-volume", "change-audio-speed",
     "fade-audio", "split-audio-by-silence", "reverse-audio", "stereo-to-mono", "loop-audio",
-    "simple-audio-eq", "autotune-audio", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
+    "simple-audio-eq", "autotune-audio", "audio-mixer", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
 ]
 
 

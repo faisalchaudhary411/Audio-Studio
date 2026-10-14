@@ -1301,6 +1301,7 @@ def usage_summary() -> dict:
         "loop": {"used": usage_tracking.get_daily_counter(request, "usage_loop"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "eq": {"used": usage_tracking.get_daily_counter(request, "usage_eq"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "autotune": {"used": usage_tracking.get_daily_counter(request, "usage_autotune"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "mixer": {"used": usage_tracking.get_daily_counter(request, "usage_mixer"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
@@ -1974,6 +1975,10 @@ BLOG_TOOL_LINKS = {
     "auto-tune": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
     "pitch correction": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
     "pitch correct": ("tool_page", {"slug": "autotune-audio"}, "Open Autotune"),
+    "mixer": ("tool_page", {"slug": "audio-mixer"}, "Open Audio Mixer"),
+    "mix audio": ("tool_page", {"slug": "audio-mixer"}, "Open Audio Mixer"),
+    "mix vocals": ("tool_page", {"slug": "audio-mixer"}, "Open Audio Mixer"),
+    "mix music": ("tool_page", {"slug": "audio-mixer"}, "Open Audio Mixer"),
     "video to audio": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
     "video extract": ("tool_page", {"slug": "extract-audio-from-video"}, "Open Video-to-Audio"),
     "music": ("tool_page", {"slug": "ai-music-generator"}, "Open Music Generator"),
@@ -4967,6 +4972,59 @@ def api_autotune():
         })
     except Exception as e:
         return api_error(e, "autotune this file")
+
+
+@app.route("/api/tools/mixer", methods=["POST"])
+def api_mixer():
+    """Mix vocals (e.g. Autotuned) with music / instrumental bed."""
+    lim = get_limits()
+    if not _under_limit("usage_mixer", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    vocal = request.files.get("vocal") or request.files.get("file_a") or request.files.get("file")
+    music = request.files.get("music") or request.files.get("file_b")
+    if not vocal or not music:
+        return jsonify({"error": "Upload both a vocal track and a music track."}), 400
+    try:
+        vocal_gain_db = float(request.form.get("vocal_gain_db", 0))
+    except (TypeError, ValueError):
+        vocal_gain_db = 0.0
+    try:
+        music_gain_db = float(request.form.get("music_gain_db", -6))
+    except (TypeError, ValueError):
+        music_gain_db = -6.0
+    try:
+        offset_ms = int(float(request.form.get("offset_ms", 0)))
+    except (TypeError, ValueError):
+        offset_ms = 0
+    music_loop = str(request.form.get("music_loop", "1")).lower() in ("1", "true", "yes", "on")
+    duck_music = str(request.form.get("duck_music", "0")).lower() in ("1", "true", "yes", "on")
+    try:
+        duck_amount_db = float(request.form.get("duck_amount_db", 6))
+    except (TypeError, ValueError):
+        duck_amount_db = 6.0
+    output_format = request.form.get("output_format", "mp3")
+    try:
+        out_bytes = audio_tools.mix_tracks(
+            vocal.read(), vocal.filename or "vocal.wav",
+            music.read(), music.filename or "music.wav",
+            vocal_gain_db=vocal_gain_db,
+            music_gain_db=music_gain_db,
+            music_loop=music_loop,
+            offset_ms=offset_ms,
+            duck_music=duck_music,
+            duck_amount_db=duck_amount_db,
+            output_format=output_format,
+        )
+        _bump_counter("usage_mixer")
+        return jsonify({
+            "audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+            "filename": f"VoxCraft-Mix-{int(time.time())}.{output_format}",
+            "format": output_format,
+            "size_kb": round(len(out_bytes) / 1024, 1),
+        })
+    except Exception as e:
+        return api_error(e, "mix these tracks")
+
 
 
 @app.route("/api/tools/redub", methods=["POST"])

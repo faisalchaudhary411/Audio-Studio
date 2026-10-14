@@ -1236,6 +1236,150 @@ def voice_change(file_bytes: bytes, filename: str, effect: str,
 
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Audio Mixer — blend vocals (e.g. Autotune) with music / beat
+# ---------------------------------------------------------------------------
+def mix_tracks(
+    vocal_bytes: bytes,
+    vocal_name: str,
+    music_bytes: bytes,
+    music_name: str,
+    vocal_gain_db: float = 0.0,
+    music_gain_db: float = -6.0,
+    music_loop: bool = True,
+    offset_ms: int = 0,
+    duck_music: bool = False,
+    duck_amount_db: float = 6.0,
+    output_format: str = "mp3",
+) -> bytes:
+    """
+    Mix a vocal/lead track over a music/bed track.
+
+    vocal_gain_db / music_gain_db: level trims in dB (typical music bed -6 to -12).
+    music_loop: if music is shorter than vocals, loop it to cover the full vocal length.
+    offset_ms: delay music start (positive) or vocals (negative) in milliseconds.
+    duck_music: lower music level wherever vocals are loud (simple envelope ducking).
+    """
+    import numpy as np
+
+    check_file_size(vocal_bytes)
+    check_file_size(music_bytes)
+
+    vocal = _load_segment(vocal_bytes, vocal_name)
+    music = _load_segment(music_bytes, music_name)
+
+    # Match sample rate / channels (pydub overlay handles some of this, but normalize)
+    target_sr = max(vocal.frame_rate, music.frame_rate)
+    if vocal.frame_rate != target_sr:
+        vocal = vocal.set_frame_rate(target_sr)
+    if music.frame_rate != target_sr:
+        music = music.set_frame_rate(target_sr)
+    # Stereo mix bus
+    if vocal.channels == 1:
+        vocal = vocal.set_channels(2)
+    if music.channels == 1:
+        music = music.set_channels(2)
+
+    vocal_gain_db = max(-24.0, min(24.0, float(vocal_gain_db)))
+    music_gain_db = max(-24.0, min(12.0, float(music_gain_db)))
+    if abs(vocal_gain_db) >= 0.05:
+        vocal = vocal.apply_gain(vocal_gain_db)
+    if abs(music_gain_db) >= 0.05:
+        music = music.apply_gain(music_gain_db)
+
+    offset_ms = int(offset_ms or 0)
+    # Build timeline: vocal is the reference length unless music is longer and we don't loop
+    v_len = len(vocal)
+    m_len = len(music)
+
+    if music_loop and m_len > 0 and m_len < v_len:
+        loops = int(np.ceil(v_len / m_len))
+        music = music * loops
+        music = music[:v_len]
+    elif len(music) > v_len and not music_loop:
+        # keep full music, pad vocal with silence
+        pass
+
+    # Optional ducking: reduce music where vocal RMS is high
+    if duck_music and len(music) > 0 and len(vocal) > 0:
+        try:
+            duck_amount_db = max(0.0, min(18.0, float(duck_amount_db)))
+            # Work in mono RMS envelopes, 50ms windows
+            hop = max(1, int(target_sr * 0.05))
+            v_samples = np.array(vocal.get_array_of_samples(), dtype=np.float64)
+            if vocal.channels == 2:
+                v_samples = v_samples.reshape(-1, 2).mean(axis=1)
+            # Normalize
+            peak = np.max(np.abs(v_samples)) or 1.0
+            v_samples = v_samples / peak
+            n = len(v_samples)
+            env = np.zeros(n)
+            for i in range(0, n, hop):
+                chunk = v_samples[i : i + hop]
+                rms = float(np.sqrt(np.mean(chunk ** 2))) if len(chunk) else 0.0
+                env[i : i + hop] = rms
+            # Smooth
+            win = max(3, hop)
+            kernel = np.ones(win) / win
+            env = np.convolve(env, kernel, mode="same")
+            thresh = float(np.percentile(env, 60)) + 1e-6
+            # Gain reduction 0..1 when above thresh
+            gr = np.clip((env - thresh) / (1.0 - thresh + 1e-9), 0.0, 1.0)
+            # Convert to per-hop gain on music
+            m_samples = np.array(music.get_array_of_samples(), dtype=np.float64)
+            ch = music.channels
+            if ch == 2:
+                m_stereo = m_samples.reshape(-1, 2)
+            else:
+                m_stereo = m_samples.reshape(-1, 1)
+            m_n = len(m_stereo)
+            # Map env length to music length
+            for i in range(0, min(n, m_n), hop):
+                g = 1.0 - gr[i] * (1.0 - 10 ** (-duck_amount_db / 20.0))
+                end = min(i + hop, m_n)
+                m_stereo[i:end] *= g
+            # Rebuild music segment
+            flat = m_stereo.flatten()
+            sw = music.sample_width
+            if sw == 2:
+                flat = np.clip(flat, -32768, 32767).astype(np.int16)
+            else:
+                peak_m = np.max(np.abs(flat)) or 1.0
+                flat = (flat / peak_m * (2 ** (8 * sw - 1) - 1)).astype(np.int16)
+                sw = 2
+            music = AudioSegment(
+                flat.tobytes(),
+                frame_rate=target_sr,
+                sample_width=sw,
+                channels=ch,
+            )
+        except Exception:
+            pass  # ducking is best-effort; mix without it on failure
+
+    # Overlay with offset
+    # pydub: overlay(seg, position=ms)
+    if offset_ms >= 0:
+        # music starts later
+        base = vocal
+        if len(music) + offset_ms > len(base):
+            base = base + AudioSegment.silent(duration=len(music) + offset_ms - len(base))
+        mixed = base.overlay(music, position=offset_ms)
+    else:
+        # vocals start later (music lead-in)
+        lead = abs(offset_ms)
+        base = music
+        if len(vocal) + lead > len(base):
+            base = base + AudioSegment.silent(duration=len(vocal) + lead - len(base))
+        mixed = base.overlay(vocal, position=lead)
+
+    # Peak safety
+    if mixed.max_dBFS > -0.5:
+        mixed = mixed.apply_gain(-0.5 - mixed.max_dBFS)
+
+    return _export_bytes(mixed, output_format)
+
+
 # Professional Autotune — pitch correction to a musical scale
 # ---------------------------------------------------------------------------
 # Detects f0 with librosa.pyin, snaps voiced frames to the chosen scale,
