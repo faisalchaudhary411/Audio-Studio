@@ -35,6 +35,20 @@
       <input type="range" class="studio-range" id="mixer-duck-amount" min="2" max="12" step="1" value="6" style="width:100%;">
     </div>
 
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Lo-fi style</label>
+    <select id="mixer-lofi" class="studio-select" style="width:100%;max-width:100%;margin-bottom:10px;">
+      <option value="" selected>Off (clean mix)</option>
+      <option value="chill">Lo-fi Chill</option>
+      <option value="tape">Cassette Tape</option>
+      <option value="vinyl">Dusty Vinyl</option>
+      <option value="slowed">Slowed + Reverb</option>
+      <option value="radio">Old Radio</option>
+    </select>
+    <div id="mixer-lofi-row" style="display:none;margin-bottom:12px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Lo-fi amount: <span id="mixer-lofi-label">70</span>%</label>
+      <input type="range" class="studio-range" id="mixer-lofi-amount" min="10" max="100" step="5" value="70" style="width:100%;">
+    </div>
+
     <select id="mixer-format" class="studio-select" style="width:100%;max-width:100%;margin-bottom:12px;">
       <option value="mp3">MP3</option>
       <option value="wav">WAV</option>
