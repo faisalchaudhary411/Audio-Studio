@@ -1,0 +1,48 @@
+  <div class="panel">
+    <span class="panel__label">Audio mixer</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
+      Mix <strong>vocals</strong> (e.g. Autotune output) over <strong>music</strong> (AI beat or instrumental).
+      Loop the bed, balance levels, optional ducking. <strong>{{ upload_limit_mb }}MB</strong> per file{% if not is_pro_ctx %} (Pro: {{ upload_pro_mb }}MB){% endif %}.
+    </p>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Track A — Vocals / lead</label>
+    <input type="file" class="file-input" id="mixer-vocal" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,audio/wav,audio/mpeg,audio/ogg,audio/mp4" style="margin-bottom:12px;">
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Track B — Music / beat</label>
+    <input type="file" class="file-input" id="mixer-music" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,audio/wav,audio/mpeg,audio/ogg,audio/mp4" style="margin-bottom:14px;">
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Vocal level: <span id="mixer-vocal-gain-label">0</span> dB</label>
+    <input type="range" class="studio-range" id="mixer-vocal-gain" min="-12" max="12" step="1" value="0" style="width:100%;margin-bottom:10px;">
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Music level: <span id="mixer-music-gain-label">-6</span> dB</label>
+    <input type="range" class="studio-range" id="mixer-music-gain" min="-18" max="6" step="1" value="-6" style="width:100%;margin-bottom:10px;">
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Music offset: <span id="mixer-offset-label">0</span> ms</label>
+    <input type="range" class="studio-range" id="mixer-offset" min="-2000" max="2000" step="50" value="0" style="width:100%;margin-bottom:4px;">
+    <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 12px;">Positive = music starts later. Negative = music lead-in.</p>
+
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="mixer-loop" checked> Loop music to match vocal length
+      </label>
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" id="mixer-duck"> Duck music under vocals
+      </label>
+    </div>
+
+    <div id="mixer-duck-row" style="display:none;margin-bottom:12px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Duck amount: <span id="mixer-duck-label">6</span> dB</label>
+      <input type="range" class="studio-range" id="mixer-duck-amount" min="2" max="12" step="1" value="6" style="width:100%;">
+    </div>
+
+    <select id="mixer-format" class="studio-select" style="width:100%;max-width:100%;margin-bottom:12px;">
+      <option value="mp3">MP3</option>
+      <option value="wav">WAV</option>
+    </select>
+
+    <div class="render-bar">
+      <button class="btn btn--brass" id="mixer-btn">Mix tracks</button>
+      <span class="render-status" data-mixer-status></span>
+    </div>
+    <div id="mixer-result" style="margin-top:14px;"></div>
+  </div>
