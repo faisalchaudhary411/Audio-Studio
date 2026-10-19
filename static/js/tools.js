@@ -1581,6 +1581,55 @@
     },
   });
 
+  // ---- BPM & key finder (returns numbers, not audio) ----
+  (function () {
+    const btn = document.getElementById('bpm-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-bpm-status]');
+    const result = document.getElementById('bpm-result');
+    const progress = ensureProgress(result);
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const fileEl = document.getElementById('bpm-file');
+      const file = fileEl && fileEl.files[0];
+      if (!file) { if (status) status.textContent = 'Choose a file first.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Analysing…';
+      if (result) result.textContent = '';
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        const res = await resumableFetch('/api/tools/bpm', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Analysis failed.'); return; }
+        if (status) status.textContent = 'Done';
+        if (result) {
+          result.textContent = '';
+          const box = document.createElement('div');
+          box.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
+          [['Tempo', data.bpm + ' BPM'], ['Key', data.key]].forEach(([label, value]) => {
+            const cell = document.createElement('div');
+            cell.className = 'panel';
+            const l = document.createElement('div');
+            l.style.cssText = 'font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);';
+            l.textContent = label;
+            const v = document.createElement('div');
+            v.style.cssText = 'font-family:var(--display);font-size:1.6rem;color:var(--text-hi);';
+            v.textContent = value;
+            cell.appendChild(l); cell.appendChild(v); box.appendChild(cell);
+          });
+          result.appendChild(box);
+          const note = document.createElement('p');
+          note.style.cssText = 'color:var(--text-dim);font-size:0.85rem;line-height:1.6;margin-top:10px;';
+          note.textContent = 'Beat detectors sometimes lock onto half or double the tempo you feel. If it sounds off, try ' +
+            data.bpm_half + ' or ' + data.bpm_double + ' BPM.';
+          result.appendChild(note);
+        }
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
+
   // ---- Autotune (professional pitch correction) ----
   (function () {
     const btn = document.getElementById('autotune-btn');
