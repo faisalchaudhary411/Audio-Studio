@@ -1302,6 +1302,7 @@ def usage_summary() -> dict:
         "eq": {"used": usage_tracking.get_daily_counter(request, "usage_eq"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "autotune": {"used": usage_tracking.get_daily_counter(request, "usage_autotune"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "mixer": {"used": usage_tracking.get_daily_counter(request, "usage_mixer"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "bpm": {"used": usage_tracking.get_daily_counter(request, "usage_bpm"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
 
@@ -2866,7 +2867,7 @@ def admin_seo():
     import json as _json
 
     pages = []
-    for slug in tool_pages.TOOL_ORDER:
+    for slug in tool_pages.TOOL_ORDER + tool_pages.FORMAT_PAGE_ORDER:
         pages.append({
             "id": f"tool:{slug}",
             "kind": "tool",
@@ -4214,7 +4215,8 @@ def tools_hub():
     exactly one place (the tool_widgets partials, unchanged) while giving
     search traffic a real reason to land on, and stay on, the specific
     page that matches their query."""
-    ordered_tools = [dict(slug=s, **(tool_pages.get_tool_page(s) or tool_pages.TOOL_PAGES[s])) for s in tool_pages.TOOL_ORDER]
+    ordered_tools = [dict(slug=s, **(tool_pages.get_tool_page(s) or tool_pages.TOOL_PAGES[s]))
+                     for s in tool_pages.TOOL_ORDER + tool_pages.FORMAT_PAGE_ORDER]
     # The WebSite's SearchAction schema (base.html) advertises
     # https://voxcraft.site/tools?q={search_term_string} as a working search
     # endpoint. Previously `q` was never read at all — the query string was
@@ -4227,6 +4229,7 @@ def tools_hub():
     # the exact same filter it already runs on every keystroke.
     q = (request.args.get("q") or "").strip()
     return render_template("tools.html", ordered_tools=ordered_tools, search_query=q,
+                            format_slugs=list(tool_pages.FORMAT_PAGE_ORDER),
                             filedesk_url=(os.environ.get("FILEDESK_URL") or "https://filedesk.site.je/").strip())
 
 
@@ -4892,6 +4895,22 @@ def api_loop():
                         "format": output_format, "size_kb": round(len(out_bytes)/1024, 1)})
     except Exception as e:
         return api_error(e, "loop this file")
+
+
+@app.route("/api/tools/bpm", methods=["POST"])
+def api_bpm():
+    lim = get_limits()
+    if not _under_limit("usage_bpm", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file uploaded."}), 400
+    try:
+        result = audio_tools.analyze_bpm_key(file.read(), file.filename)
+        _bump_counter("usage_bpm")
+        return jsonify(result)
+    except Exception as e:
+        return api_error(e, "analyse this file")
 
 
 @app.route("/api/tools/eq", methods=["POST"])

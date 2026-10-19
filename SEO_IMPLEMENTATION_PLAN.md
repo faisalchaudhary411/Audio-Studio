@@ -5,6 +5,8 @@
 
 ---
 
+> **Update (Oct 2026):** the audio-tools-first, low-competition keyword plan and the 12 new pages are documented in `KEYWORD_RESEARCH_2026-10.md`.
+
 ## 1. What Was Already Strong (No major rebuild needed)
 
 - Unique titles + meta descriptions on every tool & SEO landing page

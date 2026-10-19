@@ -2064,7 +2064,7 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
     try:
         raw_ext = (filename or "video.mp4").rsplit(".", 1)
         suffix = ("." + raw_ext[-1].lower()) if len(raw_ext) == 2 and raw_ext[-1] else ".mp4"
-        if suffix not in (".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg"):
+        if suffix not in (".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp", ".flv", ".wmv", ".ts"):
             suffix = ".mp4"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -2118,3 +2118,59 @@ def video_to_audio(file_bytes: bytes, filename: str, output_format: str = "mp3",
                     os.unlink(p)
                 except Exception:
                     pass
+
+
+# ---------------------------------------------------------------------------
+# BPM + musical key finder
+# ---------------------------------------------------------------------------
+MAX_BPM_DURATION_SEC = 10 * 60          # analysis cost grows with length; keep it bounded
+_NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def analyze_bpm_key(file_bytes: bytes, filename: str) -> dict:
+    """Estimate tempo (BPM) and musical key of an audio file.
+
+    Tempo comes from librosa's beat tracker; key from the same chroma x
+    Krumhansl-Schmuckler profile matching that Autotune uses. Both are
+    estimates: beat trackers commonly land on half or double the felt tempo,
+    so the half/double alternatives are returned too, and key detection is
+    least reliable on speech, percussion-only or heavily modulating audio.
+    """
+    check_file_size(file_bytes)
+    import numpy as np
+    import librosa
+
+    audio = _load_segment(file_bytes, filename)
+    duration_sec = len(audio) / 1000.0
+    if duration_sec < 5:
+        raise UserInputError("The clip is too short to analyse — use at least 5 seconds of music.")
+    if duration_sec > MAX_BPM_DURATION_SEC:
+        raise UserInputError(
+            f"Audio is {duration_sec / 60:.1f} minutes — max allowed for BPM analysis is "
+            f"{MAX_BPM_DURATION_SEC // 60} minutes. Trim the clip first."
+        )
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    audio = audio.set_sample_width(2)
+    y = np.array(audio.get_array_of_samples()).astype(np.float32) / 32768.0
+    sr = audio.frame_rate
+    if sr != 22050:
+        y = librosa.resample(y, orig_sr=sr, target_sr=22050)
+        sr = 22050
+    if float(np.max(np.abs(y))) < 1e-4:
+        raise UserInputError("This file is silent, so there is nothing to analyse.")
+
+    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+    bpm = float(np.atleast_1d(tempo)[0])
+    if not (bpm > 0):
+        raise UserFacingError("Could not detect a steady beat in this audio.")
+    root_pc, mode = _detect_key_from_chroma(y, sr)
+    key = f"{_NOTE_NAMES[root_pc]} {mode}"
+    return {
+        "bpm": round(bpm, 1),
+        "bpm_half": round(bpm / 2, 1),
+        "bpm_double": round(bpm * 2, 1),
+        "key": key,
+        "beats_detected": int(len(beats)),
+        "duration_sec": round(duration_sec, 1),
+    }
