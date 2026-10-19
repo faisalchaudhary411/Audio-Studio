@@ -1,0 +1,10 @@
+  <div class="panel">
+    <span class="panel__label">BPM &amp; key finder</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Estimate the tempo (BPM) and musical key of a song or loop. Works best on music with a steady beat; 5 seconds to 10 minutes. <strong>{{ upload_limit_mb }}MB max</strong>{% if not is_pro_ctx %} (Pro: {{ upload_pro_mb }}MB){% endif %}.</p>
+    <input type="file" class="file-input" id="bpm-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.opus,.aac" style="margin-bottom:12px;">
+    <div class="render-bar">
+      <button class="btn btn--brass" id="bpm-btn">Find BPM &amp; key</button>
+      <span class="render-status" data-bpm-status></span>
+    </div>
+    <div id="bpm-result" style="margin-top:14px;"></div>
+  </div>
