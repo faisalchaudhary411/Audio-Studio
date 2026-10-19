@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Free Online Audio Tools — Transcribe, Convert, Merge & More{% endblock %}
 {% block meta_description %}Free online audio tools: transcribe, convert, merge, trim, denoise, normalize, speed, fade, split, and more. Simple browser tools for creators.{% endblock %}
+{% block og_title %}Free Online Audio Tools — Transcribe, Convert, Merge & More{% endblock %}
+{% block og_description %}Free online audio tools: transcribe, convert, merge, trim, denoise, normalize, speed, fade, split, and more. No signup to start.{% endblock %}
 
 {% macro tool_icon(cat) %}
 {%- if cat == "Speech & text" -%}
@@ -9,7 +11,7 @@
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M8.6 7.4 19 18M19 6 8.6 16.6"/></svg>
 {%- elif cat == "Volume & tone" -%}
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8v8M10 5v14M15 9v6M20 6v12"/></svg>
-{%- elif cat == "Format & channels" -%}
+{%- elif cat == "Format & channels" or cat == "Convert by format" -%}
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13M17 8l-3-3M17 8l-3 3"/><path d="M20 16H7M7 16l3-3M7 16l3 3"/></svg>
 {%- elif cat == "Time & effects" -%}
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
@@ -33,7 +35,7 @@
   <div class="section__head">
     <span class="section__eyebrow">Toolkit</span>
     <h1 class="section__title">Audio tools</h1>
-    <p class="section__sub">Eighteen free, single-purpose tools. Search by name, or filter by what you're trying to do.</p>
+    <p class="section__sub">Free, single-purpose audio tools. Search by name, or filter by what you're trying to do.</p>
   </div>
 </div>
 
@@ -54,13 +56,15 @@
   </a>
 
   {# Group tools into simple categories for a cleaner library #}
+  {% set format_slugs = format_slugs|default([]) %}
   {% set groups = [
     ("Speech & text", ["transcribe-audio-to-text", "voice-changer", "autotune-audio", "video-audio-redub"]),
     ("Edit & clean", ["trim-cut-audio", "merge-audio-files", "remove-background-noise", "split-audio-by-silence", "fade-audio"]),
     ("Volume & tone", ["normalize-audio-volume", "adjust-audio-volume", "simple-audio-eq"]),
     ("Format & channels", ["convert-audio-format", "compress-audio", "decompress-audio", "stereo-to-mono", "extract-audio-from-video"]),
-    ("Time & effects", ["change-audio-speed", "loop-audio", "reverse-audio"]),
+    ("Time & effects", ["change-audio-speed", "loop-audio", "reverse-audio", "bpm-key-finder"]),
     ("Create", ["ai-music-generator"]),
+    ("Convert by format", format_slugs),
   ] %}
   {% set by_slug = {} %}
   {% for t in ordered_tools %}
