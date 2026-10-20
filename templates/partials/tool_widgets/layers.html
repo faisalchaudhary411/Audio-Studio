@@ -1,0 +1,61 @@
+  <div class="panel">
+    <span class="panel__label">Vocal layers</span>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">
+      Add 2&ndash;4 takes of the <strong>same line</strong>. They are tuned to one key, lined up with the first take and mixed into a wide stack.
+      Max 90 seconds per take. <strong>{{ upload_limit_mb }}MB</strong> per file{% if not is_pro_ctx %} (Pro: {{ upload_pro_mb }}MB){% endif %}.
+    </p>
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Take 1 (timing reference)</label>
+    <input type="file" class="file-input layers-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.opus,.aac" style="margin-bottom:8px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Take 2</label>
+    <input type="file" class="file-input layers-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.opus,.aac" style="margin-bottom:8px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Take 3 (optional)</label>
+    <input type="file" class="file-input layers-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.opus,.aac" style="margin-bottom:8px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Take 4 (optional)</label>
+    <input type="file" class="file-input layers-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.opus,.aac" style="margin-bottom:12px;">
+
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+      <div style="flex:1 1 140px;min-width:0;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Key</label>
+        <select id="layers-key" class="studio-select" style="width:100%;max-width:100%;">
+          <option value="auto" selected>Auto (from take 1)</option>
+          {% for k in ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"] %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+        </select>
+      </div>
+      <div style="flex:1 1 140px;min-width:0;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Scale</label>
+        <select id="layers-scale" class="studio-select" style="width:100%;max-width:100%;">
+          <option value="major" selected>Major</option>
+          <option value="minor">Minor</option>
+          <option value="harmonic_minor">Harmonic minor</option>
+          <option value="pentatonic_major">Pentatonic maj</option>
+          <option value="pentatonic_minor">Pentatonic min</option>
+          <option value="blues">Blues</option>
+          <option value="chromatic">Chromatic</option>
+        </select>
+      </div>
+      <div style="flex:1 1 140px;min-width:0;">
+        <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Tuning feel</label>
+        <select id="layers-speed" class="studio-select" style="width:100%;max-width:100%;">
+          <option value="natural" selected>Natural</option>
+          <option value="hard">Hard lock</option>
+        </select>
+      </div>
+    </div>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Tuning strength: <span id="layers-strength-label">100</span>%</label>
+    <input type="range" class="studio-range" id="layers-strength" min="0" max="100" step="5" value="100" style="width:100%;margin-bottom:10px;">
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Stereo spread: <span id="layers-spread-label">60</span>%</label>
+    <input type="range" class="studio-range" id="layers-spread" min="0" max="100" step="5" value="60" style="width:100%;margin-bottom:10px;">
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-mid);margin-bottom:12px;">
+      <input type="checkbox" id="layers-align" checked> Line up takes with take 1 (up to 1 s shift)
+    </label>
+    <select id="layers-format" class="studio-select" style="width:100%;max-width:100%;margin-bottom:12px;">
+      <option value="mp3">MP3</option>
+      <option value="wav">WAV</option>
+    </select>
+    <div class="render-bar">
+      <button class="btn btn--brass" id="layers-btn">Tighten layers</button>
+      <span class="render-status" data-layers-status></span>
+    </div>
+    <div id="layers-result" style="margin-top:14px;"></div>
+  </div>

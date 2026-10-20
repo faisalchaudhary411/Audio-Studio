@@ -57,6 +57,25 @@
     <input type="range" class="studio-range" id="autotune-humanize" min="0" max="100" step="5" value="0" style="width:100%;margin-bottom:4px;">
     <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 12px;">Keep at 0% for hard lock. Raise only if it sounds too robotic.</p>
 
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Match a reference song <span style="color:var(--text-dim);">(optional)</span></label>
+    <input type="file" class="file-input" id="autotune-ref" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac,.opus,.aac" style="margin-bottom:4px;">
+    <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 12px;">Its key and major/minor mood replace the Key and Scale above, so your vocal is tuned to that song.</p>
+
+    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);display:block;margin-bottom:4px;">Add harmony</label>
+    <select id="autotune-harmony" class="studio-select" style="width:100%;max-width:100%;margin-bottom:4px;">
+      <option value="none" selected>None</option>
+      <option value="third_above">3rd above</option>
+      <option value="third_below">3rd below</option>
+      <option value="fifth_above">5th above</option>
+      <option value="octave_below">Octave below</option>
+      <option value="third_fifth">3rd + 5th above (two voices)</option>
+    </select>
+    <div id="autotune-harmony-wrap" style="display:none;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Harmony level: <span id="autotune-harmony-label">-6</span> dB</label>
+      <input type="range" class="studio-range" id="autotune-harmony-level" min="-14" max="-2" step="1" value="-6" style="width:100%;margin-bottom:4px;">
+    </div>
+    <p style="font-size:0.72rem;color:var(--text-dim);margin:0 0 12px;">Harmony needs a Major, Minor, Harmonic minor, Dorian or Mixolydian scale (max 3 min) and gives a stereo file.</p>
+
     <select id="autotune-format" class="studio-select" style="width:100%;max-width:100%;margin-bottom:12px;">
       <option value="mp3">MP3</option>
       <option value="wav">WAV</option>
