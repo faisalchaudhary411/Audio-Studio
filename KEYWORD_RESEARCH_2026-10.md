@@ -44,8 +44,11 @@ return to TTS once the domain has some authority.
   file that would have to travel as base64 JSON like the audio tools do; needs a download-token
   flow (like redub) first.
 - **Vocal remover / karaoke maker** — needs a real separation model; a cheap phase trick sounds poor.
-- **Loop "to target duration"** (e.g. 10 hours) — current loop tool caps at 10 repeats.
-- iPhone **M4R** ringtone output — ringtone page honestly says output is MP3.
+- **Loop for hours** — target-length looping is built but capped at 20 min (MP3) / 5 min (WAV) because results are built in RAM and returned base64 in the response.
+
+## Added later
+- Loop tool: "repeat until target length" mode (`target_sec` on `/api/tools/loop`).
+- Trim/cutter: optional M4R output (`output_format=m4r` on `/api/tools/cutter/trim`) for iPhone ringtones.
 
 ## Also fixed
 - Every tool page `<title>` was rendered as "… | VoxCraft — VoxCraft"; now brand appears once.

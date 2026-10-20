@@ -515,6 +515,10 @@ def get_duration_sec(file_bytes: bytes, filename: str) -> float:
 
 def trim(file_bytes: bytes, filename: str, start_sec: float, end_sec: float,
          output_format: str = "mp3") -> bytes:
+    # "m4r" (iPhone ringtone) is AAC in an MP4 container with a different
+    # extension, so it is encoded as m4a here; the route names the file .m4r.
+    if (output_format or "").lower() == "m4r":
+        output_format = "m4a"
     check_file_size(file_bytes)
     audio = _load_segment(file_bytes, filename)
     start_ms = max(0, int(float(start_sec) * 1000))
@@ -959,12 +963,45 @@ def to_mono(file_bytes: bytes, filename: str, output_format: str = "mp3") -> byt
     return _export_bytes(audio, output_format)
 
 
+# Target-length looping builds the whole result in RAM and returns it base64'd
+# in the HTTP response, so it is capped well below "loop for an hour".
+MAX_LOOP_TARGET_SEC = 20 * 60          # MP3 output
+MAX_LOOP_TARGET_SEC_WAV = 5 * 60       # WAV is ~10x larger per second
+
+
 def loop_audio(file_bytes: bytes, filename: str, loops: int = 2,
-               output_format: str = "mp3") -> bytes:
-    """Repeat the clip N times (2–10). Uses pydub multiply to avoid O(n) copies."""
+               output_format: str = "mp3", target_sec: float = None) -> bytes:
+    """Repeat the clip.
+
+    Default: N repeats (2–10). Uses pydub multiply to avoid O(n) copies.
+    target_sec: instead repeat the clip until the result is that long, then cut
+    the final repeat exactly at the target (max MAX_LOOP_TARGET_SEC for MP3,
+    MAX_LOOP_TARGET_SEC_WAV for WAV).
+    """
     check_file_size(file_bytes)
-    loops = max(2, min(10, int(loops or 2)))
     audio = _load_segment(file_bytes, filename)
+    if target_sec not in (None, ""):
+        try:
+            target_sec = float(target_sec)
+        except (TypeError, ValueError):
+            raise UserInputError("Target length must be a number of seconds.")
+        fmt = (output_format or "mp3").lower()
+        cap = MAX_LOOP_TARGET_SEC_WAV if fmt == "wav" else MAX_LOOP_TARGET_SEC
+        if target_sec < 1:
+            raise UserInputError("Target length must be at least 1 second.")
+        if target_sec > cap:
+            raise UserInputError(
+                f"Target length is limited to {cap // 60} minutes for {fmt.upper()} output."
+            )
+        if len(audio) < 100:
+            raise UserInputError("The clip is too short to loop.")
+        target_ms = int(target_sec * 1000)
+        full, rest = divmod(target_ms, len(audio))
+        out = audio * full if full else audio[:0]
+        if rest:
+            out = out + audio[:rest]
+        return _export_bytes(out, output_format)
+    loops = max(2, min(10, int(loops or 2)))
     return _export_bytes(audio * loops, output_format)
 
 

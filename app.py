@@ -4540,13 +4540,17 @@ def api_cutter_trim():
     file = request.files.get("file")
     start_sec = float(request.form.get("start_sec", 0))
     end_sec = float(request.form.get("end_sec", 0))
+    out_fmt = (request.form.get("output_format") or "mp3").lower()
+    if out_fmt not in ("mp3", "m4r"):
+        out_fmt = "mp3"
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.trim(file.read(), file.filename, start_sec, end_sec)
+        out_bytes = audio_tools.trim(file.read(), file.filename, start_sec, end_sec, output_format=out_fmt)
         _bump_counter("usage_cutter")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
-                         "filename": f"VoxCraft-Trimmed-{int(time.time())}.mp3"})
+                         "filename": f"VoxCraft-Trimmed-{int(time.time())}.{out_fmt}",
+                         "format": out_fmt})
     except Exception as e:
         return api_error(e, "trim this file")
 
@@ -4885,10 +4889,12 @@ def api_loop():
     file = request.files.get("file")
     loops = int(request.form.get("loops", 2))
     output_format = request.form.get("output_format", "mp3")
+    target_sec = (request.form.get("target_sec") or "").strip() or None
     if not file:
         return jsonify({"error": "No file uploaded."}), 400
     try:
-        out_bytes = audio_tools.loop_audio(file.read(), file.filename, loops=loops, output_format=output_format)
+        out_bytes = audio_tools.loop_audio(file.read(), file.filename, loops=loops, output_format=output_format,
+                                            target_sec=target_sec)
         _bump_counter("usage_loop")
         return jsonify({"audio_b64": base64.b64encode(out_bytes).decode("ascii"),
                         "filename": f"VoxCraft-Loop-{int(time.time())}.{output_format}",
