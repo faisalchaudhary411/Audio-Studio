@@ -860,6 +860,8 @@
             b.dataset.cutterMode === cutterMode ? 'btn btn--sm btn--brass is-active' : 'btn btn--sm btn--ghost';
         });
         if (trimControls) trimControls.style.display = cutterMode === 'trim' ? '' : 'none';
+        const fmtWrap = document.getElementById('cutter-format-wrap');
+        if (fmtWrap) fmtWrap.style.display = cutterMode === 'trim' ? '' : 'none';
         if (splitControls) splitControls.style.display = cutterMode === 'split' ? '' : 'none';
       });
     });
@@ -922,6 +924,9 @@
         if (cutterStatus) cutterStatus.textContent = 'Trimming…';
         form.append('start_sec', document.getElementById('cutter-start').value);
         form.append('end_sec', document.getElementById('cutter-end').value);
+        const cfmt = document.getElementById('cutter-format');
+        const trimFmt = (cfmt && cfmt.value) || 'mp3';
+        form.append('output_format', trimFmt);
         const res = await resumableFetch('/api/tools/cutter/trim', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -929,7 +934,7 @@
           return;
         }
         if (cutterStatus) cutterStatus.textContent = 'Trimmed';
-        if (cutterResult) setAudioResult(cutterResult, data.audio_b64, data.filename);
+        if (cutterResult) setAudioResult(cutterResult, data.audio_b64, data.filename, data.format === 'm4r' ? 'audio/mp4' : undefined);
       } else {
         if (cutterStatus) cutterStatus.textContent = 'Splitting…';
         const splitEl = document.getElementById('cutter-split') || document.getElementById('cutter-split-at');
@@ -1557,8 +1562,20 @@
       const c = document.getElementById('loop-count');
       const l = document.getElementById('loop-count-label');
       if (c && l) c.addEventListener('input', () => { l.textContent = c.value; });
+      const m = document.getElementById('loop-mode');
+      const cw = document.getElementById('loop-count-wrap');
+      const tw = document.getElementById('loop-target-wrap');
+      if (m && cw && tw) m.addEventListener('change', () => {
+        cw.style.display = m.value === 'count' ? '' : 'none';
+        tw.style.display = m.value === 'target' ? '' : 'none';
+      });
     },
     append: (f) => {
+      const mode = (document.getElementById('loop-mode') || {}).value;
+      if (mode === 'target') {
+        const mins = parseFloat((document.getElementById('loop-target-min') || {}).value || '0');
+        f.append('target_sec', String(Math.round(mins * 60)));
+      }
       f.append('loops', (document.getElementById('loop-count') || {}).value || '2');
       f.append('output_format', (document.getElementById('loop-format') || {}).value || 'mp3');
     },
