@@ -2,8 +2,18 @@
     <span class="panel__label">Loop audio</span>
     <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;">Repeat a short clip 2–10 times (intros, beds, stingers). <strong>{{ upload_limit_mb }}MB max</strong>{% if not is_pro_ctx %} (Pro: {{ upload_pro_mb }}MB){% endif %}.</p>
     <input type="file" class="file-input" id="loop-file" accept="audio/*,.wav,.mp3,.ogg,.m4a,.flac" style="margin-bottom:12px;">
-    <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Repeats: <span id="loop-count-label">2</span></label>
-    <input type="range" class="studio-range" id="loop-count" min="2" max="10" step="1" value="2" style="width:100%;margin-bottom:12px;">
+    <select id="loop-mode" class="studio-select" style="margin-bottom:12px;">
+      <option value="count">Repeat a number of times</option>
+      <option value="target">Repeat until a target length</option>
+    </select>
+    <div id="loop-count-wrap">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Repeats: <span id="loop-count-label">2</span></label>
+      <input type="range" class="studio-range" id="loop-count" min="2" max="10" step="1" value="2" style="width:100%;margin-bottom:12px;">
+    </div>
+    <div id="loop-target-wrap" style="display:none;margin-bottom:12px;">
+      <label style="font-family:var(--mono);font-size:0.78rem;color:var(--text-mid);">Target length (minutes, up to 20 for MP3 / 5 for WAV)</label>
+      <input type="number" class="studio-input" id="loop-target-min" value="5" min="0.1" max="20" step="0.1" style="width:100%;">
+    </div>
     <select id="loop-format" class="studio-select" style="margin-bottom:12px;">
       <option value="mp3">MP3</option><option value="wav">WAV</option>
     </select>
