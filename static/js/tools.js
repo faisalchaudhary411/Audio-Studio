@@ -1667,6 +1667,17 @@
       if (speed && speedLabel) speedLabel.textContent = speed.value;
       if (humanize && humanizeLabel) humanizeLabel.textContent = humanize.value;
     }
+    (function harmonyUi() {
+      const sel = document.getElementById('autotune-harmony');
+      const wrap = document.getElementById('autotune-harmony-wrap');
+      const lvl = document.getElementById('autotune-harmony-level');
+      const lab = document.getElementById('autotune-harmony-label');
+      if (!sel) return;
+      const upd = () => { if (wrap) wrap.style.display = sel.value === 'none' ? 'none' : 'block'; if (lvl && lab) lab.textContent = lvl.value; };
+      sel.addEventListener('change', upd);
+      if (lvl) lvl.addEventListener('input', upd);
+      upd();
+    })();
     if (strength) strength.addEventListener('input', syncLabels);
     if (speed) speed.addEventListener('input', syncLabels);
     if (humanize) humanize.addEventListener('input', syncLabels);
@@ -1743,6 +1754,13 @@
       form.append('humanize', (hVal / 100).toFixed(2));
       form.append('output_format', (document.getElementById('autotune-format') || {}).value || 'mp3');
       form.append('preset', activePreset || 'custom');
+      const refEl = document.getElementById('autotune-ref');
+      if (refEl && refEl.files && refEl.files[0]) form.append('reference', refEl.files[0]);
+      const hSel = document.getElementById('autotune-harmony');
+      if (hSel && hSel.value && hSel.value !== 'none') {
+        form.append('harmony', hSel.value);
+        form.append('harmony_level_db', (document.getElementById('autotune-harmony-level') || {}).value || '-6');
+      }
       try {
         const res = await resumableFetch('/api/tools/autotune', { method: 'POST', body: form });
         const data = await res.json().catch(() => ({}));
@@ -1756,6 +1774,51 @@
     }));
   })();
 
+
+  // ---- Vocal layers (align + tune several takes) ----
+  (function () {
+    const btn = document.getElementById('layers-btn');
+    if (!btn) return;
+    const status = document.querySelector('[data-layers-status]');
+    const result = document.getElementById('layers-result');
+    const progress = ensureProgress(result);
+    const strength = document.getElementById('layers-strength');
+    const strengthLabel = document.getElementById('layers-strength-label');
+    const spread = document.getElementById('layers-spread');
+    const spreadLabel = document.getElementById('layers-spread-label');
+    const sync = () => {
+      if (strength && strengthLabel) strengthLabel.textContent = strength.value;
+      if (spread && spreadLabel) spreadLabel.textContent = spread.value;
+    };
+    [strength, spread].forEach((el) => { if (el) el.addEventListener('input', sync); });
+    sync();
+    btn.addEventListener('click', () => window.VoxCraftAds.showInterstitial(async () => {
+      const files = [];
+      document.querySelectorAll('.layers-file').forEach((el) => { if (el.files && el.files[0]) files.push(el.files[0]); });
+      if (files.length < 2) { if (status) status.textContent = 'Add at least 2 takes.'; return; }
+      setLoading(btn, true); showProgress(progress, true);
+      if (status) status.textContent = 'Tuning and lining up ' + files.length + ' takes…';
+      if (result) result.innerHTML = '';
+      const form = new FormData();
+      files.forEach((f) => form.append('files', f));
+      form.append('key', (document.getElementById('layers-key') || {}).value || 'auto');
+      form.append('scale', (document.getElementById('layers-scale') || {}).value || 'major');
+      form.append('strength', ((strength ? parseFloat(strength.value) : 100) / 100).toFixed(2));
+      form.append('retune_speed', (document.getElementById('layers-speed') || {}).value === 'hard' ? '1.0' : '0.7');
+      form.append('align', (document.getElementById('layers-align') || {}).checked ? '1' : '0');
+      form.append('spread', ((spread ? parseFloat(spread.value) : 60) / 100).toFixed(2));
+      form.append('output_format', (document.getElementById('layers-format') || {}).value || 'mp3');
+      try {
+        const res = await resumableFetch('/api/tools/vocal-layers', { method: 'POST', body: form });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { if (status) status.textContent = friendlyError(data, 'Could not process these takes.'); return; }
+        if (status) status.textContent = `Done · ${data.size_kb || ''} KB`;
+        if (result) setAudioResult(result, data.audio_b64, data.filename, data.format === 'wav' ? 'audio/wav' : (data.format === 'ogg' ? 'audio/ogg' : (data.format === 'm4a' ? 'audio/mp4' : 'audio/mpeg')));
+      } catch (e) {
+        if (status) status.textContent = 'Network error.';
+      } finally { setLoading(btn, false); showProgress(progress, false); }
+    }));
+  })();
 
   // ---- Audio Mixer (vocals + music) ----
   (function () {
