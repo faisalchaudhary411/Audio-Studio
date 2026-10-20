@@ -789,6 +789,7 @@ TOOL_PAGES = {
         "intro": [
             "Autotune audio online for free with VoxCraft. Professional pitch correction detects the sung (or spoken) pitch, snaps it to your chosen key and scale, and lets you dial how hard and how fast the correction happens — from subtle natural tuning to the classic hard Autotune sound.",
             "Unlike a simple pitch shifter (which moves everything by a fixed amount), this tool tracks pitch over time and corrects each note toward the nearest scale degree. Choose a key manually or leave it on Auto; pick major, minor, pentatonic, blues, or chromatic; then set strength, retune speed, and optional humanize.",
+            "Two optional extras: upload a reference song and the vocal is tuned to that song’s detected key and major/minor mood, or add a harmony (a third above or below, a fifth above, an octave below, or two voices at once) built from your own melody in the same scale. Harmony works with 7-note scales (major, minor, harmonic minor, dorian, mixolydian), is limited to 3 minutes and returns a stereo file.",
             "Built for vocal takes, vocaloids, and melodic voiceovers. It is CPU-based (no GPU required) and limited to 5 minutes per file so processing stays responsive on shared hosting. For longer sessions, trim first with the Cutter tool.",
         ],
         "how_it_works": [
@@ -814,11 +815,56 @@ TOOL_PAGES = {
             ("Is this the same as Auto-Tune by Antares?", "It is pitch correction in the same category — track pitch, snap to a scale, control speed and strength. It is not the Antares product and does not use their algorithms or branding."),
             ("Does it work on speech?", "It can, but speech is less tonal. Results are strongest on sung or hummed melodies with clear pitch."),
             ("Why is there a 5-minute limit?", "Pitch tracking is CPU-heavy. The limit keeps processing reliable on the free tier. Trim longer files first."),
+            ("How does the reference match work?", "The reference is analysed for its overall key and whether it sounds major or minor, and your vocal is tuned to those notes. It matches the key, not the melody, and key detection on a busy mix is an estimate, so check the result by ear."),
+            ("How good are the harmonies?", "They are your own voice shifted to scale notes, so they follow your melody and stay in key. They sound best on clean, dry vocals and are a quick sketch rather than a replacement for a recorded harmony."),
             ("Can I choose any key?", "Yes — C through B including sharps/flats, or Auto to detect from the audio."),
             ("What does Humanize do?", "It adds a small random offset to target pitches so the correction does not sound perfectly quantized."),
         ],
         "related_tools": ["audio-mixer", "ai-music-generator", "voice-changer", "normalize-audio-volume", "simple-audio-eq"],
         "blog_keywords": ["autotune", "pitch correction", "pitch correct", "tune vocals"],
+    },
+    "tighten-vocal-layers": {
+        "widget": "layers",
+        "usage_key": "layers",
+        "title": "Tighten Vocal Layers Online — Align & Tune Vocal Takes | VoxCraft",
+        "meta_description": "Combine 2–4 takes of the same vocal line: tune them to one key, line them up with the first take and mix into a wide stack. Free online, no install.",
+        "eyebrow": "Vocal layers",
+        "h1": "Tighten vocal layers online — tune and line up your takes",
+        "sub": "Record the same line a few times, upload the takes, and get one stacked vocal that is in the same key and starts together.",
+        "intro": [
+            "Double-tracked and stacked vocals sound fuller than a single take, but only if the takes agree. When one take is a little flat and another starts a fraction late, the stack sounds smeared instead of wide. This tool fixes the two things that matter most: it pitch-corrects every take to the same key and scale, and it lines each take up with the first one.",
+            "Upload 2 to 4 recordings of the same line, ideally sung against the same backing track or click so the phrases start at similar times. The first take is the timing reference. The others are shifted (up to one second either way) so their phrases begin with it, tuned to the same scale as the first take (or a key you choose), matched in loudness, and panned left and right to build width.",
+            "Know what it does not do. Timing is aligned with one shift per take, so if a singer speeds up or slows down inside a take, that drift stays. The stack also needs takes of the same part; different melodies or lyrics will not line up. For the best result, record dry (no reverb or music) and denoise noisy takes first.",
+            "Output is a stereo file with the takes mixed together. If you want to mix it over a backing track, use the <a href=\"/tools/audio-mixer\" style=\"color:var(--brass-hi)\">Audio Mixer</a>; for a single take, use <a href=\"/tools/autotune-audio\" style=\"color:var(--brass-hi)\">Autotune</a>.",
+        ],
+        "how_it_works": [
+            "Record 2–4 takes of the same line (dry vocals work best) and add them in order; take 1 sets the timing.",
+            "Pick a key and scale, or leave the key on Auto to detect it from take 1.",
+            "Choose Natural or Hard lock tuning, set strength and stereo spread, and keep alignment on.",
+            "Tap Tighten layers, listen, and download the stereo stack.",
+        ],
+        "use_cases": [
+            ("Double-tracked leads", "Make two takes of a chorus line sit in the same key and start together."),
+            ("Backing vocal stacks", "Combine several takes into one wide, even layer."),
+            ("Rough demos", "Quickly check how a stacked vocal might sound before a full mix."),
+            ("Content creators", "Add width to a short vocal hook for a video or reel."),
+        ],
+        "tips": [
+            "Record every take against the same backing track or click so phrases start at similar times.",
+            "Dry takes work best — reverb and music confuse pitch detection.",
+            "Choose the key by ear if the vocal is unusual; Auto is a good default for clear melodies.",
+            "Use Natural tuning for a believable stack and Hard lock only for a deliberate effect.",
+            "Takes longer than 90 seconds need trimming first.",
+        ],
+        "faq": [
+            ("Does it fix timing inside a take?", "No. Each take gets one overall shift (up to one second) to line up its start with take 1. Drift inside a take is not corrected."),
+            ("Do the takes have to be the same melody?", "Yes. It is designed for repeated takes of the same line. Different parts will be tuned to the same key but will not line up."),
+            ("How many takes can I add?", "Two to four, up to 90 seconds each."),
+            ("Why is the output stereo?", "The extra takes are panned left and right to make the stack wider. Set the stereo spread to 0 to keep everything centred."),
+            ("Is it free?", "Yes within the free daily limit, with no account needed to start."),
+        ],
+        "related_tools": ["autotune-audio", "audio-mixer", "remove-background-noise", "normalize-audio-volume"],
+        "blog_keywords": ["vocal layers", "double tracking", "vocal stack", "harmony"],
     },
     "video-audio-redub": {
         "widget": "redub",
@@ -949,7 +995,7 @@ TOOL_ORDER = [
     "merge-audio-files", "trim-cut-audio",
     "remove-background-noise", "normalize-audio-volume", "adjust-audio-volume", "change-audio-speed",
     "fade-audio", "split-audio-by-silence", "reverse-audio", "stereo-to-mono", "loop-audio",
-    "simple-audio-eq", "autotune-audio", "audio-mixer", "bpm-key-finder", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
+    "simple-audio-eq", "autotune-audio", "tighten-vocal-layers", "audio-mixer", "bpm-key-finder", "voice-changer", "extract-audio-from-video", "video-audio-redub", "ai-music-generator",
 ]
 
 # Format- and use-case-specific landing pages ("opus to mp3", "mov to mp3",

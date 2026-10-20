@@ -173,6 +173,8 @@ def _load_segment(file_bytes: bytes, filename: str) -> AudioSegment:
 def _export_bytes(segment: AudioSegment, fmt: str, bitrate_kbps: int = None) -> bytes:
     buf = io.BytesIO()
     kwargs = {}
+    if not bitrate_kbps and fmt == "mp3":
+        bitrate_kbps = 192   # ffmpeg's 128k default adds audible shimmer on vocals/music
     if bitrate_kbps:
         kwargs["bitrate"] = f"{bitrate_kbps}k"
 
@@ -1575,6 +1577,7 @@ def mix_tracks(
 # smooths the correction curve by retune speed, then applies a time-varying
 # spectral pitch shift (STFT magnitude remapping). CPU-only; duration-capped.
 MAX_AUTOTUNE_DURATION_SEC = 5 * 60
+MAX_AUTOTUNE_HARMONY_SEC = 3 * 60
 
 # Scale intervals in semitones from the root.
 _AUTOTUNE_SCALES = {
@@ -1774,7 +1777,8 @@ def _clean_pitch_track(times, f0):
     return midi, dt, runs
 
 
-def _build_correction(times, midi, dt, runs_fn, scale_midis, strength, retune_speed, humanize):
+def _build_correction(times, midi, dt, runs_fn, scale_midis, strength, retune_speed, humanize,
+                      degree_steps=0, clip=4.0):
     """
     Semitone correction per pitch frame.
 
@@ -1823,6 +1827,10 @@ def _build_correction(times, midi, dt, runs_fn, scale_midis, strength, retune_sp
                 if i > 0 and (j - i) < min_len:
                     notes[i:j] = notes[i - 1]
                 i = j
+        if degree_steps:
+            # Harmony voice: move each locked note N scale steps up/down (2 = a third).
+            idx = np.array([int(np.argmin(np.abs(scale_arr - x))) for x in notes])
+            notes = scale_arr[np.clip(idx + int(degree_steps), 0, len(scale_arr) - 1)]
         desired = (notes + humanize * 0.8 * (m - slow)) - m
         desired *= strength
         c = desired[0]
@@ -1831,7 +1839,7 @@ def _build_correction(times, midi, dt, runs_fn, scale_midis, strength, retune_sp
             c += alpha * (d - c)
             out[i] = c
         corr[a:b] = out
-    return np.clip(corr, -4.0, 4.0)
+    return np.clip(corr, -float(clip), float(clip))
 
 
 def _psola_retune(y, sr: int, times, midi, corr):
@@ -1969,9 +1977,20 @@ def autotune(
     retune_speed: float = 0.7,
     humanize: float = 0.0,
     output_format: str = "mp3",
+    reference_bytes: bytes = None,
+    reference_name: str = "",
+    harmony: str = "none",
+    harmony_level_db: float = -6.0,
 ) -> bytes:
     """
     Pitch-correction Autotune (Antares / Melodyne style).
+
+    reference    : optional second file (a song / instrumental). Its key and major/minor
+                   mode are detected and override `key` and `scale`, so the vocal is
+                   tuned to the reference.
+    harmony      : 'none', 'third_above', 'third_below', 'fifth_above', 'octave_below',
+                   'third_fifth' (two voices). Extra voices follow the corrected melody
+                   in the chosen scale and are mixed in (stereo output).
 
     key          : root note ('C', 'D#', 'Bb', …) or 'auto' (detected from the sung melody).
     scale        : chromatic, major, minor, harmonic_minor, pentatonic_major,
@@ -2041,7 +2060,21 @@ def autotune(
 
     # --- Key ---
     key_str = (key or "auto").strip().lower()
-    if key_str in ("auto", "detect", ""):
+    ref_key = None
+    if reference_bytes:
+        check_file_size(reference_bytes)
+        ref_seg = _load_segment(reference_bytes, reference_name or "reference.wav")
+        if len(ref_seg) > 4 * 60 * 1000:
+            ref_seg = ref_seg[: 4 * 60 * 1000]
+        ref_seg = ref_seg.set_channels(1).set_frame_rate(16000).set_sample_width(2)
+        ref_y = np.array(ref_seg.get_array_of_samples(), dtype=np.float64) / 32768.0
+        if len(ref_y) < 16000:
+            raise UserInputError("The reference audio is too short to detect a key (need at least 1 s).")
+        ref_key = _detect_key_from_chroma(ref_y, 16000)
+        root_pc, ref_mode = ref_key
+        scale_key = "minor" if ref_mode == "minor" else "major"
+        intervals = _AUTOTUNE_SCALES[scale_key]
+    elif key_str in ("auto", "detect", ""):
         det = _detect_key_from_pitch(midi)
         if det is None:
             det = _detect_key_from_chroma(y_an, 16000)
@@ -2060,15 +2093,68 @@ def autotune(
         root_pc = _NOTE_PC[note]
     scale_midis = _build_scale_midi(root_pc, intervals, 24, 108)
 
+    harmony_steps = _HARMONY_PRESETS.get((harmony or "none").strip().lower())
+    if harmony_steps is None:
+        raise UserInputError(f"Unknown harmony '{harmony}'. Choose: {', '.join(_HARMONY_PRESETS)}.")
+
+    if harmony_steps:
+        if len(intervals) != 7:
+            raise UserInputError("Harmony needs a 7-note scale: Major, Minor, Harmonic minor, Dorian or Mixolydian.")
+        if duration_sec > MAX_AUTOTUNE_HARMONY_SEC:
+            raise UserFacingError(
+                f"Harmony is limited to {MAX_AUTOTUNE_HARMONY_SEC // 60:.0f} minutes per file "
+                f"(each voice is a full extra pitch-shift). Trim the clip or turn harmony off."
+            )
+
     # --- Correction curve + PSOLA resynthesis ---
     corr = _build_correction(times, midi, dt, runs_fn, scale_midis,
                              strength, retune_speed, humanize)
-    if float(np.max(np.abs(corr))) < 0.01:
+    if float(np.max(np.abs(corr))) < 0.01 and not harmony_steps:
         return _export_bytes(audio, output_format)
     y_out = _psola_retune(y, sr, times, midi, corr)
+    y_out = _limit_peaks(y_out)
 
-    # Soft-clip stray PSOLA transient peaks above ~-1 dBFS (keeps MP3 encoding clean),
-    # then make sure nothing exceeds full scale.
+    if not harmony_steps:
+        out_seg = _mono_segment(y_out, sr)
+        return _export_bytes(out_seg, output_format)
+
+    # --- Harmony voices: same melody, N scale steps away, mixed under the lead ---
+    gain = 10.0 ** (max(-18.0, min(0.0, float(harmony_level_db))) / 20.0)
+    pans = [(0.35, 0.65), (0.65, 0.35)]          # (left, right) weights per voice
+    left = y_out * 0.7071
+    right = y_out * 0.7071
+    for i, steps in enumerate(harmony_steps):
+        hc = _build_correction(times, midi, dt, runs_fn, scale_midis,
+                               1.0, min(retune_speed, 0.8), 0.0,
+                               degree_steps=steps, clip=14.0)
+        hv = _limit_peaks(_psola_retune(y, sr, times, midi, hc)) * gain
+        wl, wr = pans[i % 2]
+        left = left + hv * wl * 1.4
+        right = right + hv * wr * 1.4
+    pk = max(float(np.max(np.abs(left))), float(np.max(np.abs(right))), 1e-9)
+    if pk > 0.97:
+        left, right = left * 0.97 / pk, right * 0.97 / pk
+    pcm = np.empty(len(left) * 2, dtype=np.int16)
+    pcm[0::2] = np.clip(left * 32767.0, -32768, 32767).astype(np.int16)
+    pcm[1::2] = np.clip(right * 32767.0, -32768, 32767).astype(np.int16)
+    out_seg = AudioSegment(pcm.tobytes(), frame_rate=sr, sample_width=2, channels=2)
+    return _export_bytes(out_seg, output_format)
+
+
+# Scale-step offsets for each harmony voice (2 steps = a diatonic third, 4 = a fifth).
+_HARMONY_PRESETS = {
+    "none": [],
+    "third_above": [2],
+    "third_below": [-2],
+    "fifth_above": [4],
+    "octave_below": [-7],
+    "third_fifth": [2, 4],
+}
+
+
+def _limit_peaks(y_out):
+    """Soft-clip stray PSOLA transient peaks above ~-1 dBFS, then keep under full scale."""
+    import numpy as np
     knee = 0.89
     over = np.abs(y_out) > knee
     if np.any(over):
@@ -2076,9 +2162,168 @@ def autotune(
     peak = float(np.max(np.abs(y_out))) or 1.0
     if peak > 0.99:
         y_out = y_out * (0.99 / peak)
+    return y_out
+
+
+def _mono_segment(y_out, sr: int) -> AudioSegment:
+    import numpy as np
     pcm = np.clip(y_out * 32767.0, -32768, 32767).astype(np.int16)
-    out_seg = AudioSegment(pcm.tobytes(), frame_rate=sr, sample_width=2, channels=1)
+    return AudioSegment(pcm.tobytes(), frame_rate=sr, sample_width=2, channels=1)
+
+
+# ---------------------------------------------------------------------------
+# Vocal layers — line up several takes of the same part and tune them together
+# ---------------------------------------------------------------------------
+MAX_LAYER_TAKES = 4
+MAX_LAYER_TAKE_SEC = 90
+MAX_LAYER_SHIFT_SEC = 1.0
+
+
+def _take_offset_samples(ref, take, sr: int, max_shift_sec: float = MAX_LAYER_SHIFT_SEC) -> int:
+    """Samples `take` must be moved (positive = later) to line up with `ref`.
+
+    Cross-correlates the loudness envelopes (5 ms frames), so it locks onto when the
+    phrases start rather than on the exact waveform. One global shift per take.
+    """
+    import numpy as np
+    from scipy.signal import fftconvolve
+    hop = max(1, int(sr * 0.005))
+
+    def env(x):
+        n = (len(x) // hop) * hop
+        e = np.sqrt(np.mean(np.square(x[:n].reshape(-1, hop)), axis=1))
+        e = np.log1p(60.0 * e)
+        return e - e.mean()
+
+    a, b = env(ref), env(take)
+    if len(a) < 4 or len(b) < 4:
+        return 0
+    corr = fftconvolve(a, b[::-1], mode="full")
+    lags = np.arange(-(len(b) - 1), len(a))
+    max_lag = int(max_shift_sec / 0.005)
+    keep = np.abs(lags) <= max_lag
+    best = lags[keep][int(np.argmax(corr[keep]))]
+    return int(best) * hop
+
+
+def tighten_layers(
+    takes: list,
+    key: str = "auto",
+    scale: str = "major",
+    strength: float = 1.0,
+    retune_speed: float = 0.7,
+    align: bool = True,
+    spread: float = 0.6,
+    output_format: str = "mp3",
+) -> bytes:
+    """
+    Combine 2-4 takes of the same vocal line into one tight stack.
+
+    takes        : list of (file_bytes, filename). The first take is the timing reference.
+    align        : shift each other take (up to +/-1 s) so its phrases start with take 1.
+                   One global shift per take; it cannot fix drift inside a take.
+    key / scale  : every take is pitch-corrected to the SAME key and scale
+                   ('auto' = detected from the first take), so the layers agree on pitch.
+    spread       : 0 = everything centred, 1 = extra takes panned hard left/right.
+    """
+    import numpy as np
+    from math import gcd
+    from scipy.signal import resample_poly
+
+    if not isinstance(takes, (list, tuple)) or len(takes) < 2:
+        raise UserInputError("Add at least 2 takes of the same line.")
+    if len(takes) > MAX_LAYER_TAKES:
+        raise UserInputError(f"At most {MAX_LAYER_TAKES} takes at a time.")
+    output_format = (output_format or "mp3").lower().strip()
+    if output_format not in ("mp3", "wav", "ogg", "m4a"):
+        raise UserInputError("Output format must be mp3, wav, ogg, or m4a.")
+    spread = max(0.0, min(1.0, float(spread)))
+
+    segs = []
+    for fb, fn in takes:
+        check_file_size(fb)
+        seg = _load_segment(fb, fn)
+        if len(seg) / 1000.0 > MAX_LAYER_TAKE_SEC:
+            raise UserFacingError(
+                f"Each take can be at most {MAX_LAYER_TAKE_SEC} seconds ({fn or 'a take'} is "
+                f"{len(seg) / 1000.0:.0f} s). Trim it first."
+            )
+        segs.append(seg.set_channels(1).set_sample_width(2))
+    sr = int(min(max(s_.frame_rate for s_ in segs), 44100))
+    segs = [s_.set_frame_rate(sr) for s_ in segs]
+
+    # Shared key from the first take, so every take is tuned to the same notes.
+    scale_key = (scale or "major").strip().lower().replace("-", "_").replace(" ", "_")
+    key_str = (key or "auto").strip()
+    if key_str.lower() in ("auto", "detect", ""):
+        y0 = np.array(segs[0].get_array_of_samples(), dtype=np.float64) / 32768.0
+        g = gcd(16000, sr)
+        y16 = resample_poly(y0, 16000 // g, sr // g) if sr != 16000 else y0
+        times, f0 = _track_pitch(y16, 16000)
+        midi, _dt, _r = _clean_pitch_track(times, f0)
+        det = _detect_key_from_pitch(midi) or _detect_key_from_chroma(y16, 16000)
+        root_pc, mode = det
+        minor_like = scale_key in ("minor", "harmonic_minor", "pentatonic_minor", "blues", "dorian")
+        major_like = scale_key in ("major", "pentatonic_major", "mixolydian")
+        if minor_like and mode == "major":
+            root_pc = (root_pc + 9) % 12
+        elif major_like and mode == "minor":
+            root_pc = (root_pc + 3) % 12
+        key_str = _PC_NAMES[root_pc]
+
+    tuned = []
+    for seg in segs:
+        buf = io.BytesIO()
+        seg.export(buf, format="wav")
+        wav_bytes = buf.getvalue()
+        out = autotune(wav_bytes, "take.wav", key=key_str, scale=scale_key, strength=strength,
+                       retune_speed=retune_speed, humanize=0.0, output_format="wav")
+        o = _load_segment(out, "x.wav").set_channels(1).set_frame_rate(sr).set_sample_width(2)
+        tuned.append(np.array(o.get_array_of_samples(), dtype=np.float64) / 32768.0)
+
+    # Timing: shift every take to line up with take 1.
+    if align:
+        ref = tuned[0]
+        for i in range(1, len(tuned)):
+            off = _take_offset_samples(ref, tuned[i], sr)
+            if off:
+                t = tuned[i]
+                if off > 0:
+                    tuned[i] = np.concatenate([np.zeros(off), t])
+                else:
+                    tuned[i] = t[-off:]
+
+    # Match loudness so no take dominates.
+    rms = [max(float(np.sqrt(np.mean(t ** 2))), 1e-6) for t in tuned]
+    target = rms[0]
+    tuned = [t * (target / r) for t, r in zip(tuned, rms)]
+
+    n = max(len(t) for t in tuned)
+    left = np.zeros(n)
+    right = np.zeros(n)
+    for i, t in enumerate(tuned):
+        if i == 0:
+            wl = wr = 0.7071
+        else:
+            side = -1.0 if i % 2 else 1.0           # alternate left / right
+            pan = side * spread * (0.5 + 0.5 * (i > 2))
+            wl, wr = 0.7071 * (1.0 - pan), 0.7071 * (1.0 + pan)
+        left[: len(t)] += t * wl
+        right[: len(t)] += t * wr
+    gain = 1.0 / np.sqrt(len(tuned))
+    left *= gain * 1.3
+    right *= gain * 1.3
+    pk = max(float(np.max(np.abs(left))), float(np.max(np.abs(right))), 1e-9)
+    if pk > 0.97:
+        left, right = left * 0.97 / pk, right * 0.97 / pk
+    pcm = np.empty(n * 2, dtype=np.int16)
+    pcm[0::2] = np.clip(left * 32767.0, -32768, 32767).astype(np.int16)
+    pcm[1::2] = np.clip(right * 32767.0, -32768, 32767).astype(np.int16)
+    out_seg = AudioSegment(pcm.tobytes(), frame_rate=sr, sample_width=2, channels=2)
     return _export_bytes(out_seg, output_format)
+
+
+_PC_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 
 # ---------------------------------------------------------------------------

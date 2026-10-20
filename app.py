@@ -1302,6 +1302,7 @@ def usage_summary() -> dict:
         "eq": {"used": usage_tracking.get_daily_counter(request, "usage_eq"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "autotune": {"used": usage_tracking.get_daily_counter(request, "usage_autotune"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "mixer": {"used": usage_tracking.get_daily_counter(request, "usage_mixer"), "limit": lim["FREE_DAILY_ACTIONS"]},
+        "layers": {"used": usage_tracking.get_daily_counter(request, "usage_layers"), "limit": lim["FREE_DAILY_ACTIONS"]},
         "bpm": {"used": usage_tracking.get_daily_counter(request, "usage_bpm"), "limit": lim["FREE_DAILY_ACTIONS"]},
     }
 
@@ -4977,12 +4978,21 @@ def api_autotune():
         humanize = 0.0
     output_format = request.form.get("output_format", "mp3")
     path_used = "hard" if (retune_speed >= 0.65 and strength >= 0.5) else "soft"
+    ref_file = request.files.get("reference")
+    harmony = (request.form.get("harmony") or "none").strip().lower()
+    try:
+        harmony_level_db = float(request.form.get("harmony_level_db", -6))
+    except (TypeError, ValueError):
+        harmony_level_db = -6.0
     try:
         out_bytes = audio_tools.autotune(
             file.read(), file.filename,
             key=key, scale=scale,
             strength=strength, retune_speed=retune_speed,
             humanize=humanize, output_format=output_format,
+            reference_bytes=ref_file.read() if ref_file else None,
+            reference_name=(ref_file.filename if ref_file else "") or "",
+            harmony=harmony, harmony_level_db=harmony_level_db,
         )
         _bump_counter("usage_autotune")
         return jsonify({
@@ -4997,6 +5007,46 @@ def api_autotune():
         })
     except Exception as e:
         return api_error(e, "autotune this file")
+
+
+@app.route("/api/tools/vocal-layers", methods=["POST"])
+def api_vocal_layers():
+    """Align and pitch-tighten 2-4 takes of the same vocal line into one stack."""
+    lim = get_limits()
+    if not _under_limit("usage_layers", lim["FREE_DAILY_ACTIONS"]):
+        return jsonify({"error": f"Free daily limit reached ({lim['FREE_DAILY_ACTIONS']}/day). Upgrade to Pro for unlimited."}), 402
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    if len(files) < 2:
+        return jsonify({"error": "Add at least 2 takes of the same line."}), 400
+    if len(files) > audio_tools.MAX_LAYER_TAKES:
+        return jsonify({"error": f"At most {audio_tools.MAX_LAYER_TAKES} takes at a time."}), 400
+    def _f(name, default):
+        try:
+            return float(request.form.get(name, default))
+        except (TypeError, ValueError):
+            return float(default)
+    output_format = request.form.get("output_format", "mp3")
+    align = str(request.form.get("align", "1")).lower() in ("1", "true", "yes", "on")
+    try:
+        out_bytes = audio_tools.tighten_layers(
+            [(f.read(), f.filename) for f in files],
+            key=request.form.get("key", "auto"),
+            scale=request.form.get("scale", "major"),
+            strength=max(0.0, min(1.0, _f("strength", 1.0))),
+            retune_speed=max(0.0, min(1.0, _f("retune_speed", 0.7))),
+            align=align,
+            spread=max(0.0, min(1.0, _f("spread", 0.6))),
+            output_format=output_format,
+        )
+        _bump_counter("usage_layers")
+        return jsonify({
+            "audio_b64": base64.b64encode(out_bytes).decode("ascii"),
+            "filename": f"VoxCraft-Layers-{int(time.time())}.{output_format}",
+            "format": output_format,
+            "size_kb": round(len(out_bytes) / 1024, 1),
+        })
+    except Exception as e:
+        return api_error(e, "tighten these takes")
 
 
 @app.route("/api/tools/mixer", methods=["POST"])
