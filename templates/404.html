@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Page not found — VoxCraft{% endblock %}
+{% block meta_description %}The page you requested could not be found. Try Voice Studio, free audio tools, or the homepage.{% endblock %}
+{% block robots %}<meta name="robots" content="noindex, follow">{% endblock %}
+
+{% block content %}
+<section class="section" style="max-width:560px;text-align:center;padding-top:72px;padding-bottom:72px;">
+  <p style="font-family:var(--mono);font-size:0.8rem;color:var(--brass);letter-spacing:0.08em;margin-bottom:12px;">404</p>
+  <h1 class="section__title" style="margin-bottom:12px;">Page not found</h1>
+  <p class="section__sub" style="margin-bottom:28px;">
+    This URL does not exist (or the page was moved). Try one of these instead:
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:28px;">
+    <a href="{{ url_for('landing') }}" class="btn btn--brass">Home</a>
+    <a href="{{ url_for('studio') }}" class="btn btn--ghost">Voice Studio</a>
+    <a href="{{ url_for('tools_hub') }}" class="btn btn--ghost">All tools</a>
+    <a href="{{ url_for('tool_page', slug='transcribe-audio-to-text') }}" class="btn btn--ghost">Speech to text</a>
+  </div>
+  <p style="color:var(--text-dim);font-size:0.9rem;line-height:1.6;">
+    Looking for Urdu / Hindi speech to text?
+    <a href="{{ url_for('seo_landing_page', slug='urdu-speech-to-text') }}" style="color:var(--brass-hi);">Urdu STT</a> ·
+    <a href="{{ url_for('seo_landing_page', slug='hindi-speech-to-text') }}" style="color:var(--brass-hi);">Hindi STT</a> ·
+    <a href="{{ url_for('seo_landing_page', slug='punjabi-speech-to-text') }}" style="color:var(--brass-hi);">Punjabi STT</a>
+  </p>
+</section>
+{% endblock %}
