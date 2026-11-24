@@ -24,10 +24,10 @@ TOOL_PAGES = {
     "transcribe-audio-to-text": {
         "widget": "transcribe",
         "usage_key": "transcribe",
-        "title": "Urdu & Hindi Speech to Text — Free | VoxCraft",
-        "meta_description": "Transcribe Urdu, Hindi, or English audio to text online free. WAV, MP3, M4A, OGG, FLAC for captions and notes.",
+        "title": "Speech to Text Free — Urdu, Hindi, Punjabi & English | VoxCraft",
+        "meta_description": "Free speech to text online for Urdu, Hindi, Punjabi and English. Upload audio or a WhatsApp voice note and get a transcript — no signup to start.",
         "eyebrow": "Audio → Text",
-        "h1": "Transcribe Urdu, Hindi, or English audio to text — free",
+        "h1": "Free speech to text — Urdu, Hindi, Punjabi & English",
         "sub": "Upload a recording and get a text transcript back, with Urdu and Hindi as first-choice languages. No install, no account required for free-tier use.",
         "intro": [
             'Transcribe Urdu, Hindi, or English audio to text online for free with VoxCraft. Upload a WAV, MP3, M4A, OGG or FLAC recording and get a readable transcript — no install and no account required on the free tier.',

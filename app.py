@@ -4368,10 +4368,18 @@ def seo_landing_page(slug):
     page["use_cases"] = [(n, _fill_placeholders(d, url_map)) for n, d in page.get("use_cases", [])]
     page["faq"] = [(q, _fill_placeholders(a, url_map)) for q, a in page.get("faq", [])]
 
-    # Every page's cta_label currently talks about Voice Studio except the
-    # tools round-up page, which talks about the tools hub — route each
-    # accordingly rather than sending every CTA to the same place.
-    cta_url = url_for("tools_hub") if slug == "audio-tools-for-youtubers" else url_for("studio")
+    # Route the primary CTA by page intent rather than sending everything
+    # to Studio. Speech-to-text landings open the transcribe tool; the tools
+    # round-up goes to the tools hub; noise pages go to denoise; everything
+    # else defaults to Voice Studio.
+    if slug in ("urdu-speech-to-text", "hindi-speech-to-text", "punjabi-speech-to-text"):
+        cta_url = url_for("tool_page", slug="transcribe-audio-to-text")
+    elif slug == "remove-noise-from-audio":
+        cta_url = url_for("tool_page", slug="remove-background-noise")
+    elif slug == "audio-tools-for-youtubers":
+        cta_url = url_for("tools_hub")
+    else:
+        cta_url = url_for("studio")
 
     return render_template("seo_page.html", page=page, page_slug=slug, cta_url=cta_url)
 

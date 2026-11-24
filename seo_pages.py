@@ -96,7 +96,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                            ('Text to speech for YouTube',
                                             '/text-to-speech-for-youtube'),
                                            ('Trim or cut audio', '/tools/trim-cut-audio'),
-                                           ('Normalize volume', '/tools/normalize-audio-volume')],
+                                           ('Normalize volume', '/tools/normalize-audio-volume'),
+                                           ('Urdu speech to text', '/urdu-speech-to-text'),
+                                           ('Transcribe audio to text', '/tools/transcribe-audio-to-text'),
+                                          ],
                          'sub': 'Free Urdu text to speech in the browser — pick a neural voice, '
                                 'paste your script, generate and download. No account required on '
                                 'the free tier.'},
@@ -169,7 +172,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                             ('How to create a YouTube voiceover',
                                              '/how-to-create-youtube-voiceover'),
                                             ('Normalize volume', '/tools/normalize-audio-volume'),
-                                            ('Merge audio files', '/tools/merge-audio-files')],
+                                            ('Merge audio files', '/tools/merge-audio-files'),
+                                            ('Hindi speech to text', '/hindi-speech-to-text'),
+                                            ('Transcribe audio to text', '/tools/transcribe-audio-to-text'),
+                                           ],
                           'sub': 'Free Hindi text to speech online — Devanagari works best, '
                                  'generate neural narration, download for YouTube or courses '
                                  'without signing up.'},
@@ -235,7 +241,10 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                               ('Urdu text to speech', '/urdu-text-to-speech'),
                                               ('Free text to speech', '/free-text-to-speech'),
                                               ('Normalize volume',
-                                               '/tools/normalize-audio-volume')],
+                                               '/tools/normalize-audio-volume'),
+                                              ('Punjabi speech to text', '/punjabi-speech-to-text'),
+                                              ('Transcribe audio to text', '/tools/transcribe-audio-to-text'),
+                                             ],
                             'sub': 'Free Punjabi text to speech — paste Gurmukhi, choose a neural '
                                    'voice, download narration. No signup needed to start.'},
  'bengali-text-to-speech': {'title': 'Bengali Text to Speech Free — AI Voice Online | VoxCraft',
@@ -472,7 +481,9 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                    '/audio-tools-for-youtubers'),
                                                   ('Normalize volume',
                                                    '/tools/normalize-audio-volume'),
-                                                  ('Merge audio', '/tools/merge-audio-files')],
+                                                  ('Merge audio', '/tools/merge-audio-files'),
+                                                  ('Transcribe audio to text', '/tools/transcribe-audio-to-text'),
+                                                 ],
                                 'sub': 'Yes — you can use text to speech for YouTube: test a short '
                                        'opening, fix names and numbers, generate in sections, then '
                                        'edit the audio into your video.'},
@@ -586,7 +597,11 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
                                                        ('Urdu text to speech',
                                                         '/urdu-text-to-speech'),
                                                        ('Hindi text to speech',
-                                                        '/hindi-text-to-speech')],
+                                                        '/hindi-text-to-speech'),
+                                                       ('Urdu speech to text', '/urdu-speech-to-text'),
+                                                       ('Hindi speech to text', '/hindi-speech-to-text'),
+                                                       ('Transcribe audio', '/tools/transcribe-audio-to-text'),
+                                                      ],
                                      'sub': 'Write for the ear, test the first 20–40 seconds, fix '
                                             'hard words, then generate or record the rest in '
                                             'sections and match audio to the video.'},
@@ -1295,6 +1310,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
             ('TTS for YouTube', '/text-to-speech-for-youtube'),
             ('What is text to speech?', '/what-is-text-to-speech'),
             ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
+            ('Urdu speech to text', '/urdu-speech-to-text'),
         ],
     },
 
@@ -1357,6 +1373,7 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
             ('Urdu text to speech', '/urdu-text-to-speech'),
             ('TTS for beginners', '/text-to-speech-for-beginners'),
             ('VoxCraft vs ElevenLabs', '/voxcraft-vs-elevenlabs'),
+            ('Hindi speech to text', '/hindi-speech-to-text'),
         ],
     },
 
@@ -1425,6 +1442,152 @@ SEO_PAGES = {'urdu-text-to-speech': {'title': 'Urdu Text to Speech Free — AI V
             ('All audio tools', '/tools'),
         ],
     },
+    # ------------------------------------------------------------------
+    # Speech-to-text language landings (high-intent from Search Console)
+    # These funnel into the existing /tools/transcribe-audio-to-text tool.
+    # ------------------------------------------------------------------
+    'urdu-speech-to-text': {
+        'title': 'Urdu Speech to Text Free — Convert Voice to Text Online | VoxCraft',
+        'meta_description': 'Free Urdu speech to text online. Upload an Urdu recording or WhatsApp voice note and get a text transcript — no signup required to start.',
+        'eyebrow': 'Urdu STT',
+        'h1': 'Urdu speech to text (free online)',
+        'sub': 'Upload an Urdu audio file or voice note and get a readable transcript back. Works without an account on the free tier.',
+        'intro': [
+            'Need to turn an Urdu recording into text? Upload the file, pick Urdu as the language, and get a transcript you can copy into captions, notes, or a script. The free tier works without creating an account.',
+            'Common uses: WhatsApp voice notes, interview recordings, YouTube captions, class notes, and turning spoken drafts into written scripts. If the audio is noisy, run it through the free denoise tool first for cleaner results.',
+            'Supported formats include MP3, WAV, M4A, OGG and FLAC. After you have the text you can edit it, then use Voice Studio if you want to re-narrate a cleaned version.',
+        ],
+        'steps': [
+            'Open the free Transcribe tool.',
+            'Upload your Urdu audio or voice note.',
+            'Select Urdu as the language.',
+            'Run transcription and copy or download the text.',
+            'Optional: clean noisy audio first with the denoise tool.',
+        ],
+        'use_cases': [
+            ('WhatsApp & voice notes', 'Turn long Urdu voice messages into text you can search and reply to.'),
+            ('YouTube & Shorts captions', 'Get a starting transcript for Urdu videos, then edit for accuracy.'),
+            ('Interviews & meetings', 'Convert spoken Urdu into editable notes without typing everything.'),
+            ('Content creators', 'Speak a draft, transcribe it, then polish the script for a voiceover.'),
+        ],
+        'faq': [
+            ('Is Urdu speech to text free on VoxCraft?',
+             'Yes. You can transcribe within the free daily limits without creating an account. See the pricing page for current limits.'),
+            ('Does it work with WhatsApp voice notes?',
+             'Yes. Export or share the voice note as a file (often .opus or .ogg), then upload it. There is also a dedicated WhatsApp voice note page.'),
+            ('How accurate is Urdu transcription?',
+             'Accuracy depends on recording quality, accent, and background noise. Clear speech produces much better results. Always review the output.'),
+            ('Can I use the transcript commercially?',
+             'Yes under current Terms, subject to free or Pro limits. Always check the live Terms page.'),
+            ('What if the audio is noisy?',
+             'Use the free Remove Background Noise or Remove Hum tools first, then transcribe the cleaned file.'),
+        ],
+        'cta_label': 'Transcribe Urdu audio free',
+        'related_links': [
+            ('Open Transcribe tool', '/tools/transcribe-audio-to-text'),
+            ('WhatsApp voice note to text', '/tools/whatsapp-voice-note-to-text'),
+            ('Urdu text to speech', '/urdu-text-to-speech'),
+            ('Hindi speech to text', '/hindi-speech-to-text'),
+            ('Punjabi speech to text', '/punjabi-speech-to-text'),
+            ('Remove background noise', '/tools/remove-background-noise'),
+            ('How to create a YouTube voiceover', '/how-to-create-youtube-voiceover'),
+        ],
+    },
+    'hindi-speech-to-text': {
+        'title': 'Hindi Speech to Text Free — Voice to Text Online | VoxCraft',
+        'meta_description': 'Free Hindi speech to text online. Convert Hindi audio or voice notes into text for captions, notes and scripts — no account needed to start.',
+        'eyebrow': 'Hindi STT',
+        'h1': 'Hindi speech to text (free online)',
+        'sub': 'Upload a Hindi recording and get a text transcript. Free tier works without signup.',
+        'intro': [
+            'Convert Hindi speech into editable text. Upload the audio, choose Hindi, and receive a transcript you can use for captions, notes, or as the base for a written script.',
+            'Useful for YouTube creators, students, journalists, and anyone who receives long Hindi voice notes. Clear recordings with less background noise produce better results.',
+            'After transcription you can clean the text and, if needed, turn the polished script back into audio with Hindi neural voices in Voice Studio.',
+        ],
+        'steps': [
+            'Open the Transcribe tool.',
+            'Upload your Hindi audio file.',
+            'Select Hindi as the language.',
+            'Generate the transcript and copy the text.',
+            'Optional: denoise the file first for better accuracy.',
+        ],
+        'use_cases': [
+            ('YouTube captions', 'Get a first-pass Hindi transcript, then edit for on-screen captions.'),
+            ('Voice notes', 'Turn long Hindi voice messages into searchable text.'),
+            ('Interview notes', 'Transcribe spoken Hindi interviews or meetings.'),
+            ('Script drafting', 'Speak ideas in Hindi, transcribe, then refine the written script.'),
+        ],
+        'faq': [
+            ('Is Hindi speech to text free?',
+             'Yes, within free daily limits and without requiring an account to start.'),
+            ('Does it handle mixed Hindi–English?',
+             'It can, but accuracy is higher when speech is clear. Always proofread names, numbers and English words.'),
+            ('Which file formats work?',
+             'MP3, WAV, M4A, OGG, FLAC and similar common formats are supported.'),
+            ('Can I improve accuracy?',
+             'Record in a quiet place, speak clearly, and use the free denoise tools if there is background noise.'),
+            ('Where do I go next after the transcript?',
+             'Edit the text, then use Voice Studio for a Hindi voiceover if you need narration.'),
+        ],
+        'cta_label': 'Transcribe Hindi audio free',
+        'related_links': [
+            ('Open Transcribe tool', '/tools/transcribe-audio-to-text'),
+            ('WhatsApp voice note to text', '/tools/whatsapp-voice-note-to-text'),
+            ('Hindi text to speech', '/hindi-text-to-speech'),
+            ('Urdu speech to text', '/urdu-speech-to-text'),
+            ('Punjabi speech to text', '/punjabi-speech-to-text'),
+            ('Remove background noise', '/tools/remove-background-noise'),
+            ('Text to speech for YouTube', '/text-to-speech-for-youtube'),
+        ],
+    },
+    'punjabi-speech-to-text': {
+        'title': 'Punjabi Speech to Text Free — Convert Voice to Text | VoxCraft',
+        'meta_description': 'Free Punjabi speech to text online. Upload Punjabi audio or voice notes and get a text transcript — no signup required to start.',
+        'eyebrow': 'Punjabi STT',
+        'h1': 'Punjabi speech to text (free online)',
+        'sub': 'Upload Punjabi audio and get a text transcript back. Free to try without an account.',
+        'intro': [
+            'Turn Punjabi speech into text. Upload the recording, select Punjabi, and receive a transcript for captions, notes, or further editing. The free tier does not require an account to start.',
+            'Helpful for creators, students, and anyone dealing with Punjabi voice notes or interview audio. Cleaner recordings produce more accurate text.',
+            'Once you have the transcript you can edit it and, if needed, generate a new Punjabi voiceover from the cleaned script in Voice Studio.',
+        ],
+        'steps': [
+            'Open the free Transcribe tool.',
+            'Upload your Punjabi audio file.',
+            'Choose Punjabi as the language.',
+            'Run transcription and copy the result.',
+            'Optional: remove background noise first for better results.',
+        ],
+        'use_cases': [
+            ('Voice notes', 'Convert long Punjabi voice messages into text.'),
+            ('Video captions', 'Create a starting transcript for Punjabi YouTube or social videos.'),
+            ('Notes & study', 'Turn spoken Punjabi explanations into written notes.'),
+            ('Content workflow', 'Speak a draft, transcribe it, then polish and re-narrate.'),
+        ],
+        'faq': [
+            ('Is Punjabi speech to text free?',
+             'Yes, within the free daily limits shown on the site. No account is required to try it.'),
+            ('How accurate is it?',
+             'Accuracy depends on clarity, accent and noise. Always review the output, especially names and numbers.'),
+            ('Can I use WhatsApp voice notes?',
+             'Yes. Save or export the voice note and upload it. A dedicated WhatsApp page is also available.'),
+            ('What should I do if results are poor?',
+             'Re-record in a quieter place if possible, or run the file through the free denoise tools first.'),
+            ('Can I make a Punjabi voiceover after this?',
+             'Yes. Edit the transcript, then open Voice Studio and use a Punjabi neural voice.'),
+        ],
+        'cta_label': 'Transcribe Punjabi audio free',
+        'related_links': [
+            ('Open Transcribe tool', '/tools/transcribe-audio-to-text'),
+            ('WhatsApp voice note to text', '/tools/whatsapp-voice-note-to-text'),
+            ('Punjabi text to speech', '/punjabi-text-to-speech'),
+            ('Urdu speech to text', '/urdu-speech-to-text'),
+            ('Hindi speech to text', '/hindi-speech-to-text'),
+            ('Remove background noise', '/tools/remove-background-noise'),
+            ('How to create a YouTube voiceover', '/how-to-create-youtube-voiceover'),
+        ],
+    },
+
 }
 
 
